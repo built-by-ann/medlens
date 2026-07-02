@@ -1,36 +1,36 @@
 # MedLens
 
-An AI-powered healthcare platform that analyzes mock clinical notes and medication lists to generate structured summaries, identify potential medication documentation inconsistencies, and demonstrate production-grade software engineering practices.
+An AI-powered clinical documentation reconciliation platform that extracts medication information from multiple clinical documents, identifies potential medication documentation inconsistencies, and demonstrates production-grade software engineering practices.
 
-> **Status:** In Development
-
----
+**Status:** Active Development
 
 ## Overview
 
-MedLens is a full-stack AI healthcare application inspired by research on medication documentation inconsistencies conducted at Vanderbilt University Medical Center.
+MedLens is a full-stack AI application inspired by research conducted at Vanderbilt University Medical Center on medication documentation inconsistencies within electronic health records.
 
-The application allows users to upload or paste mock clinical notes, manage medication lists, and receive AI-generated summaries along with potential medication reconciliation issues. While not intended for clinical use, MedLens demonstrates how modern AI systems can assist in organizing healthcare information through a secure, production-style architecture.
+The application allows users to upload multiple synthetic clinical documents—including medication lists, visit notes, discharge summaries, progress notes, and medication reconciliation forms. AI extracts structured medication information from each document, compares information across documentation sources, and highlights potential medication reconciliation issues with evidence supporting each finding.
 
-The project is designed to showcase full-stack software engineering, cloud deployment, testing, containerization, and AI integration.
+Rather than functioning as an AI chatbot, MedLens demonstrates how large language models can be integrated into a realistic clinical documentation workflow through a production-style software architecture.
 
----
+The project is built to showcase modern software engineering practices, including full-stack development, cloud deployment, containerization, automated testing, CI/CD, and AI integration.
 
 ## Motivation
 
-Medication documentation inconsistencies are a common challenge in healthcare systems. Clinical notes, medication lists, and patient records can become misaligned over time, making it difficult to understand which medications are currently active.
+Medication information often exists in multiple locations throughout a patient's healthcare record. A medication may appear in a medication list, visit note, discharge summary, or medication reconciliation document, and these sources do not always remain consistent over time.
 
-This project explores how AI can assist with:
+During research at Vanderbilt University Medical Center, I studied medication documentation inconsistencies within electronic health records. MedLens was inspired by that work and explores how AI can assist by extracting medication information from multiple clinical documents, comparing documentation sources, and surfacing potential reconciliation issues for human review.
 
-- Organizing clinical documentation
-- Summarizing visit notes
-- Extracting medication information
-- Identifying potential documentation inconsistencies
-- Presenting healthcare information in a structured, user-friendly format
+The application uses **synthetic clinical data only** and is intended solely for educational and portfolio purposes.
 
-The application uses **synthetic data only** and is intended solely for educational and portfolio purposes.
+## How It Works
 
----
+1. Upload one or more synthetic clinical documents.
+2. AI extracts structured medication information from each document.
+3. Medication names and statuses are normalized into a consistent format.
+4. MedLens compares medication information across documentation sources.
+5. Potential medication documentation inconsistencies are identified.
+6. Evidence-backed discrepancy reports are generated for human review.
+7. Completed analyses are saved for future reference.
 
 ## Planned Features
 
@@ -41,35 +41,50 @@ The application uses **synthetic data only** and is intended solely for educatio
 - JWT authentication
 - Protected dashboard
 
-### Clinical Notes
+### Clinical Documents
 
-- Paste clinical notes
-- Upload `.txt` files
+Users can:
+
+- Upload medication lists
+- Upload visit notes
+- Upload discharge summaries
+- Upload progress notes
 - Upload PDF files
-- Save previous notes
+- Upload text files
+- Paste document text
+- View previously uploaded documents
 
-### Medication Management
+### AI Medication Extraction
 
-- Manual medication entry
-- Medication CRUD
-- CSV medication upload
+The application will:
 
-### AI Analysis
+- Extract medication names
+- Extract dosage information
+- Extract medication frequency
+- Extract medication route
+- Infer medication status
+- Normalize medication terminology
+- Preserve supporting context from the source document
 
-- Plain-language summaries
-- Medication extraction
-- Condition extraction
-- Follow-up recommendations
-- Medication inconsistency detection
+### Reconciliation Analysis
+
+Users can:
+
+- Compare medication information across multiple documentation sources
+- Detect medication documentation inconsistencies
+- View evidence supporting each discrepancy
+- Review AI-generated explanations
+- Save completed reconciliation analyses
 
 ### Dashboard
 
-- Saved analyses
-- Analysis history
-- Medication flags
-- Delete analyses
+Users can:
 
----
+- View uploaded clinical documents
+- Review previous analyses
+- Search saved analyses
+- Review discrepancy reports
+- Delete saved analyses
 
 ## Technology Stack
 
@@ -94,7 +109,7 @@ The application uses **synthetic data only** and is intended solely for educatio
 
 ### AI
 
-- Gemini API
+- Google Gemini API
 
 ### Infrastructure
 
@@ -111,134 +126,174 @@ The application uses **synthetic data only** and is intended solely for educatio
 - React Testing Library
 - Playwright (planned)
 
----
-
 ## Architecture
 
-```
-                User
-                  │
-                  ▼
-      React + TypeScript Frontend
-                  │
-             REST API
-                  │
-                  ▼
-            FastAPI Backend
-      ┌──────────┼──────────┐
-      ▼          ▼          ▼
- PostgreSQL    AI API      AWS S3
+```text
+                    User
+                      │
+                      ▼
+         React + TypeScript Frontend
+                      │
+            Upload Clinical Documents
+                      │
+                      ▼
+               FastAPI Backend
+                      │
+      ┌───────────────┼────────────────┐
+      ▼               ▼                ▼
+PostgreSQL      Gemini API      Reconciliation Engine
+      │               │                │
+      └───────────────┴────────────────┘
+                      │
+                      ▼
+         Medication Discrepancy Reports
 ```
 
 Additional architecture documentation is available in `docs/architecture.md`.
 
----
-
 ## Project Structure
 
-```
+```text
 medlens/
 
 ├── backend/
 ├── frontend/
 ├── docs/
+│   ├── PRD.md
+│   ├── architecture.md
+│   ├── data-model.md
+│   ├── roadmap.md
+│   ├── api.md
+│   ├── deployment.md
+│   ├── design-decisions.md
+│   └── testing.md
 ├── infra/
 ├── .github/
 └── README.md
 ```
 
----
-
 ## Documentation
 
-Project documentation can be found in the `docs/` directory.
+Project documentation is located in the `docs/` directory.
 
 - Product Requirements Document
 - Architecture
+- Data Model
 - Roadmap
 - API Specification
 - Testing Strategy
 - Deployment Plan
 - Design Decisions
 
----
-
 ## Roadmap
 
-### Sprint 1
+### Sprint 1 — Backend Foundation
 
-- Project setup
+- FastAPI backend
+- PostgreSQL integration
+- SQLAlchemy ORM
+- Alembic migrations
 - Authentication
-- PostgreSQL
-- Docker
-- FastAPI foundation
+- Docker development environment
+- Initial database models
 
-### Sprint 2
-
-- Clinical note uploads
-- Medication management
-- AI summaries
-- Medication reconciliation
-
-### Sprint 3
+### Sprint 2 — Core Application
 
 - React frontend
+- Clinical document uploads
 - Dashboard
-- User experience
-- Responsive design
+- Document management
+- Responsive user interface
 
-### Sprint 4
+### Sprint 3 — AI Reconciliation
+
+- Medication extraction
+- Medication normalization
+- Reconciliation engine
+- Documentation discrepancy detection
+- Evidence-backed AI explanations
+
+### Sprint 4 — Production Engineering
 
 - AWS deployment
 - CI/CD
-- Testing
-- Documentation
-- Production engineering
-
----
+- Automated testing
+- Monitoring
+- Performance optimization
+- Production documentation
 
 ## Local Development
 
-Setup instructions will be added as development progresses.
+Clone the repository:
 
-The project will be containerized using Docker Compose for reproducible local development.
+```bash
+git clone https://github.com/built-by-ann/medlens.git
+cd medlens
+```
 
----
+Start the development environment:
+
+```bash
+cd infra
+docker compose up --build
+```
+
+Additional setup instructions will be added as development progresses.
 
 ## Project Status
 
-Current phase:
+Completed:
 
-- Product planning completed
-- Architecture design completed
-- Technical documentation completed
-- Backend development in progress
+- Product requirements
+- Software architecture
+- Database design
+- FastAPI backend
+- PostgreSQL integration
+- Docker development environment
+- SQLAlchemy configuration
+- Alembic migrations
+- Initial database models
 
----
+In Progress:
 
-## Future Improvements
+- Authentication
+- Backend API development
 
-Potential future enhancements include:
+Planned:
 
+- React frontend
+- AI reconciliation engine
+- Cloud deployment
+- Automated testing
+
+## Future Enhancements
+
+Potential future improvements include:
+
+- FHIR import/export
+- RxNorm integration
+- Timeline view of medication changes
 - Background job processing
-- Search functionality
-- PDF exports
+- Resolution workflow for discrepancies
+- PDF reports
+- CSV export
+- Search across analyses
 - Cloud monitoring
 - Kubernetes deployment
 - Observability dashboard
-
----
 
 ## Disclaimer
 
 MedLens is an educational software engineering project.
 
-- Uses synthetic healthcare data only
-- Not HIPAA compliant
-- Does not provide medical advice
-- Not intended for clinical decision-making
+The application:
 
----
+- Uses synthetic clinical data only
+- Is not HIPAA compliant
+- Does not provide medical advice
+- Does not make clinical decisions
+- Presents AI-generated findings for human review
+- Is not intended for clinical use
 
 ## License
 

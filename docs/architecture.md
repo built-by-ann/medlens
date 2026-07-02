@@ -2,20 +2,26 @@
 
 ## Overview
 
-MedLens follows a modern three-tier web architecture consisting of a React frontend, FastAPI backend, PostgreSQL database, and external AI service integration. The frontend provides the user interface, the backend contains the application's business logic, PostgreSQL stores application data, and an AI service generates structured clinical insights from mock clinical notes.
+MedLens follows a modern three-tier web architecture consisting of a React frontend, FastAPI backend, PostgreSQL database, and external AI service integration.
+
+The application is designed around a clinical documentation reconciliation workflow. Users upload multiple synthetic clinical documents, the backend orchestrates AI-powered medication extraction and normalization, and a reconciliation engine compares medication information across documentation sources to identify potential documentation inconsistencies.
+
+The frontend provides the user interface, the backend manages application logic and AI orchestration, PostgreSQL stores application data, and the AI service performs structured information extraction.
 
 ---
 
-## Goals
+## Architectural Goals
 
 The architecture is designed to be:
 
 - Modular
 - Scalable
-- Easy to test
-- Easy to maintain
+- Testable
+- Maintainable
+- Secure
 - Production-ready
-- Easy to deploy with Docker
+- Easily deployable with Docker
+- Cloud-native
 
 ---
 
@@ -41,7 +47,7 @@ The architecture is designed to be:
 
 ### AI
 
-- Gemini API (or OpenAI)
+- Google Gemini API
 
 ### Infrastructure
 
@@ -56,33 +62,35 @@ The architecture is designed to be:
 ## High-Level Architecture
 
 ```text
-                User
-                  │
-                  ▼
-      React + TypeScript Frontend
-                  │
-             REST API
-                  │
-                  ▼
-            FastAPI Backend
-      ┌──────────┼──────────┐
-      ▼          ▼          ▼
- PostgreSQL    AI API      AWS S3
+                    User
+                      │
+                      ▼
+         React + TypeScript Frontend
+                      │
+               REST API (HTTPS)
+                      │
+                      ▼
+               FastAPI Backend
+                      │
+      ┌───────────────┼────────────────┐
+      ▼               ▼                ▼
+ PostgreSQL      Gemini API    Reconciliation Engine
 ```
 
 ---
 
-## Core Components
+## System Components
 
 ### Frontend
 
 Responsible for:
 
-- Authentication
+- User authentication
+- Document upload
 - Dashboard
-- Clinical note upload
-- Medication management
-- Displaying analysis results
+- Viewing uploaded clinical documents
+- Displaying reconciliation results
+- Reviewing discrepancy reports
 
 ---
 
@@ -93,8 +101,10 @@ Responsible for:
 - Authentication
 - API endpoints
 - Business logic
+- Document management
 - AI orchestration
-- Medication reconciliation
+- Medication normalization
+- Reconciliation workflow
 - Database communication
 
 ---
@@ -104,10 +114,10 @@ Responsible for:
 Stores:
 
 - Users
-- Clinical Notes
-- Medications
+- Clinical Documents
+- Medication Mentions
 - Analyses
-- Medication Flags
+- Medication Discrepancies
 
 ---
 
@@ -115,10 +125,25 @@ Stores:
 
 Responsible for:
 
-- Clinical note summarization
 - Medication extraction
-- Condition extraction
-- Follow-up recommendations
+- Dosage extraction
+- Frequency extraction
+- Medication normalization assistance
+- Clinical note summarization
+- Structured JSON generation
+
+---
+
+### Reconciliation Engine
+
+Responsible for:
+
+- Comparing medication information across multiple clinical documents
+- Detecting documentation inconsistencies
+- Generating discrepancy explanations
+- Producing evidence-backed reconciliation reports
+
+The reconciliation engine combines AI-generated structured data with application business logic. Rather than relying solely on AI, MedLens performs deterministic comparisons between extracted medication information to identify potential documentation inconsistencies.
 
 ---
 
@@ -127,60 +152,95 @@ Responsible for:
 The expected application workflow is:
 
 1. User logs in.
-2. User uploads or pastes a mock clinical note.
-3. Backend validates the request.
-4. Backend stores the note.
-5. Backend sends note text to the AI service.
-6. AI returns structured JSON.
-7. Backend validates the response.
-8. Medication reconciliation logic compares extracted medications against the user's medication list.
-9. Results are stored in PostgreSQL.
-10. The frontend displays the completed analysis.
+2. User uploads one or more synthetic clinical documents.
+3. Backend validates the uploaded documents.
+4. Documents are stored in PostgreSQL.
+5. Backend sends document text to the AI service.
+6. AI returns structured medication information as JSON.
+7. Backend validates the AI response using Pydantic models.
+8. Medication names and statuses are normalized.
+9. The reconciliation engine compares medication information across selected documents.
+10. Potential documentation inconsistencies are identified.
+11. Analysis results are stored in PostgreSQL.
+12. The frontend displays discrepancy reports with supporting evidence.
 
 ---
 
-## Planned Database Relationships
+## Data Model
 
 ```text
 User
- ├── Clinical Notes
- ├── Medications
- └── Analyses
+ │
+ ├── ClinicalDocument
+ │      └── MedicationMention
+ │
+ └── Analysis
+        └── MedicationDiscrepancy
+```
+
+### Relationships
+
+```text
+User
+ 1 ─── many ClinicalDocument
+
+ClinicalDocument
+ 1 ─── many MedicationMention
+
+User
+ 1 ─── many Analysis
 
 Analysis
- └── Medication Flags
+ 1 ─── many MedicationDiscrepancy
 ```
 
 ---
 
 ## Security Considerations
 
-The application will include:
+The application includes:
 
 - JWT authentication
 - Password hashing
 - Protected API routes
 - Environment variables for secrets
 - Input validation
-- Structured AI output validation
+- Structured AI response validation
+- Secure database connections
 
-Only synthetic clinical data will be used.
+Only synthetic clinical data is used throughout the application.
 
 ---
 
-## Future Improvements
+## Future Architecture Improvements
 
 Potential future additions include:
 
-- Background processing with Celery or FastAPI Background Tasks
-- Redis
-- AWS S3 integration
+- Background processing using Celery or FastAPI Background Tasks
+- Redis caching
+- AWS S3 document storage
 - CloudWatch logging
 - Kubernetes deployment
+- Distributed tracing
 - Sentry monitoring
+- FHIR integration
+- RxNorm integration
+
+---
+
+## Design Principles
+
+The architecture follows several guiding principles:
+
+- AI is a component of the system, not the product itself.
+- Business logic remains deterministic whenever possible.
+- Clinical documents serve as the primary source of information.
+- AI extracts structured data rather than making clinical decisions.
+- Users remain responsible for reviewing all identified discrepancies.
+- Every AI-generated discrepancy should include supporting evidence from the original documentation.
 
 ---
 
 ## Notes
 
-This document represents the intended architecture before implementation. It will evolve as the project is developed and design decisions are refined.
+This document represents the intended system architecture for MedLens and will evolve as the project is implemented. As new features are introduced, the architecture documentation will be updated to reflect significant design decisions and implementation changes.
