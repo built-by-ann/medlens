@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from sqlalchemy import text
+
+from app.db.session import SessionLocal
 
 app = FastAPI(title="MedLens API")
 
@@ -10,4 +13,19 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+
+        return {
+            "status": "ok",
+            "database": "connected",
+        }
+
+    except Exception as error:
+        return {
+            "status": "error",
+            "database": "disconnected",
+            "detail": str(error),
+        }
