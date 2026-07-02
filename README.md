@@ -2,7 +2,7 @@
 
 An AI-powered healthcare platform that analyzes mock clinical notes and medication lists to generate structured summaries, identify potential medication documentation inconsistencies, and demonstrate production-grade software engineering practices.
 
-> **Status:** 🚧 In Development
+> **Status:** In Development
 
 ---
 
