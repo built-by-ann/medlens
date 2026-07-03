@@ -1,20 +1,26 @@
 # MedLens
 
-An AI-powered clinical documentation reconciliation platform that extracts medication information from multiple clinical documents, identifies potential medication documentation inconsistencies, and demonstrates production-grade software engineering practices.
+An AI-powered clinical documentation reconciliation platform that extracts medication information from multiple clinical documents, identifies potential documentation inconsistencies, and demonstrates production-grade software engineering practices.
 
 **Status:** Active Development
 
-## Overview
+---
+
+# Overview
 
 MedLens is a full-stack AI application inspired by research conducted at Vanderbilt University Medical Center on medication documentation inconsistencies within electronic health records.
 
 The application allows users to upload multiple synthetic clinical documents—including medication lists, visit notes, discharge summaries, progress notes, and medication reconciliation forms. AI extracts structured medication information from each document, compares information across documentation sources, and highlights potential medication reconciliation issues with evidence supporting each finding.
 
+The AI layer is designed around a provider-agnostic architecture that supports multiple large language models through a common interface. This enables MedLens to evaluate and compare both general-purpose and domain-specific medical LLMs while maintaining the same reconciliation workflow.
+
 Rather than functioning as an AI chatbot, MedLens demonstrates how large language models can be integrated into a realistic clinical documentation workflow through a production-style software architecture.
 
-The project is built to showcase modern software engineering practices, including full-stack development, cloud deployment, containerization, automated testing, CI/CD, and AI integration.
+The project is built to showcase modern software engineering practices, including full-stack development, cloud deployment, containerization, automated testing, CI/CD, modular AI integration, and scalable backend architecture.
 
-## Motivation
+---
+
+# Motivation
 
 Medication information often exists in multiple locations throughout a patient's healthcare record. A medication may appear in a medication list, visit note, discharge summary, or medication reconciliation document, and these sources do not always remain consistent over time.
 
@@ -22,26 +28,32 @@ During research at Vanderbilt University Medical Center, I studied medication do
 
 The application uses **synthetic clinical data only** and is intended solely for educational and portfolio purposes.
 
-## How It Works
+---
+
+# How It Works
 
 1. Upload one or more synthetic clinical documents.
-2. AI extracts structured medication information from each document.
+2. AI extracts structured medication information from each document using schema-constrained JSON outputs.
 3. Medication names and statuses are normalized into a consistent format.
 4. MedLens compares medication information across documentation sources.
 5. Potential medication documentation inconsistencies are identified.
 6. Evidence-backed discrepancy reports are generated for human review.
 7. Completed analyses are saved for future reference.
 
-## Planned Features
+---
 
-### Authentication
+# Planned Features
+
+## Authentication
 
 - User registration
 - User login
 - JWT authentication
 - Protected dashboard
 
-### Clinical Documents
+---
+
+## Clinical Documents
 
 Users can:
 
@@ -49,12 +61,15 @@ Users can:
 - Upload visit notes
 - Upload discharge summaries
 - Upload progress notes
+- Upload medication reconciliation forms
 - Upload PDF files
 - Upload text files
 - Paste document text
 - View previously uploaded documents
 
-### AI Medication Extraction
+---
+
+## AI Medication Extraction
 
 The application will:
 
@@ -65,8 +80,11 @@ The application will:
 - Infer medication status
 - Normalize medication terminology
 - Preserve supporting context from the source document
+- Validate structured JSON outputs
 
-### Reconciliation Analysis
+---
+
+## Reconciliation Analysis
 
 Users can:
 
@@ -76,7 +94,9 @@ Users can:
 - Review AI-generated explanations
 - Save completed reconciliation analyses
 
-### Dashboard
+---
+
+## Dashboard
 
 Users can:
 
@@ -86,16 +106,18 @@ Users can:
 - Review discrepancy reports
 - Delete saved analyses
 
-## Technology Stack
+---
 
-### Frontend
+# Technology Stack
+
+## Frontend
 
 - React
 - TypeScript
 - Vite
 - React Router
 
-### Backend
+## Backend
 
 - FastAPI
 - Python
@@ -103,15 +125,26 @@ Users can:
 - Alembic
 - Pydantic
 
-### Database
+## Database
 
 - PostgreSQL
 
-### AI
+## AI
 
-- Google Gemini API
+The application uses a modular AI layer that supports multiple language model providers through a common interface.
 
-### Infrastructure
+Current provider:
+
+- Google Gemini
+
+Planned providers:
+
+- OpenBioLLM
+- MedGemma
+
+The backend is designed so multiple providers can be evaluated using the same extraction pipeline, prompts, and validation logic.
+
+## Infrastructure
 
 - Docker
 - Docker Compose
@@ -119,14 +152,16 @@ Users can:
 - AWS EC2
 - AWS S3 (planned)
 
-### Testing
+## Testing
 
 - pytest
 - Vitest
 - React Testing Library
 - Playwright (planned)
 
-## Architecture
+---
+
+# Architecture
 
 ```text
                     User
@@ -139,19 +174,29 @@ Users can:
                       ▼
                FastAPI Backend
                       │
+              Business Services
+                      │
       ┌───────────────┼────────────────┐
       ▼               ▼                ▼
-PostgreSQL      Gemini API      Reconciliation Engine
-      │               │                │
-      └───────────────┴────────────────┘
+ PostgreSQL      AI Service      Reconciliation Engine
+                      │
+              LLM Provider Layer
+      ┌───────────────┼────────────────┐
+      ▼               ▼                ▼
+   Gemini        OpenBioLLM       MedGemma
                       │
                       ▼
-         Medication Discrepancy Reports
+     Structured Medication Extraction
+                      │
+                      ▼
+        Medication Discrepancy Reports
 ```
 
 Additional architecture documentation is available in `docs/architecture.md`.
 
-## Project Structure
+---
+
+# Project Structure
 
 ```text
 medlens/
@@ -161,6 +206,8 @@ medlens/
 ├── docs/
 │   ├── PRD.md
 │   ├── architecture.md
+│   ├── ai.md
+│   ├── evaluation.md
 │   ├── data-model.md
 │   ├── roadmap.md
 │   ├── api.md
@@ -172,12 +219,16 @@ medlens/
 └── README.md
 ```
 
-## Documentation
+---
+
+# Documentation
 
 Project documentation is located in the `docs/` directory.
 
 - Product Requirements Document
-- Architecture
+- Software Architecture
+- AI Pipeline
+- Model Evaluation
 - Data Model
 - Roadmap
 - API Specification
@@ -185,9 +236,11 @@ Project documentation is located in the `docs/` directory.
 - Deployment Plan
 - Design Decisions
 
-## Roadmap
+---
 
-### Sprint 1 — Backend Foundation
+# Roadmap
+
+## Sprint 1 — Backend Foundation
 
 - FastAPI backend
 - PostgreSQL integration
@@ -197,7 +250,9 @@ Project documentation is located in the `docs/` directory.
 - Docker development environment
 - Initial database models
 
-### Sprint 2 — Core Application
+---
+
+## Sprint 2 — Core Application
 
 - React frontend
 - Clinical document uploads
@@ -205,15 +260,21 @@ Project documentation is located in the `docs/` directory.
 - Document management
 - Responsive user interface
 
-### Sprint 3 — AI Reconciliation
+---
+
+## Sprint 3 — AI Reconciliation
 
 - Medication extraction
 - Medication normalization
+- Structured JSON validation
+- Prompt engineering
 - Reconciliation engine
 - Documentation discrepancy detection
 - Evidence-backed AI explanations
 
-### Sprint 4 — Production Engineering
+---
+
+## Sprint 4 — Production Engineering
 
 - AWS deployment
 - CI/CD
@@ -222,7 +283,23 @@ Project documentation is located in the `docs/` directory.
 - Performance optimization
 - Production documentation
 
-## Local Development
+---
+
+## Sprint 5 — Model Evaluation
+
+- Integrate OpenBioLLM
+- Integrate MedGemma
+- Benchmark multiple LLM providers
+- Compare extraction accuracy
+- Measure JSON schema adherence
+- Measure hallucination rates
+- Compare latency
+- Compare inference cost
+- Document model selection
+
+---
+
+# Local Development
 
 Clone the repository:
 
@@ -240,9 +317,11 @@ docker compose up --build
 
 Additional setup instructions will be added as development progresses.
 
-## Project Status
+---
 
-Completed:
+# Project Status
+
+### Completed
 
 - Product requirements
 - Software architecture
@@ -254,19 +333,22 @@ Completed:
 - Alembic migrations
 - Initial database models
 
-In Progress:
+### In Progress
 
 - Authentication
 - Backend API development
 
-Planned:
+### Planned
 
 - React frontend
 - AI reconciliation engine
+- Multi-model evaluation
 - Cloud deployment
 - Automated testing
 
-## Future Enhancements
+---
+
+# Future Enhancements
 
 Potential future improvements include:
 
@@ -278,11 +360,16 @@ Potential future improvements include:
 - PDF reports
 - CSV export
 - Search across analyses
+- Multi-model benchmarking dashboard
+- Prompt versioning
+- AI evaluation reports
 - Cloud monitoring
 - Kubernetes deployment
 - Observability dashboard
 
-## Disclaimer
+---
+
+# Disclaimer
 
 MedLens is an educational software engineering project.
 
@@ -295,6 +382,8 @@ The application:
 - Presents AI-generated findings for human review
 - Is not intended for clinical use
 
-## License
+---
+
+# License
 
 This project is licensed under the MIT License.
