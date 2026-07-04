@@ -272,7 +272,7 @@ Completed:
 
 ---
 
-## Sprint 2 — Core Application 🚧
+## Sprint 2 — Core Application (In Progress)
 
 Completed:
 
