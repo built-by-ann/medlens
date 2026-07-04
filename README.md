@@ -2,13 +2,15 @@
 
 An AI-powered clinical documentation reconciliation platform that extracts medication information from multiple clinical documents, identifies potential documentation inconsistencies, and demonstrates production-grade software engineering practices.
 
-**Status:** Active Development
+**Status:** Active Development (Sprint 2)
 
 ---
 
 # Overview
 
 MedLens is a full-stack AI application inspired by research conducted at Vanderbilt University Medical Center on medication documentation inconsistencies within electronic health records.
+
+Users can securely authenticate, upload synthetic clinical documents by pasting text or uploading TXT and PDF files, and prepare them for AI-powered medication reconciliation and discrepancy analysis.
 
 The application allows users to upload multiple synthetic clinical documents—including medication lists, visit notes, discharge summaries, progress notes, and medication reconciliation forms. AI extracts structured medication information from each document, compares information across documentation sources, and highlights potential medication reconciliation issues with evidence supporting each finding.
 
@@ -32,40 +34,50 @@ The application uses **synthetic clinical data only** and is intended solely for
 
 # How It Works
 
-1. Upload one or more synthetic clinical documents.
-2. AI extracts structured medication information from each document using schema-constrained JSON outputs.
-3. Medication names and statuses are normalized into a consistent format.
-4. MedLens compares medication information across documentation sources.
-5. Potential medication documentation inconsistencies are identified.
-6. Evidence-backed discrepancy reports are generated for human review.
-7. Completed analyses are saved for future reference.
+1. Register and authenticate using JWT.
+2. Upload one or more synthetic clinical documents by:
+   - Pasting document text
+   - Uploading `.txt` files
+   - Uploading PDF files
+3. PDF documents are parsed and text is extracted.
+4. Clinical documents are securely stored and associated with the authenticated user.
+5. AI extracts structured medication information using schema-constrained JSON outputs.
+6. Medication names and statuses are normalized into a consistent format.
+7. MedLens compares medication information across documentation sources.
+8. Potential medication documentation inconsistencies are identified.
+9. Evidence-backed discrepancy reports are generated for human review.
+10. Completed analyses are saved for future reference.
 
 ---
 
-# Planned Features
+# Current Features
 
 ## Authentication
+
+Completed:
 
 - User registration
 - User login
 - JWT authentication
-- Protected dashboard
+- Protected API endpoints
 
 ---
 
 ## Clinical Documents
 
-Users can:
+Implemented:
 
-- Upload medication lists
-- Upload visit notes
-- Upload discharge summaries
-- Upload progress notes
-- Upload medication reconciliation forms
-- Upload PDF files
-- Upload text files
 - Paste document text
-- View previously uploaded documents
+- Upload `.txt` files
+- Upload PDF files
+- View uploaded clinical documents
+- View individual clinical documents
+- Delete uploaded clinical documents
+
+Planned:
+
+- Dashboard document management
+- Bulk document uploads
 
 ---
 
@@ -86,7 +98,7 @@ The application will:
 
 ## Reconciliation Analysis
 
-Users can:
+Users will be able to:
 
 - Compare medication information across multiple documentation sources
 - Detect medication documentation inconsistencies
@@ -98,7 +110,7 @@ Users can:
 
 ## Dashboard
 
-Users can:
+Users will be able to:
 
 - View uploaded clinical documents
 - Review previous analyses
@@ -124,6 +136,7 @@ Users can:
 - SQLAlchemy
 - Alembic
 - Pydantic
+- JWT Authentication
 
 ## Database
 
@@ -148,15 +161,19 @@ The backend is designed so multiple providers can be evaluated using the same ex
 
 - Docker
 - Docker Compose
-- GitHub Actions
-- AWS EC2
+- GitHub Actions (planned)
+- AWS EC2 (planned)
 - AWS S3 (planned)
 
 ## Testing
 
 - pytest
-- Vitest
-- React Testing Library
+- End-to-end API testing
+- Authentication tests
+- Clinical document CRUD tests
+- File upload tests
+- Vitest (planned)
+- React Testing Library (planned)
 - Playwright (planned)
 
 ---
@@ -240,25 +257,36 @@ Project documentation is located in the `docs/` directory.
 
 # Roadmap
 
-## Sprint 1 — Backend Foundation
+## Sprint 1 — Backend Foundation (Completed)
+
+Completed:
 
 - FastAPI backend
 - PostgreSQL integration
 - SQLAlchemy ORM
 - Alembic migrations
-- Authentication
 - Docker development environment
-- Initial database models
+- JWT authentication
+- Health endpoint
+- Initial backend test suite
 
 ---
 
-## Sprint 2 — Core Application
+## Sprint 2 — Core Application 🚧
+
+Completed:
+
+- Clinical document CRUD
+- Paste document submission
+- Text file upload
+- PDF upload and text extraction
+
+In Progress:
 
 - React frontend
-- Clinical document uploads
 - Dashboard
-- Document management
-- Responsive user interface
+- Medication data model
+- Medication management
 
 ---
 
@@ -315,6 +343,14 @@ cd infra
 docker compose up --build
 ```
 
+Run the backend tests:
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m pytest -v
+```
+
 Additional setup instructions will be added as development progresses.
 
 ---
@@ -329,22 +365,30 @@ Additional setup instructions will be added as development progresses.
 - FastAPI backend
 - PostgreSQL integration
 - Docker development environment
-- SQLAlchemy configuration
+- SQLAlchemy ORM
 - Alembic migrations
-- Initial database models
+- JWT authentication
+- Health monitoring endpoint
+- Backend API
+- Clinical document CRUD
+- Paste document submission
+- Text file upload
+- PDF upload and text extraction
+- Backend test suite (40+ automated tests)
 
 ### In Progress
 
-- Authentication
-- Backend API development
+- Medication management
+- React frontend
+- AI extraction pipeline
 
 ### Planned
 
-- React frontend
-- AI reconciliation engine
-- Multi-model evaluation
+- Medication reconciliation engine
+- Multi-model LLM evaluation
 - Cloud deployment
-- Automated testing
+- CI/CD
+- Production monitoring
 
 ---
 
