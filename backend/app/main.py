@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.api.routes.auth import router as auth_router
@@ -23,14 +24,20 @@ def health_check():
         db.execute(text("SELECT 1"))
         db.close()
 
-        return {
-            "status": "ok",
-            "database": "connected",
-        }
+        return JSONResponse(
+            content={
+                "status": "ok",
+                "database": "connected",
+            },
+            status_code=200,
+        )
 
     except Exception as error:
-        return {
-            "status": "error",
-            "database": "disconnected",
-            "detail": str(error),
-        }
+        return JSONResponse(
+            content={
+                "status": "error",
+                "database": "disconnected",
+                "detail": str(error),
+            },
+            status_code=503,
+        )
