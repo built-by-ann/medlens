@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.pdf import PdfExtractionError, extract_text_from_pdf
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.clinical_document import ClinicalDocumentCreate, ClinicalDocumentResponse
 from app.services.clinical_document_service import (
+    PDF_FILE_TYPE,
     TXT_FILE_TYPE,
     create_clinical_document,
     create_clinical_document_from_file,
@@ -77,6 +79,60 @@ def upload_txt_document(
         raw_text=raw_text,
         file_name=file.filename,
         file_type=TXT_FILE_TYPE,
+    )
+
+
+@router.post(
+    "/upload-pdf",
+    response_model=ClinicalDocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def upload_pdf_document(
+    document_type: str = Form(min_length=1),
+    title: str = Form(min_length=1),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ClinicalDocumentResponse:
+    is_pdf_extension = (file.filename or "").lower().endswith(".pdf")
+    is_pdf_content_type = file.content_type == "application/pdf"
+
+    if not (is_pdf_extension or is_pdf_content_type):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Only .pdf or application/pdf files are supported",
+        )
+
+    contents = file.file.read()
+
+    if not contents:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Uploaded file is empty",
+        )
+
+    try:
+        raw_text = extract_text_from_pdf(contents)
+    except PdfExtractionError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="File must be a valid PDF",
+        )
+
+    if not raw_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="No extractable text found in PDF",
+        )
+
+    return create_clinical_document_from_file(
+        db,
+        current_user.id,
+        document_type=document_type,
+        title=title,
+        raw_text=raw_text,
+        file_name=file.filename,
+        file_type=PDF_FILE_TYPE,
     )
 
 

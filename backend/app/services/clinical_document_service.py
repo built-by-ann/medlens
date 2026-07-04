@@ -5,6 +5,7 @@ from app.schemas.clinical_document import ClinicalDocumentCreate
 
 DEFAULT_FILE_TYPE = "manual_entry"
 TXT_FILE_TYPE = "txt"
+PDF_FILE_TYPE = "pdf"
 
 
 def create_clinical_document(

@@ -231,3 +231,108 @@ def test_upload_txt_rejects_invalid_encoding(client):
     response = _upload_txt(client, token, content=b"\xff\xfe\x00invalid")
 
     assert response.status_code == 422
+
+
+def _text_pdf_bytes(text="Patient presents with hypertension."):
+    from io import BytesIO
+
+    from reportlab.pdfgen import canvas
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer)
+    pdf.drawString(72, 700, text)
+    pdf.save()
+
+    return buffer.getvalue()
+
+
+def _blank_pdf_bytes():
+    from io import BytesIO
+
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+
+    buffer = BytesIO()
+    writer.write(buffer)
+
+    return buffer.getvalue()
+
+
+def _upload_pdf(client, token, filename="note.pdf", content=None, content_type="application/pdf", **form_overrides):
+    if content is None:
+        content = _text_pdf_bytes()
+
+    form = {"document_type": "visit_note", "title": "Uploaded PDF Note"}
+    form.update(form_overrides)
+
+    return client.post(
+        "/clinical-documents/upload-pdf",
+        data=form,
+        files={"file": (filename, content, content_type)},
+        headers=_auth_headers(token),
+    )
+
+
+def test_upload_pdf_succeeds(client):
+    token = _register_and_login(client, "pdfuploader@example.com")
+
+    response = _upload_pdf(client, token)
+
+    assert response.status_code == 201
+
+    body = response.json()
+    assert body["document_type"] == "visit_note"
+    assert body["title"] == "Uploaded PDF Note"
+    assert "Patient presents with hypertension." in body["raw_text"]
+    assert body["file_name"] == "note.pdf"
+    assert body["file_type"] == "pdf"
+
+
+def test_upload_pdf_requires_authentication(client):
+    response = client.post(
+        "/clinical-documents/upload-pdf",
+        data={"document_type": "visit_note", "title": "Uploaded PDF Note"},
+        files={"file": ("note.pdf", _text_pdf_bytes(), "application/pdf")},
+    )
+
+    assert response.status_code == 401
+
+
+def test_upload_pdf_rejects_invalid_file_type(client):
+    token = _register_and_login(client, "pdfbadfiletype@example.com")
+
+    response = _upload_pdf(
+        client,
+        token,
+        filename="note.txt",
+        content=b"Patient presents with hypertension.",
+        content_type="text/plain",
+    )
+
+    assert response.status_code == 422
+
+
+def test_upload_pdf_rejects_empty_file(client):
+    token = _register_and_login(client, "pdfemptyfile@example.com")
+
+    response = _upload_pdf(client, token, content=b"")
+
+    assert response.status_code == 422
+
+
+def test_upload_pdf_rejects_pdf_with_no_extractable_text(client):
+    token = _register_and_login(client, "pdfnotext@example.com")
+
+    response = _upload_pdf(client, token, content=_blank_pdf_bytes())
+
+    assert response.status_code == 422
+
+
+def test_upload_pdf_rejects_malformed_pdf(client):
+    token = _register_and_login(client, "pdfmalformed@example.com")
+
+    response = _upload_pdf(client, token, content=b"this is not a real pdf file")
+
+    assert response.status_code == 422
