@@ -1,100 +1,63 @@
-# Testing Strategy
+# Testing
 
 ## Overview
 
-MedLens will use automated testing to verify backend logic, API behavior, frontend components, and core user workflows. Testing is part of the definition of done for major features.
+MedLens backend tests are written with `pytest` and exercise the API the same way a real client would, using FastAPI's `TestClient`. Rather than mocking the database, tests run against a real, isolated PostgreSQL database so that ORM behavior, password hashing, and JWT creation and verification are all exercised as they would be in production.
+
+Tests are part of the definition of done for backend features.
 
 ---
 
-## Backend Testing
+## Test Stack
 
-Backend tests will use `pytest`.
-
-### Unit Tests
-
-Unit tests will cover isolated logic, including:
-
-- Medication reconciliation rules
-- AI response parsing
-- Pydantic validation
-- File validation
-- Authentication helpers
-
-### API Tests
-
-API tests will verify:
-
-- Status codes
-- Request validation
-- Error responses
-- Protected routes
-- Response schemas
-
-### Integration Tests
-
-Integration tests will cover complete backend workflows, including:
-
-- User registration and login
-- Authenticated note submission
-- Medication list creation
-- Analysis creation
-- Saved analysis retrieval
+- pytest
+- FastAPI TestClient
+- PostgreSQL
 
 ---
 
-## Frontend Testing
+## Running Tests
 
-Frontend tests will use Vitest and React Testing Library.
+```bash
+cd backend
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+pytest -v
+```
 
-Tests will cover:
-
-- Signup page
-- Login page
-- Dashboard rendering
-- Note upload form
-- Medication entry form
-- Analysis result page
-- Loading states
-- Error states
+The local PostgreSQL container must be running (`docker compose up --build` from `infra/`), since tests connect to it over `localhost:5432`.
 
 ---
 
-## End-to-End Testing
+## Test Database
 
-End-to-end testing may use Playwright.
+Tests never run against `medlens_db`, the development database.
 
-Target workflow:
+Before the application is imported, the test suite rewrites the `DATABASE_URL` environment variable to point at a separate database, `medlens_test_db`, on the same local PostgreSQL server. Because the backend's settings and database engine are constructed from environment variables at import time, this makes the entire application — including code paths that talk to the database directly — use the isolated test database automatically, with no need for dependency overrides or mocks.
 
-1. User signs up.
-2. User logs in.
-3. User uploads or pastes a mock clinical note.
-4. User enters medications.
-5. User runs analysis.
-6. User sees AI summary and medication flags.
+`medlens_test_db` is created automatically on first run if it does not already exist, and its schema is created from the SQLAlchemy models.
 
----
+### Isolation Between Tests
 
-## Continuous Integration
-
-GitHub Actions will run tests automatically on pull requests.
-
-Planned CI checks:
-
-- Backend tests
-- Frontend tests
-- TypeScript checks
-- Linting
-- Docker build validation
+After each test, all rows are removed from every table so that each test starts from a clean slate without needing to recreate the schema. Tests that need a user (for example, to log in or call `/users/me`) create one through the real `/auth/register` and `/auth/login` endpoints as part of the test itself.
 
 ---
 
-## Definition of Done
+## Current Coverage
 
-A feature is not complete until:
+- **Health endpoint** — `GET /health` returns a successful status with a connected database.
+- **Registration** — successful registration, rejection of duplicate emails, rejection of invalid email formats, rejection of passwords shorter than 8 characters, and correct handling of an optional name.
+- **Login** — successful login returns a bearer token whose decoded claims match the authenticated user; incorrect passwords and unknown emails are both rejected.
+- **JWT authentication** — the `get_current_user` dependency is exercised end-to-end through `/users/me`, covering missing, malformed, expired, and otherwise invalid tokens, as well as a validly signed token referencing a user that no longer exists.
+- **/users/me** — returns the authenticated user's profile and never exposes the stored password hash.
+- **Configuration** — application settings load expected values from environment variables and fall back to documented defaults when optional values are not set.
 
-- The implementation works locally
-- Errors are handled
-- Inputs are validated
-- Relevant tests are added
-- Documentation is updated if needed
-- CI checks pass
+---
+
+## Future Testing
+
+- Clinical documents
+- Medication reconciliation
+- AI integration
+- Frontend (Vitest and React Testing Library)
+- CI/CD (running the backend test suite automatically on pull requests via GitHub Actions)
