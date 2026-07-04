@@ -164,3 +164,70 @@ def test_delete_document_requires_authentication(client):
     response = client.delete("/clinical-documents/1")
 
     assert response.status_code == 401
+
+
+def _upload_txt(client, token, filename="note.txt", content=b"Patient reports improvement.", content_type="text/plain", **form_overrides):
+    form = {"document_type": "visit_note", "title": "Uploaded Note"}
+    form.update(form_overrides)
+
+    return client.post(
+        "/clinical-documents/upload-txt",
+        data=form,
+        files={"file": (filename, content, content_type)},
+        headers=_auth_headers(token),
+    )
+
+
+def test_upload_txt_succeeds(client):
+    token = _register_and_login(client, "uploader@example.com")
+
+    response = _upload_txt(client, token)
+
+    assert response.status_code == 201
+
+    body = response.json()
+    assert body["document_type"] == "visit_note"
+    assert body["title"] == "Uploaded Note"
+    assert body["raw_text"] == "Patient reports improvement."
+    assert body["file_name"] == "note.txt"
+    assert body["file_type"] == "txt"
+
+
+def test_upload_txt_requires_authentication(client):
+    response = client.post(
+        "/clinical-documents/upload-txt",
+        data={"document_type": "visit_note", "title": "Uploaded Note"},
+        files={"file": ("note.txt", b"Patient reports improvement.", "text/plain")},
+    )
+
+    assert response.status_code == 401
+
+
+def test_upload_txt_rejects_invalid_file_type(client):
+    token = _register_and_login(client, "badfiletype@example.com")
+
+    response = _upload_txt(
+        client,
+        token,
+        filename="note.pdf",
+        content=b"%PDF-1.4 fake pdf content",
+        content_type="application/pdf",
+    )
+
+    assert response.status_code == 422
+
+
+def test_upload_txt_rejects_empty_file(client):
+    token = _register_and_login(client, "emptyfile@example.com")
+
+    response = _upload_txt(client, token, content=b"")
+
+    assert response.status_code == 422
+
+
+def test_upload_txt_rejects_invalid_encoding(client):
+    token = _register_and_login(client, "badencoding@example.com")
+
+    response = _upload_txt(client, token, content=b"\xff\xfe\x00invalid")
+
+    assert response.status_code == 422

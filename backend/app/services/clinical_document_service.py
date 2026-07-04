@@ -4,6 +4,7 @@ from app.models.clinical_document import ClinicalDocument
 from app.schemas.clinical_document import ClinicalDocumentCreate
 
 DEFAULT_FILE_TYPE = "manual_entry"
+TXT_FILE_TYPE = "txt"
 
 
 def create_clinical_document(
@@ -16,6 +17,31 @@ def create_clinical_document(
         raw_text=document_in.raw_text,
         file_name=None,
         file_type=DEFAULT_FILE_TYPE,
+    )
+
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    return document
+
+
+def create_clinical_document_from_file(
+    db: Session,
+    user_id: int,
+    document_type: str,
+    title: str,
+    raw_text: str,
+    file_name: str,
+    file_type: str,
+) -> ClinicalDocument:
+    document = ClinicalDocument(
+        user_id=user_id,
+        document_type=document_type,
+        title=title,
+        raw_text=raw_text,
+        file_name=file_name,
+        file_type=file_type,
     )
 
     db.add(document)
