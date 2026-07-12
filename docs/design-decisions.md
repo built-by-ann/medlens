@@ -206,6 +206,33 @@ Cons
 
 ---
 
+# Decision 11: Association Table for Analysis and ClinicalDocument
+
+**Decision**
+
+Represent the relationship between Analysis and ClinicalDocument with a dedicated association table, analysis_clinical_documents, using a composite primary key and `ON DELETE CASCADE` on both foreign keys, rather than a foreign key on either model.
+
+**Reasoning**
+
+An analysis can cover more than one clinical document, and the same document can be included in more than one analysis. A foreign key on Analysis or on ClinicalDocument can only represent a single direction of that relationship, so a true many to many association requires its own table. Unlike MedicationDiscrepancy's references, an association row carries no meaning of its own beyond linking one analysis to one document, so there is nothing to preserve if either side is deleted. `ON DELETE CASCADE` removes the link automatically, while leaving the analysis, its other documents, and its findings intact, and leaving the document and its other analyses intact.
+
+The table uses a composite primary key of analysis_id and clinical_document_id instead of a surrogate id column, which is a deliberate exception to this project's usual pattern of giving every table a surrogate id. The composite key already uniquely identifies each link, and the table has no other attributes that would need a single id to reference.
+
+**Trade-offs**
+
+Pros
+
+- Correctly represents a many to many relationship without duplicating document content or creating a second document table
+- Link rows are cleaned up automatically, at the database level, when either side is deleted
+- Composite primary key avoids an unused surrogate id on a table with no independent attributes
+
+Cons
+
+- First table in the project without a surrogate id column, which differs from the rest of the schema
+- Adds a table whose sole purpose is linking, which the reconciliation service must join through when loading an analysis's documents
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:

@@ -257,18 +257,26 @@ Medication belongs to User
 
 ## Analysis
 
-Represents one reconciliation run across selected clinical documents.
+Represents one reconciliation run across a set of clinical documents.
 
-An analysis compares medication mentions across multiple documentation sources and stores the resulting summary and discrepancies.
+An analysis tracks who initiated it, which documents it covers, its progress through a status lifecycle, summary counts of what it found, and the resulting discrepancies. It does not itself compare medication mentions; that comparison is the responsibility of the future reconciliation service. This model only records the run and its outcome.
 
 ### Fields
 
 ```text
 id
 user_id
-summary
 status
-processing_time_ms
+started_at
+completed_at
+error_message
+summary
+total_findings
+high_severity_findings
+medium_severity_findings
+low_severity_findings
+provider
+model_name
 created_at
 updated_at
 ```
@@ -279,22 +287,63 @@ updated_at
 status
 ```
 
-Tracks whether the analysis is complete, processing, or failed.
+Tracks the analysis through its lifecycle.
 
 Possible values:
 
 ```text
+pending
 processing
-complete
+completed
 failed
 ```
+
+New analyses start as `pending`. `processing` marks the run as underway, `completed` and `failed` are terminal states.
+
+```text
+started_at
+completed_at
+```
+
+Record when processing began and when the run reached a terminal state, whether by completing or failing. Both are null until the corresponding transition happens.
+
+```text
+error_message
+```
+
+Set when an analysis fails, describing why. Cleared if an analysis is later marked completed.
+
+```text
+summary
+```
+
+An optional narrative summary of the analysis, stored as text. May hold a structured JSON string if the reconciliation service chooses that format, but the column itself is untyped text, consistent with the rest of this schema.
+
+```text
+total_findings
+high_severity_findings
+medium_severity_findings
+low_severity_findings
+```
+
+Counts of discrepancies found during the run, broken out by severity. Stored as individual integer columns rather than a JSON structure, since the set of counts is small, fixed, and needs to support simple database queries and updates. Default to 0 and are not expected to be negative.
+
+```text
+provider
+model_name
+```
+
+Record which AI provider and model produced the analysis, when applicable. Both are nullable, since not every analysis path is required to use an AI provider.
 
 ### Relationships
 
 ```text
 Analysis belongs to User
 Analysis has many MedicationDiscrepancies
+Analysis references many ClinicalDocuments
 ```
+
+The relationship to ClinicalDocument is many to many: an analysis typically covers more than one document, and the same document can be included in more than one analysis over time. This is implemented with an association table, analysis_clinical_documents, rather than a foreign key on either side. See Design Decisions.
 
 ---
 
@@ -425,6 +474,9 @@ MedicationDiscrepancy
 
 MedicationDiscrepancy
   many ─── 1 MedicationMention
+
+Analysis
+  many ─── many ClinicalDocument
 ```
 
 ---
@@ -487,6 +539,18 @@ Medication discrepancies are stored as their own model because users may need to
 ### MedicationDiscrepancy references Medication and MedicationMention
 
 The original MedicationDiscrepancy design compared two ClinicalDocuments directly, before Medication existed as a model. Now that Medication represents the user's own list, reconciliation findings compare a medication list entry against an extracted mention rather than two documents. The nullable medication_id and medication_mention_id fields replace the earlier document references, since every supported finding type is a list-versus-mention comparison rather than a document-versus-document comparison. Document context remains reachable through medication_mention_id, since a MedicationMention belongs to a ClinicalDocument.
+
+### Analysis references ClinicalDocument through an association table
+
+An analysis typically covers more than one clinical document, and the same document can be reused across more than one analysis over time, for example when a user re-runs reconciliation after uploading a new document. A foreign key on either Analysis or ClinicalDocument can only represent one of those two directions, so the relationship uses an association table, analysis_clinical_documents, instead. The association table has no columns of its own beyond the two foreign keys, so it uses a composite primary key rather than a surrogate id, unlike every other table in this schema.
+
+### Analysis drops processing_time_ms in favor of started_at and completed_at
+
+The original Analysis model stored a single processing_time_ms duration. Once started_at and completed_at exist, the duration is derivable from the two, and storing both timestamps preserves more information than a single computed duration would. The analyses table held no rows when this change was made, so no data was lost.
+
+### Analysis summary counts are individual integer columns
+
+total_findings, high_severity_findings, medium_severity_findings, and low_severity_findings are stored as separate integer columns rather than a single JSON structure. The set of counts is small and fixed, and individual columns are simpler to query, default, and update than a JSON document would be for the same purpose.
 
 ---
 

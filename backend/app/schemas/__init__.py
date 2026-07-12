@@ -1,3 +1,10 @@
+from app.schemas.analysis import (
+    AnalysisCompletedSummary,
+    AnalysisCreate,
+    AnalysisFailure,
+    AnalysisResponse,
+    AnalysisStatus,
+)
 from app.schemas.auth import Token, UserLogin
 from app.schemas.clinical_document import ClinicalDocumentCreate, ClinicalDocumentResponse
 from app.schemas.medication import (
@@ -16,6 +23,11 @@ from app.schemas.medication_discrepancy import (
 from app.schemas.user import UserCreate, UserResponse
 
 __all__ = [
+    "AnalysisCompletedSummary",
+    "AnalysisCreate",
+    "AnalysisFailure",
+    "AnalysisResponse",
+    "AnalysisStatus",
     "ClinicalDocumentCreate",
     "ClinicalDocumentResponse",
     "DiscrepancySeverity",
