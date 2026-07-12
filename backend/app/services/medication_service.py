@@ -4,8 +4,8 @@ from app.models.medication import Medication
 from app.schemas.medication import MedicationCreate, MedicationUpdate
 
 
-def create_medication(db: Session, user_id: int, medication_in: MedicationCreate) -> Medication:
-    medication = Medication(
+def _build_medication(user_id: int, medication_in: MedicationCreate) -> Medication:
+    return Medication(
         user_id=user_id,
         medication_name=medication_in.medication_name,
         dose=medication_in.dose,
@@ -16,11 +16,26 @@ def create_medication(db: Session, user_id: int, medication_in: MedicationCreate
         notes=medication_in.notes,
     )
 
+
+def create_medication(db: Session, user_id: int, medication_in: MedicationCreate) -> Medication:
+    medication = _build_medication(user_id, medication_in)
+
     db.add(medication)
     db.commit()
     db.refresh(medication)
 
     return medication
+
+
+def create_medications_from_rows(
+    db: Session, user_id: int, rows: list[MedicationCreate]
+) -> int:
+    medications = [_build_medication(user_id, row) for row in rows]
+
+    db.add_all(medications)
+    db.commit()
+
+    return len(medications)
 
 
 def get_medications_for_user(db: Session, user_id: int) -> list[Medication]:

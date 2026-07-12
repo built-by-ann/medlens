@@ -1,12 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.medication import MedicationCreate, MedicationResponse, MedicationUpdate
+from app.schemas.medication import (
+    MedicationCreate,
+    MedicationImportSummary,
+    MedicationResponse,
+    MedicationUpdate,
+)
+from app.services.medication_import_service import (
+    CsvFormatError,
+    CsvValidationError,
+    parse_medication_csv,
+)
 from app.services.medication_service import (
     create_medication,
+    create_medications_from_rows,
     delete_medication,
     get_medication,
     get_medications_for_user,
@@ -29,6 +40,62 @@ def create_medication_route(
     db: Session = Depends(get_db),
 ) -> MedicationResponse:
     return create_medication(db, current_user.id, medication_in)
+
+
+@router.post(
+    "/import",
+    response_model=MedicationImportSummary,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_medications(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MedicationImportSummary:
+    is_csv_extension = (file.filename or "").lower().endswith(".csv")
+    is_csv_content_type = file.content_type == "text/csv"
+
+    if not (is_csv_extension or is_csv_content_type):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Only .csv or text/csv files are supported",
+        )
+
+    contents = file.file.read()
+
+    try:
+        decoded_text = contents.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="File must be valid UTF-8 encoded text",
+        )
+
+    try:
+        result = parse_medication_csv(decoded_text)
+    except CsvFormatError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        )
+    except CsvValidationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "message": "CSV import failed validation. No medications were created.",
+                "row_errors": error.row_errors,
+            },
+        )
+
+    medications_created = create_medications_from_rows(
+        db, current_user.id, result.medications
+    )
+
+    return MedicationImportSummary(
+        rows_processed=result.rows_processed,
+        medications_created=medications_created,
+        blank_rows_ignored=result.blank_rows_ignored,
+    )
 
 
 @router.get("", response_model=list[MedicationResponse])
