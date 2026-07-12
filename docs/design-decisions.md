@@ -233,6 +233,80 @@ Cons
 
 ---
 
+# Decision 12: Deterministic Reconciliation Without AI or Fuzzy Matching
+
+**Decision**
+
+Implement medication reconciliation as explicit, deterministic backend logic. Medication names and fields are compared using fixed normalization rules and a small, explicit alias list. No fuzzy matching library, vector search, or LLM call is used anywhere in the comparison itself.
+
+**Reasoning**
+
+AI is responsible for producing MedicationMention records from clinical text. Deciding whether two already-structured records conflict is a comparison problem, not an extraction problem, and does not need a language model. A deterministic implementation is reproducible, directly unit testable, and does not risk inventing brand or generic equivalence, correcting misspellings, or merging medications on partial string similarity, all of which could silently hide a real documentation inconsistency instead of surfacing it.
+
+**Trade-offs**
+
+Pros
+
+- Fully reproducible and unit testable without any external service
+- Cannot silently merge genuinely different medications
+- No dependency on an AI provider being available or affordable at analysis time
+
+Cons
+
+- Will not catch a conflict where a document uses a materially different name for the same medication, such as a brand name where the list uses a generic name
+- Requires new aliases to be added explicitly as they are identified, rather than inferred automatically
+
+---
+
+# Decision 13: Narrow Assumption for the Unsupported Medication List Entry Rule
+
+**Decision**
+
+Only generate an unsupported_medication_list_entry finding when at least one of the documents selected for the analysis has a document_type of medication_list or medication_reconciliation_form.
+
+**Reasoning**
+
+This finding type asserts that a medication in the user's list is not supported by the selected documents. That assertion is only safe if the selected documents can reasonably be expected to mention every current medication. A visit note, progress note, or discharge summary is not expected to re-list every medication a patient takes, so its silence proves nothing. A medication list or medication reconciliation form is different: both document types exist specifically to represent the current medication list, so silence there is meaningful evidence. Restricting the rule this way avoids the false positives the underlying finding type is most at risk of producing.
+
+**Trade-offs**
+
+Pros
+
+- Avoids flagging medications as unsupported based on documents that were never meant to be exhaustive
+- Uses a signal, document_type, that already exists rather than inventing a new one
+
+Cons
+
+- The rule produces no findings at all for an analysis that only includes visit notes or similar documents, even if a medication genuinely appears nowhere else
+- Depends on document_type being set accurately at upload time
+
+---
+
+# Decision 14: Two-Phase Commit Boundary for Reconciliation Runs
+
+**Decision**
+
+Commit an Analysis in two separate steps before its findings exist: first as pending, then as processing. Only the remaining work, discrepancy creation and the final completed or failed transition, is committed as one atomic unit.
+
+**Reasoning**
+
+The existing Analysis service already commits each status transition independently. A single all-encompassing transaction across the entire reconciliation run would mean that if reconciliation fails, there would be no Analysis row at all to mark as failed, since the transaction that created it would also roll back. Committing pending and processing durably first guarantees a record of the run exists no matter what happens afterward, while still keeping discrepancy creation and the completion or failure fields atomic with each other, so no completed analysis can exist with a mismatched or missing set of findings.
+
+**Trade-offs**
+
+Pros
+
+- A failed reconciliation run always leaves a durable, explained record instead of no record at all
+- No completed analysis can exist with partially created discrepancies or counts that do not match them
+- Reuses the existing single-item commit functions rather than introducing a new transaction pattern
+
+Cons
+
+- Not a single database transaction for the entire run, so an external observer could see a processing analysis with no findings yet
+- Relies on rollback correctly discarding any discrepancies staged before a late failure, which must be verified by test rather than guaranteed by a single wrapping transaction
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:
