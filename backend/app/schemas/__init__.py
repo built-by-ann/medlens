@@ -6,15 +6,27 @@ from app.schemas.medication import (
     MedicationResponse,
     MedicationUpdate,
 )
+from app.schemas.medication_discrepancy import (
+    DiscrepancySeverity,
+    DiscrepancyType,
+    MedicationDiscrepancyCreate,
+    MedicationDiscrepancyResponse,
+    ResolutionStatus,
+)
 from app.schemas.user import UserCreate, UserResponse
 
 __all__ = [
     "ClinicalDocumentCreate",
     "ClinicalDocumentResponse",
+    "DiscrepancySeverity",
+    "DiscrepancyType",
     "MedicationCreate",
+    "MedicationDiscrepancyCreate",
+    "MedicationDiscrepancyResponse",
     "MedicationImportSummary",
     "MedicationResponse",
     "MedicationUpdate",
+    "ResolutionStatus",
     "Token",
     "UserCreate",
     "UserLogin",

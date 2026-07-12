@@ -302,20 +302,23 @@ Analysis has many MedicationDiscrepancies
 
 Represents a potential medication reconciliation issue found during an analysis.
 
+A discrepancy references at most one Medication and at most one MedicationMention, since a finding may only have one side of the comparison. A medication mentioned in a document but missing from the medication list has a MedicationMention and no Medication. A medication list entry with no supporting document has a Medication and no MedicationMention.
+
 ### Fields
 
 ```text
 id
 analysis_id
-medication_name
-normalized_name
-source_document_a_id
-source_document_b_id
+medication_id
+medication_mention_id
 discrepancy_type
 severity
+title
 ai_explanation
 recommendation
-resolved
+expected_value
+observed_value
+resolution_status
 created_at
 updated_at
 ```
@@ -323,18 +326,11 @@ updated_at
 ### Field Notes
 
 ```text
-source_document_a_id
-source_document_b_id
+medication_id
+medication_mention_id
 ```
 
-Reference the two documents being compared.
-
-Example:
-
-```text
-Medication List
-Visit Note
-```
+Reference the medication list entry and the extracted mention being compared. Both are nullable, and a discrepancy is not required to have both. Deleting the referenced Medication or MedicationMention sets the corresponding field to null rather than deleting the discrepancy.
 
 ```text
 discrepancy_type
@@ -345,11 +341,13 @@ Describes the type of inconsistency.
 Possible values:
 
 ```text
+missing_from_medication_list
+discontinued_status_conflict
+dose_conflict
+route_conflict
+frequency_conflict
 status_conflict
-missing_from_source
-dose_mismatch
-frequency_mismatch
-unclear_status
+unsupported_medication_list_entry
 ```
 
 ```text
@@ -367,16 +365,39 @@ high
 ```
 
 ```text
-resolved
+title
 ```
 
-Tracks whether the user has reviewed or dismissed the discrepancy.
+A short, human-readable summary of the finding.
+
+```text
+expected_value
+observed_value
+```
+
+Store the specific values being compared, such as a status or dose recorded in the medication list versus the value observed in a document.
+
+```text
+resolution_status
+```
+
+Tracks how the user has responded to the discrepancy.
+
+Possible values:
+
+```text
+open
+reviewed
+resolved
+dismissed
+```
 
 ### Relationships
 
 ```text
 MedicationDiscrepancy belongs to Analysis
-MedicationDiscrepancy references two ClinicalDocuments
+MedicationDiscrepancy references Medication
+MedicationDiscrepancy references MedicationMention
 ```
 
 ---
@@ -400,7 +421,10 @@ Analysis
   1 ─── many MedicationDiscrepancy
 
 MedicationDiscrepancy
-  many ─── 2 ClinicalDocuments
+  many ─── 1 Medication
+
+MedicationDiscrepancy
+  many ─── 1 MedicationMention
 ```
 
 ---
@@ -424,13 +448,12 @@ MedicationDiscrepancy
 ```text
 Medication: Lisinopril
 
-Source A: Medication List
-Status: discontinued
-
-Source B: Visit Note
-Status: active
+Medication List Status: discontinued
+Visit Note Status: active
 
 Discrepancy Type: status_conflict
+Expected Value: discontinued
+Observed Value: active
 
 Explanation:
 Lisinopril is marked as discontinued in the medication list but appears as an active medication in the visit note.
@@ -460,6 +483,10 @@ Medication is a separate model representing the user's own, self-maintained medi
 ### Discrepancies are stored separately
 
 Medication discrepancies are stored as their own model because users may need to review, resolve, dismiss, or revisit them later.
+
+### MedicationDiscrepancy references Medication and MedicationMention
+
+The original MedicationDiscrepancy design compared two ClinicalDocuments directly, before Medication existed as a model. Now that Medication represents the user's own list, reconciliation findings compare a medication list entry against an extracted mention rather than two documents. The nullable medication_id and medication_mention_id fields replace the earlier document references, since every supported finding type is a list-versus-mention comparison rather than a document-versus-document comparison. Document context remains reachable through medication_mention_id, since a MedicationMention belongs to a ClinicalDocument.
 
 ---
 
