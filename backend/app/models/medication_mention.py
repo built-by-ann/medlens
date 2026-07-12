@@ -31,3 +31,4 @@ class MedicationMention(Base):
         "ClinicalDocument",
         back_populates="medication_mentions",
     )
+    discrepancies = relationship("MedicationDiscrepancy", back_populates="medication_mention")

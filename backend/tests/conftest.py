@@ -17,7 +17,7 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
-from app.db.session import Base, engine  # noqa: E402
+from app.db.session import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import User  # noqa: E402,F401
 
@@ -66,3 +66,13 @@ def _clean_tables():
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+@pytest.fixture
+def db():
+    session = SessionLocal()
+
+    try:
+        yield session
+    finally:
+        session.close()

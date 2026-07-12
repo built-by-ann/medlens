@@ -23,3 +23,4 @@ class Medication(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="medications")
+    discrepancies = relationship("MedicationDiscrepancy", back_populates="medication")

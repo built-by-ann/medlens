@@ -181,6 +181,31 @@ The goal is to simulate a professional software engineering workflow rather than
 
 ---
 
+# Decision 10: Database-Level ON DELETE SET NULL for Reconciliation Findings
+
+**Decision**
+
+Use `ON DELETE SET NULL` on the foreign keys from MedicationDiscrepancy to Medication and to MedicationMention, enforced at the database level.
+
+**Reasoning**
+
+Every other foreign key in the schema relies only on ORM-level cascade behavior, not a database-level `ON DELETE` action. MedicationDiscrepancy is a deliberate exception, because a reconciliation finding is a record of something that was true at analysis time. If the referenced Medication or MedicationMention is later deleted, the finding should survive with the reference cleared rather than being deleted along with it, and the referenced Medication or MedicationMention should never be deleted as a side effect of removing a finding.
+
+**Trade-offs**
+
+Pros
+
+- Findings are not silently lost when a medication or mention is later removed
+- A user's medication records and clinical evidence cannot be deleted as a side effect of finding cleanup
+- Enforced at the database level, not only through application code
+
+Cons
+
+- Introduces a schema convention that differs from every other foreign key in the project
+- Requires readers of the schema to understand why this table is treated differently
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:

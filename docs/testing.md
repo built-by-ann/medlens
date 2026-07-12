@@ -51,6 +51,7 @@ After each test, all rows are removed from every table so that each test starts 
 - **JWT authentication** — the `get_current_user` dependency is exercised end-to-end through `/users/me`, covering missing, malformed, expired, and otherwise invalid tokens, as well as a validly signed token referencing a user that no longer exists.
 - **/users/me** — returns the authenticated user's profile and never exposes the stored password hash.
 - **Medications**: full CRUD (create, list, retrieve, partial update, delete) scoped to the authenticated user, plus CSV import covering successful multi-row imports, optional field handling, file type and encoding validation, header validation, blank row handling, whitespace trimming, per-row field validation, atomic rejection when any row is invalid, and ownership isolation.
+- **Medication reconciliation findings**: model creation, each allowed finding type, severity, and resolution status value, rejection of invalid values, nullable medication and medication mention references, relationships to Analysis, Medication, and MedicationMention, response schema serialization, a database constraint on the required analysis reference, and deletion behavior, including cascade deletion from Analysis and reference clearing when a Medication or MedicationMention is deleted.
 - **Configuration** — application settings load expected values from environment variables and fall back to documented defaults when optional values are not set.
 
 ---
