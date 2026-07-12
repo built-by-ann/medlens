@@ -53,13 +53,14 @@ After each test, all rows are removed from every table so that each test starts 
 - **Medications**: full CRUD (create, list, retrieve, partial update, delete) scoped to the authenticated user, plus CSV import covering successful multi-row imports, optional field handling, file type and encoding validation, header validation, blank row handling, whitespace trimming, per-row field validation, atomic rejection when any row is invalid, and ownership isolation.
 - **Medication reconciliation findings**: model creation, each allowed finding type, severity, and resolution status value, rejection of invalid values, nullable medication and medication mention references, relationships to Analysis, Medication, and MedicationMention, response schema serialization, a database constraint on the required analysis reference, and deletion behavior, including cascade deletion from Analysis and reference clearing when a Medication or MedicationMention is deleted.
 - **Analysis**: model creation with a default pending status, every allowed status value and rejection of an invalid one, nonnegative validation on summary counts, the user relationship, attaching multiple clinical documents to one analysis and one document to multiple analyses, the discrepancy relationship, cascade deletion of discrepancies when an analysis is deleted, association cleanup when a clinical document is deleted, response schema serialization, the processing, completed, and failed transitions, timestamp behavior across the lifecycle, error message handling, and provider and model metadata.
+- **Medication normalization**: trimming, lowercasing, and whitespace collapsing for medication names and comparable fields, the trailing period rule for names, the known route and frequency aliases, and confirmation that unrelated or partially matching names are never treated as equivalent.
+- **Medication reconciliation service**: each supported discrepancy rule in isolation, including the discontinued-status case taking precedence over the general status conflict, no finding when only one side has a comparable value, no finding for values that are equivalent after normalization, deduplication of identical mentions into a single finding, separate findings for genuinely distinct conflicting values, correct linkage to the originating Medication and MedicationMention, the centralized severity mapping, full orchestration through `run_medication_reconciliation` including status and timestamp progression, count totals, provider and model metadata, rejection of a nonexistent or another user's document, a selected document with no mentions completing successfully, rollback of staged discrepancies and a sanitized error message on an unexpected failure, and isolation from another user's medications.
 - **Configuration** — application settings load expected values from environment variables and fall back to documented defaults when optional values are not set.
 
 ---
 
 ## Future Testing
 
-- Medication reconciliation
 - AI integration
 - Frontend (Vitest and React Testing Library)
 - CI/CD (running the backend test suite automatically on pull requests via GitHub Actions)
