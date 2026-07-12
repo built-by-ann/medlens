@@ -266,6 +266,93 @@ Possible error responses
 
 ---
 
+### POST /medications/import
+
+Purpose
+
+Imports medications into the authenticated user's medication list from an uploaded CSV file.
+
+Accepted file type
+
+`.csv` file extension or `text/csv` content type. Any other file type is rejected.
+
+Expected headers
+
+```text
+medication_name
+dose
+route
+frequency
+status
+source
+notes
+```
+
+`medication_name`, `dose`, `route`, `frequency`, `status`, and `source` are required headers. `notes` is optional. Header names are matched case-insensitively and with surrounding whitespace trimmed, so `Medication_Name` and ` medication_name ` are both accepted. Extra columns beyond the ones listed above are ignored.
+
+Row behavior
+
+- Surrounding whitespace is trimmed from every header and every cell value.
+- A row where every recognized column is empty is treated as a blank row and ignored. Blank rows are counted separately in the response and do not cause an error.
+- An empty `notes` cell is stored as `null`, matching the other creation endpoints.
+- Each nonblank row is validated using the same rules as `POST /medications`.
+
+Import is atomic. Every row is validated before any medication is created. If any nonblank row fails validation, no medications are created and the response reports every invalid row.
+
+Example CSV content
+
+```csv
+medication_name,dose,route,frequency,status,source,notes
+Lisinopril,10 mg,oral,once daily,active,patient_reported,Taken with breakfast
+Metformin,500 mg,oral,twice daily,active,patient_reported,
+```
+
+Success response
+
+`201 Created`
+
+```json
+{
+  "rows_processed": 2,
+  "medications_created": 2,
+  "blank_rows_ignored": 0
+}
+```
+
+`rows_processed` counts every nonheader row read from the file, including blank rows. `medications_created` counts the medications actually created. `blank_rows_ignored` counts rows skipped because every recognized column was empty.
+
+Validation error response
+
+`422 Unprocessable Entity`
+
+Row numbers follow spreadsheet convention: the header is row 1, so the first data row is row 2.
+
+```json
+{
+  "detail": {
+    "message": "CSV import failed validation. No medications were created.",
+    "row_errors": [
+      {
+        "row": 3,
+        "errors": [
+          {
+            "field": "dose",
+            "message": "String should have at least 1 character"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `422 Unprocessable Entity`: the file is not a CSV, the file is empty or has no header row, the header row is missing a required column, or one or more rows fail validation. When one or more rows fail validation, no medications are created.
+
+---
+
 ### GET /medications
 
 Purpose

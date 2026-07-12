@@ -50,13 +50,13 @@ After each test, all rows are removed from every table so that each test starts 
 - **Login** — successful login returns a bearer token whose decoded claims match the authenticated user; incorrect passwords and unknown emails are both rejected.
 - **JWT authentication** — the `get_current_user` dependency is exercised end-to-end through `/users/me`, covering missing, malformed, expired, and otherwise invalid tokens, as well as a validly signed token referencing a user that no longer exists.
 - **/users/me** — returns the authenticated user's profile and never exposes the stored password hash.
+- **Medications**: full CRUD (create, list, retrieve, partial update, delete) scoped to the authenticated user, plus CSV import covering successful multi-row imports, optional field handling, file type and encoding validation, header validation, blank row handling, whitespace trimming, per-row field validation, atomic rejection when any row is invalid, and ownership isolation.
 - **Configuration** — application settings load expected values from environment variables and fall back to documented defaults when optional values are not set.
 
 ---
 
 ## Future Testing
 
-- Clinical documents
 - Medication reconciliation
 - AI integration
 - Frontend (Vitest and React Testing Library)

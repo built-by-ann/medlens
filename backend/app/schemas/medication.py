@@ -23,6 +23,12 @@ class MedicationUpdate(BaseModel):
     notes: str | None = None
 
 
+class MedicationImportSummary(BaseModel):
+    rows_processed: int
+    medications_created: int
+    blank_rows_ignored: int
+
+
 class MedicationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

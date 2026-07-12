@@ -238,3 +238,262 @@ def test_delete_medication_requires_authentication(client):
     response = client.delete("/medications/1")
 
     assert response.status_code == 401
+
+
+def _upload_csv(client, token, content, filename="medications.csv", content_type="text/csv"):
+    encoded = content.encode("utf-8") if isinstance(content, str) else content
+
+    return client.post(
+        "/medications/import",
+        files={"file": (filename, encoded, content_type)},
+        headers=_auth_headers(token),
+    )
+
+
+def test_import_csv_succeeds_with_multiple_medications(client):
+    token = _register_and_login(client, "importer@example.com")
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source,notes\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported,Taken with breakfast\n"
+        "Metformin,500 mg,oral,twice daily,active,patient_reported,\n"
+    )
+
+    response = _upload_csv(client, token, csv_content)
+
+    assert response.status_code == 201
+
+    body = response.json()
+    assert body["rows_processed"] == 2
+    assert body["medications_created"] == 2
+    assert body["blank_rows_ignored"] == 0
+
+
+def test_import_csv_succeeds_with_notes_column_omitted(client):
+    token = _register_and_login(client, "importnonotes@example.com")
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported\n"
+    )
+
+    response = _upload_csv(client, token, csv_content)
+
+    assert response.status_code == 201
+    assert response.json()["medications_created"] == 1
+
+    list_response = client.get("/medications", headers=_auth_headers(token))
+    assert list_response.json()[0]["notes"] is None
+
+
+def test_import_csv_requires_authentication(client):
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported\n"
+    )
+
+    response = client.post(
+        "/medications/import",
+        files={"file": ("medications.csv", csv_content.encode("utf-8"), "text/csv")},
+    )
+
+    assert response.status_code == 401
+
+
+def test_import_csv_rejects_invalid_file_type(client):
+    token = _register_and_login(client, "importbadtype@example.com")
+
+    response = _upload_csv(
+        client, token, "not a csv file", filename="medications.txt", content_type="text/plain"
+    )
+
+    assert response.status_code == 422
+
+
+def test_import_csv_rejects_empty_file(client):
+    token = _register_and_login(client, "importempty@example.com")
+
+    response = _upload_csv(client, token, "")
+
+    assert response.status_code == 422
+
+
+def test_import_csv_rejects_file_with_no_header_row(client):
+    token = _register_and_login(client, "importnoheader@example.com")
+
+    response = _upload_csv(client, token, "\n\n")
+
+    assert response.status_code == 422
+
+
+def test_import_csv_rejects_missing_required_headers(client):
+    token = _register_and_login(client, "importmissingheaders@example.com")
+
+    csv_content = "medication_name,dose\nLisinopril,10 mg\n"
+
+    response = _upload_csv(client, token, csv_content)
+
+    assert response.status_code == 422
+    assert "route" in response.json()["detail"]
+
+
+def test_import_csv_ignores_extra_unknown_headers(client):
+    token = _register_and_login(client, "importextraheaders@example.com")
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source,notes,insurance_id\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported,,12345\n"
+    )
+
+    response = _upload_csv(client, token, csv_content)
+
+    assert response.status_code == 201
+    assert response.json()["medications_created"] == 1
+
+
+def test_import_csv_ignores_fully_blank_rows(client):
+    token = _register_and_login(client, "importblankrows@example.com")
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source,notes\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported,\n"
+        ",,,,,,\n"
+        "Metformin,500 mg,oral,twice daily,active,patient_reported,\n"
+    )
+
+    response = _upload_csv(client, token, csv_content)
+
+    assert response.status_code == 201
+
+    body = response.json()
+    assert body["rows_processed"] == 3
+    assert body["medications_created"] == 2
+    assert body["blank_rows_ignored"] == 1
+
+
+def test_import_csv_trims_whitespace_from_headers_and_values(client):
+    token = _register_and_login(client, "importwhitespace@example.com")
+
+    csv_content = (
+        " Medication_Name , Dose , Route , Frequency , Status , Source , Notes \n"
+        " Lisinopril , 10 mg , oral , once daily , active , patient_reported , Taken with breakfast \n"
+    )
+
+    response = _upload_csv(client, token, csv_content)
+
+    assert response.status_code == 201
+    assert response.json()["medications_created"] == 1
+
+    list_response = client.get("/medications", headers=_auth_headers(token))
+    medication = list_response.json()[0]
+    assert medication["medication_name"] == "Lisinopril"
+    assert medication["dose"] == "10 mg"
+    assert medication["notes"] == "Taken with breakfast"
+
+
+def test_import_csv_rejects_invalid_field_values(client):
+    token = _register_and_login(client, "importinvalidfield@example.com")
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source,notes\n"
+        "Lisinopril,,oral,once daily,active,patient_reported,\n"
+    )
+
+    response = _upload_csv(client, token, csv_content)
+
+    assert response.status_code == 422
+
+    detail = response.json()["detail"]
+    assert detail["row_errors"][0]["row"] == 2
+    assert any(error["field"] == "dose" for error in detail["row_errors"][0]["errors"])
+
+
+def test_import_csv_reports_row_number_for_invalid_row_among_valid_rows(client):
+    token = _register_and_login(client, "importonebad@example.com")
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source,notes\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported,\n"
+        "BadRow,,oral,once daily,active,patient_reported,\n"
+        "Metformin,500 mg,oral,twice daily,active,patient_reported,\n"
+    )
+
+    response = _upload_csv(client, token, csv_content)
+
+    assert response.status_code == 422
+
+    detail = response.json()["detail"]
+    assert detail["row_errors"][0]["row"] == 3
+
+
+def test_import_csv_creates_no_medications_when_any_row_invalid(client):
+    token = _register_and_login(client, "importatomic@example.com")
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source,notes\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported,\n"
+        "BadRow,,oral,once daily,active,patient_reported,\n"
+    )
+
+    response = _upload_csv(client, token, csv_content)
+
+    assert response.status_code == 422
+
+    list_response = client.get("/medications", headers=_auth_headers(token))
+    assert list_response.json() == []
+
+
+def test_import_csv_assigns_medications_to_authenticated_user(client):
+    token = _register_and_login(client, "importowner@example.com")
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source,notes\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported,\n"
+    )
+
+    _upload_csv(client, token, csv_content)
+
+    list_response = client.get("/medications", headers=_auth_headers(token))
+    medications = list_response.json()
+
+    assert len(medications) == 1
+    assert "user_id" in medications[0]
+
+
+def test_import_csv_does_not_leak_into_other_users_list(client):
+    token_a = _register_and_login(client, "importusera@example.com")
+    token_b = _register_and_login(client, "importuserb@example.com")
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source,notes\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported,\n"
+    )
+
+    _upload_csv(client, token_b, csv_content)
+
+    list_response_a = client.get("/medications", headers=_auth_headers(token_a))
+    assert list_response_a.json() == []
+
+
+def test_imported_medications_appear_through_list_endpoint(client):
+    token = _register_and_login(client, "importlist@example.com")
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source,notes\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported,Taken with breakfast\n"
+    )
+
+    _upload_csv(client, token, csv_content)
+
+    list_response = client.get("/medications", headers=_auth_headers(token))
+    assert list_response.status_code == 200
+
+    medications = list_response.json()
+    assert len(medications) == 1
+    assert medications[0]["medication_name"] == "Lisinopril"
+    assert medications[0]["dose"] == "10 mg"
+    assert medications[0]["route"] == "oral"
+    assert medications[0]["frequency"] == "once daily"
+    assert medications[0]["status"] == "active"
+    assert medications[0]["source"] == "patient_reported"
+    assert medications[0]["notes"] == "Taken with breakfast"
