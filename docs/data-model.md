@@ -34,6 +34,8 @@ User
  ├── ClinicalDocument
  │      └── MedicationMention
  │
+ ├── Medication
+ │
  └── Analysis
         └── MedicationDiscrepancy
 ```
@@ -61,6 +63,7 @@ updated_at
 
 ```text
 User has many ClinicalDocuments
+User has many Medications
 User has many Analyses
 ```
 
@@ -208,6 +211,50 @@ MedicationMention belongs to ClinicalDocument
 
 ---
 
+## Medication
+
+Represents one medication in a user's own, self-maintained medication list.
+
+Unlike MedicationMention, a Medication record is not extracted from a clinical document. It is entered and owned directly by the user, independent of any document, and is not tied to a document's confidence or context.
+
+### Fields
+
+```text
+id
+user_id
+medication_name
+dose
+route
+frequency
+status
+source
+notes
+created_at
+updated_at
+```
+
+### Field Notes
+
+```text
+source
+```
+
+Describes where the medication entry came from, such as `patient_reported` or `manual_entry`.
+
+```text
+notes
+```
+
+Optional free-text notes about the medication. May be null.
+
+### Relationships
+
+```text
+Medication belongs to User
+```
+
+---
+
 ## Analysis
 
 Represents one reconciliation run across selected clinical documents.
@@ -344,6 +391,9 @@ ClinicalDocument
   1 ─── many MedicationMention
 
 User
+  1 ─── many Medication
+
+User
   1 ─── many Analysis
 
 Analysis
@@ -399,11 +449,13 @@ The system uses `ClinicalDocument` rather than `MedicationSource` because medica
 
 This keeps the model flexible enough to support visit notes, discharge summaries, after-visit summaries, and medication lists.
 
-### MedicationMention instead of Medication
+### MedicationMention versus Medication
 
-The system stores medication mentions rather than global medication records.
+The system stores medication mentions rather than treating extracted document data as a global medication record.
 
-This is intentional because the core problem is not maintaining one perfect medication list. The core problem is identifying how the same medication is represented differently across documents.
+This is intentional because the core reconciliation problem is not maintaining one perfect medication list. The core problem is identifying how the same medication is represented differently across documents.
+
+Medication is a separate model representing the user's own, self-maintained medication list. It exists independently of document extraction and is not a source for reconciliation. The two models serve different purposes: MedicationMention captures what a document says, while Medication captures what the user says.
 
 ### Discrepancies are stored separately
 
@@ -437,6 +489,7 @@ The MVP data model supports:
 - authenticated users
 - uploaded or pasted clinical documents
 - AI-extracted medication mentions
+- user-maintained medication lists
 - reconciliation analyses
 - saved discrepancy results
 
