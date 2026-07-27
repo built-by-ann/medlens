@@ -3,6 +3,8 @@ from pydantic import ValidationError
 
 from app.core.security import hash_password
 from app.models.analysis import Analysis
+from app.models.analysis_inconsistency import AnalysisInconsistency
+from app.models.analysis_medication_mention import AnalysisMedicationMention
 from app.models.clinical_document import ClinicalDocument
 from app.models.medication_discrepancy import MedicationDiscrepancy
 from app.models.user import User
@@ -16,6 +18,7 @@ from app.schemas.analysis import (
 from app.services.analysis_service import (
     InvalidClinicalDocumentIdsError,
     create_analysis,
+    get_analysis_for_user,
     mark_analysis_completed,
     mark_analysis_failed,
     mark_analysis_processing,
@@ -405,3 +408,64 @@ def test_analysis_timestamps_progress_through_lifecycle(db):
     )
     assert analysis.completed_at is not None
     assert analysis.completed_at >= analysis.started_at
+
+
+def test_get_analysis_for_user_returns_owned_analysis(db):
+    user = _create_user(db, email="getanalysisowner@example.com")
+    document = _create_clinical_document(db, user)
+    analysis = create_analysis(db, user.id, AnalysisCreate(clinical_document_ids=[document.id]))
+
+    fetched = get_analysis_for_user(db, user.id, analysis.id)
+
+    assert fetched is not None
+    assert fetched.id == analysis.id
+
+
+def test_get_analysis_for_user_returns_none_for_other_users_analysis(db):
+    owner = _create_user(db, email="getanalysisrealowner@example.com")
+    other_user = _create_user(db, email="getanalysisintruder@example.com")
+    document = _create_clinical_document(db, owner)
+    analysis = create_analysis(db, owner.id, AnalysisCreate(clinical_document_ids=[document.id]))
+
+    fetched = get_analysis_for_user(db, other_user.id, analysis.id)
+
+    assert fetched is None
+
+
+def test_get_analysis_for_user_returns_none_for_nonexistent_analysis(db):
+    user = _create_user(db, email="getanalysismissing@example.com")
+
+    fetched = get_analysis_for_user(db, user.id, 999999)
+
+    assert fetched is None
+
+
+def test_get_analysis_for_user_loads_mentions_and_inconsistencies(db):
+    # get_analysis_for_user does not sort these collections itself (that is
+    # the response layer's responsibility, so the ORM-managed relationship
+    # collections are never mutated in place); this only confirms both
+    # collections are loaded with the correct rows via selectinload.
+    user = _create_user(db, email="getanalysisloaded@example.com")
+    document = _create_clinical_document(db, user)
+    analysis = create_analysis(db, user.id, AnalysisCreate(clinical_document_ids=[document.id]))
+
+    mention_c = AnalysisMedicationMention(analysis_id=analysis.id, medication_name="Metformin")
+    mention_a = AnalysisMedicationMention(analysis_id=analysis.id, medication_name="Atorvastatin")
+    db.add_all([mention_c, mention_a])
+    db.commit()
+
+    inconsistency_b = AnalysisInconsistency(analysis_id=analysis.id, description="Second.")
+    inconsistency_a = AnalysisInconsistency(analysis_id=analysis.id, description="First.")
+    db.add_all([inconsistency_b, inconsistency_a])
+    db.commit()
+
+    fetched = get_analysis_for_user(db, user.id, analysis.id)
+
+    assert {mention.medication_name for mention in fetched.medication_mentions} == {
+        "Metformin",
+        "Atorvastatin",
+    }
+    assert {row.description for row in fetched.possible_inconsistencies} == {
+        "Second.",
+        "First.",
+    }

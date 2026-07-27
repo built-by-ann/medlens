@@ -1,7 +1,10 @@
 from app.schemas.analysis import (
     AnalysisCompletedSummary,
     AnalysisCreate,
+    AnalysisDetailResponse,
     AnalysisFailure,
+    AnalysisInconsistencyResponse,
+    AnalysisMedicationMentionResponse,
     AnalysisResponse,
     AnalysisStatus,
 )
@@ -25,7 +28,10 @@ from app.schemas.user import UserCreate, UserResponse
 __all__ = [
     "AnalysisCompletedSummary",
     "AnalysisCreate",
+    "AnalysisDetailResponse",
     "AnalysisFailure",
+    "AnalysisInconsistencyResponse",
+    "AnalysisMedicationMentionResponse",
     "AnalysisResponse",
     "AnalysisStatus",
     "ClinicalDocumentCreate",

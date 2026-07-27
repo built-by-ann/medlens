@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.analysis import Analysis
 from app.models.clinical_document import ClinicalDocument
@@ -76,6 +76,26 @@ def mark_analysis_completed(
     db.refresh(analysis)
 
     return analysis
+
+
+def get_analysis_for_user(db: Session, user_id: int, analysis_id: int) -> Analysis | None:
+    # selectinload avoids N+1 queries for the two child collections, and
+    # avoids the cartesian product joinedload would produce when eagerly
+    # loading two independent one-to-many relationships at once. Ordering
+    # of these collections is decided by the caller, not here, so this
+    # function never mutates the loaded relationship collections.
+    return (
+        db.query(Analysis)
+        .options(
+            selectinload(Analysis.medication_mentions),
+            selectinload(Analysis.possible_inconsistencies),
+        )
+        .filter(
+            Analysis.id == analysis_id,
+            Analysis.user_id == user_id,
+        )
+        .first()
+    )
 
 
 def mark_analysis_failed(db: Session, analysis: Analysis, error_message: str) -> Analysis:

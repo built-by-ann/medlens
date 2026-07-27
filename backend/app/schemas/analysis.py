@@ -29,6 +29,43 @@ class AnalysisFailure(BaseModel):
     error_message: str = Field(min_length=1)
 
 
+class AnalysisMedicationMentionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    medication_name: str
+    dosage: str | None
+    route: str | None
+    frequency: str | None
+    status: str | None
+    notes: str | None
+
+
+class AnalysisInconsistencyResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    description: str
+
+
+class AnalysisDetailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: AnalysisStatus
+    provider: str | None
+    model_name: str | None
+    summary: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime | None
+
+    medication_mentions: list[AnalysisMedicationMentionResponse]
+    possible_inconsistencies: list[AnalysisInconsistencyResponse]
+
+
 class AnalysisResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
