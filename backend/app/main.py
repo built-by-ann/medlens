@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.api.routes.ai import router as ai_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.clinical_documents import router as clinical_documents_router
 from app.api.routes.medications import router as medications_router
@@ -14,6 +15,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(clinical_documents_router)
 app.include_router(medications_router)
+app.include_router(ai_router)
 
 
 @app.get("/")
