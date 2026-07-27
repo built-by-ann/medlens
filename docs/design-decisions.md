@@ -332,6 +332,56 @@ Cons
 
 ---
 
+# Decision 16: Strict Validation of AI Responses
+
+**Decision**
+
+Parse and validate the AI provider's raw text as a single Pydantic model, `ClinicalSummary`, using `model_validate_json`. Configure both `ClinicalSummary` and its nested `Medication` model with `extra="forbid"`, so a response containing any field outside the documented shape fails validation rather than having the extra field silently dropped. Convert every failure, malformed JSON or a schema mismatch, into the existing `AIProviderError`, so this looks like any other provider failure to the rest of the application.
+
+**Reasoning**
+
+The project's existing rule is that AI responses are untrusted input and must be validated before use. A lenient parse, one that accepts and ignores unexpected fields, would hide the exact situation this rule exists to catch: the model drifting away from the prompt's contract without anyone noticing. Reusing `AIProviderError` rather than introducing a new exception type means the API route did not need to change its error handling to support validation.
+
+**Trade-offs**
+
+Pros
+
+- A response that does not match the documented shape is rejected immediately instead of silently returning incomplete or unexpected data
+- One exception type for every provider failure, network, configuration, or validation, so callers only need one `except` clause
+- `model_validate_json` reports malformed JSON and schema violations through the same `ValidationError`, so both are handled by one code path
+
+Cons
+
+- A harmless, additive change to the model's output, such as a new field the prompt did not ask for, is rejected the same as a genuinely broken response, rather than being ignored
+- The prompt's JSON shape and the Pydantic schema must be kept in sync by hand, since nothing currently generates one from the other
+
+---
+
+# Decision 17: Route Orchestrates Persistence, Service Layer Stays Single-Purpose
+
+**Decision**
+
+`POST /ai/summarize` orchestrates the full flow: create the Analysis, mark it processing, call `AISummaryService` for a validated result, then call a separate persistence function, `persist_analysis_result`, to store it. `AISummaryService` gained no database access to do this. Persistence lives in its own module, `analysis_result_service.py`, which knows about the validated `ClinicalSummary` shape and the database models, but nothing about Gemini or any provider.
+
+**Reasoning**
+
+`AISummaryService` already had one job, turning a provider's raw text into a validated `ClinicalSummary`, and adding database writes to it would have given it two responsibilities that change for different reasons: a new provider or a prompt change affects validation, while a new field to persist or a schema change affects storage. Keeping them apart means a change to one never risks breaking the other, and `AISummaryService` remains testable with a fake provider and no database at all, exactly as it already was.
+
+**Trade-offs**
+
+Pros
+
+- `AISummaryService` still requires no database session to test, even though the feature as a whole now persists data
+- Persistence logic can be reused by a future caller that already has a validated `ClinicalSummary` from somewhere other than this route
+- The route's control flow directly reflects the two-phase commit pattern (Decision 14): `pending` and `processing` committed on their own, the rest committed or rolled back together
+
+Cons
+
+- The route is less thin than the rest of this project's routes, since it now sequences four separate service calls and handles rollback itself
+- A second caller wanting the same orchestration would need to duplicate the route's sequencing and failure handling, since it is not itself extracted into a reusable function
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:

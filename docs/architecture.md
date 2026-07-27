@@ -119,6 +119,8 @@ Stores:
 - Medications
 - Analyses
 - Medication Discrepancies
+- Analysis Medication Mentions
+- Analysis Inconsistencies
 
 ---
 
@@ -166,7 +168,9 @@ The expected application workflow is:
 11. Analysis results are stored in PostgreSQL.
 12. The frontend displays discrepancy reports with supporting evidence.
 
-As of this writing, steps 9 through 11 are implemented: the reconciliation engine and analysis persistence exist as deterministic backend logic. AI-based extraction, steps 5 through 8, is not yet implemented, so MedicationMention records must currently be created directly rather than produced by an AI service.
+As of this writing, steps 9 through 11 are implemented for the reconciliation path described above: the reconciliation engine and analysis persistence exist as deterministic backend logic. AI-based extraction into MedicationMention, steps 5 through 8 as described here, is not yet implemented, so MedicationMention records must currently be created directly rather than produced by an AI service.
+
+A separate AI summary flow is implemented end to end, outside the numbered steps above: `POST /ai/summarize` sends the text of selected documents to Gemini, validates the JSON response with Pydantic, and persists the result as a completed Analysis, with the extracted medications and possible inconsistencies stored as AnalysisMedicationMention and AnalysisInconsistency rows. This flow does not populate MedicationMention and does not feed the reconciliation engine; it is a distinct, AI-authored observation of the selected documents, not reconciliation input. See `docs/ai.md`.
 
 ---
 
@@ -181,7 +185,9 @@ User
  ├── Medication
  │
  └── Analysis
-        └── MedicationDiscrepancy
+        ├── MedicationDiscrepancy
+        ├── AnalysisMedicationMention
+        └── AnalysisInconsistency
 ```
 
 ### Relationships
@@ -201,6 +207,12 @@ User
 
 Analysis
  1 ─── many MedicationDiscrepancy
+
+Analysis
+ 1 ─── many AnalysisMedicationMention
+
+Analysis
+ 1 ─── many AnalysisInconsistency
 
 Analysis
  many ─── many ClinicalDocument

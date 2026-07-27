@@ -503,7 +503,7 @@ Possible error responses
 
 Purpose
 
-Summarizes one or more of the authenticated user's clinical documents using the configured AI provider. See `docs/ai.md` for the provider architecture.
+Summarizes one or more of the authenticated user's clinical documents using the configured AI provider, and persists the result as a completed Analysis. See `docs/ai.md` for the provider architecture and `docs/data-model.md` for what is stored.
 
 Request body
 
@@ -519,24 +519,38 @@ Validation rules
 
 Success response
 
-`200 OK`
+`201 Created`
 
 ```json
 {
+  "analysis_id": 7,
   "provider": "gemini",
   "model": "gemini-2.0-flash",
-  "summary": "{\"medications\": [...], \"possible_inconsistencies\": [...], \"summary\": \"...\"}"
+  "medications": [
+    {
+      "name": "Lisinopril",
+      "dosage": "10 mg",
+      "route": "oral",
+      "frequency": "once daily",
+      "status": "active",
+      "notes": null
+    }
+  ],
+  "possible_inconsistencies": [],
+  "summary": "..."
 }
 ```
 
-`summary` is the raw text returned by the provider, requested and constrained as JSON, but returned here as a plain string. It is not parsed, validated, or stored, and no discrepancy detection or reconciliation is performed on it. See `docs/ai.md` for the JSON shape the prompt requests.
+`medications`, `possible_inconsistencies`, and `summary` are the provider's response, parsed as JSON and validated against a Pydantic schema. `analysis_id` identifies the Analysis this request created, whose fields, medication mentions, and inconsistencies are persisted before the response is returned. No discrepancy detection or reconciliation is performed on it. See `docs/ai.md` for the full response schema.
+
+If a requested document does not exist or is not owned by the caller, no Analysis is created at all. If the AI provider or persistence fails after the Analysis is created, it is marked `failed` with a sanitized error message rather than left in an incomplete state. See Error Responses below.
 
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
 - `404 Not Found`: a requested document does not exist or does not belong to the current user.
 - `422 Unprocessable Entity`: `clinical_document_ids` is missing or empty.
-- `503 Service Unavailable`: the AI provider could not produce a response, including a missing API key, a request failure, a timeout, or an invalid response.
+- `503 Service Unavailable`: the AI provider could not produce a usable response, including a missing API key, a request failure, a timeout, malformed JSON, or a response that fails schema validation.
 
 ---
 
@@ -612,4 +626,4 @@ Returned by `POST /ai/summarize` when the configured AI provider cannot produce 
 
 ## Notes
 
-This API currently supports authentication, application infrastructure, clinical document management, user-owned medication list management, and AI-generated document summaries (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`, `/ai/summarize`). Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.
+This API currently supports authentication, application infrastructure, clinical document management, user-owned medication list management, and AI-generated document summaries, persisted as completed analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`, `/ai/summarize`). Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.
