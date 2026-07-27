@@ -37,7 +37,9 @@ User
  ├── Medication
  │
  └── Analysis
-        └── MedicationDiscrepancy
+        ├── MedicationDiscrepancy
+        ├── AnalysisMedicationMention
+        └── AnalysisInconsistency
 ```
 
 ---
@@ -257,9 +259,14 @@ Medication belongs to User
 
 ## Analysis
 
-Represents one reconciliation run across a set of clinical documents.
+Represents one analysis run across a set of clinical documents.
 
-An analysis tracks who initiated it, which documents it covers, its progress through a status lifecycle, summary counts of what it found, and the resulting discrepancies. It does not itself compare medication mentions; that comparison is the responsibility of the future reconciliation service. This model only records the run and its outcome.
+An analysis tracks who initiated it, which documents it covers, its progress through a status lifecycle, summary counts of what it found, and its results. This model only records the run and its outcome; it does not itself compare medication mentions or produce them.
+
+An analysis can be completed by either of two separate processes, and its stored results differ depending on which one produced it:
+
+- The medication reconciliation service compares Medication against MedicationMention using deterministic rules and produces MedicationDiscrepancy rows, with total_findings and the severity counts reflecting what it found.
+- The AI summary service reads clinical documents directly and produces AnalysisMedicationMention and AnalysisInconsistency rows, an AI observation of what the documents say, with no comparison against the user's medication list. total_findings and the severity counts are always zero for this path, since no MedicationDiscrepancy rows are created by it.
 
 ### Fields
 
@@ -340,10 +347,73 @@ Record which AI provider and model produced the analysis, when applicable. Both 
 ```text
 Analysis belongs to User
 Analysis has many MedicationDiscrepancies
+Analysis has many AnalysisMedicationMentions
+Analysis has many AnalysisInconsistencies
 Analysis references many ClinicalDocuments
 ```
 
 The relationship to ClinicalDocument is many to many: an analysis typically covers more than one document, and the same document can be included in more than one analysis over time. This is implemented with an association table, analysis_clinical_documents, rather than a foreign key on either side. See Design Decisions.
+
+---
+
+## AnalysisMedicationMention
+
+Represents one medication as extracted by the AI summary service for a single analysis run.
+
+This is distinct from MedicationMention, which belongs to a ClinicalDocument and is read by the deterministic reconciliation service. AnalysisMedicationMention belongs to an Analysis instead, and is not matched against the user's Medication list. It is a record of what the AI observed when summarizing the selected documents, nothing more.
+
+### Fields
+
+```text
+id
+analysis_id
+medication_name
+dosage
+route
+frequency
+status
+notes
+created_at
+updated_at
+```
+
+### Field Notes
+
+```text
+dosage
+```
+
+Named to match the field the AI summary prompt and its validated response schema use. MedicationMention, an unrelated model, uses `dose` for the same concept.
+
+### Relationships
+
+```text
+AnalysisMedicationMention belongs to Analysis
+```
+
+---
+
+## AnalysisInconsistency
+
+Represents one possible inconsistency as observed by the AI summary service.
+
+This is an unstructured AI observation, not a deterministic finding. It has no severity, no discrepancy type, and no reference to a Medication or MedicationMention. Structured, deterministic findings are represented by MedicationDiscrepancy, produced by the reconciliation service, not by this model.
+
+### Fields
+
+```text
+id
+analysis_id
+description
+created_at
+updated_at
+```
+
+### Relationships
+
+```text
+AnalysisInconsistency belongs to Analysis
+```
 
 ---
 
@@ -471,6 +541,12 @@ User
 Analysis
   1 ─── many MedicationDiscrepancy
 
+Analysis
+  1 ─── many AnalysisMedicationMention
+
+Analysis
+  1 ─── many AnalysisInconsistency
+
 MedicationDiscrepancy
   many ─── 1 Medication
 
@@ -554,6 +630,10 @@ The original Analysis model stored a single processing_time_ms duration. Once st
 
 total_findings, high_severity_findings, medium_severity_findings, and low_severity_findings are stored as separate integer columns rather than a single JSON structure. The set of counts is small and fixed, and individual columns are simpler to query, default, and update than a JSON document would be for the same purpose.
 
+### AnalysisMedicationMention and AnalysisInconsistency instead of reusing MedicationMention
+
+Persisting AI summary results needed a model scoped to Analysis, but MedicationMention already existed, scoped to ClinicalDocument, with a `dose` field, and is load-bearing for the reconciliation service. Renaming or repurposing it would have broken a working, tested pipeline for a reason unrelated to that pipeline. AnalysisMedicationMention and AnalysisInconsistency are new models instead, matching the field names the AI schema and prompt already use, so the persisted record needs no translation from what was validated. Neither model is matched against Medication or read by the reconciliation service.
+
 ---
 
 ## Future Extensions
@@ -585,6 +665,7 @@ The MVP data model supports:
 - user-maintained medication lists
 - reconciliation analyses
 - saved discrepancy results
+- persisted AI summary results, including extracted medications and possible inconsistencies
 
 The MVP does not support:
 

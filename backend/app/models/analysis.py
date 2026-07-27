@@ -58,3 +58,13 @@ class Analysis(Base):
         secondary=analysis_clinical_documents,
         back_populates="analyses",
     )
+    medication_mentions = relationship(
+        "AnalysisMedicationMention",
+        back_populates="analysis",
+        cascade="all, delete-orphan",
+    )
+    possible_inconsistencies = relationship(
+        "AnalysisInconsistency",
+        back_populates="analysis",
+        cascade="all, delete-orphan",
+    )
