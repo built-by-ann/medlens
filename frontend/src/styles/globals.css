@@ -1,0 +1,17 @@
+@import 'tailwindcss';
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+
+  /* Visible focus states for keyboard navigation, kept consistent across
+     native elements and the shared components built on top of them. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-blue-600;
+  }
+}
