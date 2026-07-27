@@ -499,6 +499,47 @@ Possible error responses
 
 ---
 
+### POST /ai/summarize
+
+Purpose
+
+Summarizes one or more of the authenticated user's clinical documents using the configured AI provider. See `docs/ai.md` for the provider architecture.
+
+Request body
+
+```json
+{
+  "clinical_document_ids": [1, 2]
+}
+```
+
+Validation rules
+
+- `clinical_document_ids` is required and must contain at least one id.
+
+Success response
+
+`200 OK`
+
+```json
+{
+  "provider": "gemini",
+  "model": "gemini-2.0-flash",
+  "summary": "{\"medications\": [...], \"possible_inconsistencies\": [...], \"summary\": \"...\"}"
+}
+```
+
+`summary` is the raw text returned by the provider, requested and constrained as JSON, but returned here as a plain string. It is not parsed, validated, or stored, and no discrepancy detection or reconciliation is performed on it. See `docs/ai.md` for the JSON shape the prompt requests.
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: a requested document does not exist or does not belong to the current user.
+- `422 Unprocessable Entity`: `clinical_document_ids` is missing or empty.
+- `503 Service Unavailable`: the AI provider could not produce a response, including a missing API key, a request failure, a timeout, or an invalid response.
+
+---
+
 ## Error Responses
 
 ### 400 Bad Request
@@ -557,8 +598,18 @@ Returned when the request body fails validation (invalid email format, password 
 }
 ```
 
+### 503 Service Unavailable
+
+Returned by `POST /ai/summarize` when the configured AI provider cannot produce a response, including a missing API key, a request failure, a timeout, or an invalid response.
+
+```json
+{
+  "detail": "Gemini API key is not configured"
+}
+```
+
 ---
 
 ## Notes
 
-This API currently supports authentication, application infrastructure, clinical document management, and user-owned medication list management (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`). AI-based medication extraction and reconciliation endpoints are not yet implemented and will be introduced in future sprints.
+This API currently supports authentication, application infrastructure, clinical document management, user-owned medication list management, and AI-generated document summaries (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`, `/ai/summarize`). Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.

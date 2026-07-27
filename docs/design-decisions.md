@@ -307,6 +307,31 @@ Cons
 
 ---
 
+# Decision 15: Provider Abstraction for AI Integration
+
+**Decision**
+
+Define an abstract `AIProvider` interface with a single method, `generate_summary(prompt: str) -> str`, and one exception type, `AIProviderError`, that every provider raises for any failure. `AISummaryService` depends only on this interface. The first implementation, `GeminiProvider`, is the only concrete class that imports the Gemini SDK.
+
+**Reasoning**
+
+The project intends to evaluate multiple providers, including OpenAI, MedGemma, and OpenBioLLM. If business logic called a specific SDK directly, adding or swapping a provider would mean changing the service layer itself. Behind a single interface, a new provider is a new class that implements one method and translates its own SDK's exceptions into `AIProviderError`. Nothing else in the application needs to change, and nothing else needs to know which SDK is in use.
+
+**Trade-offs**
+
+Pros
+
+- A new provider can be added without touching `AISummaryService`, the prompt template, or the API route
+- Callers handle exactly one exception type regardless of which provider is active
+- The service is testable with a fake provider, with no live API call and no SDK-specific mocking required
+
+Cons
+
+- The shared interface is intentionally minimal, a single prompt in and a single string out, so providers with richer capabilities are reduced to that shape for now
+- Provider-specific configuration, such as Gemini's timeout, is not yet part of the shared interface and lives on the concrete provider instead
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:

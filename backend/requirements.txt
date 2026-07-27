@@ -11,3 +11,4 @@ email-validator
 pyjwt
 python-multipart
 pypdf
+google-genai
