@@ -190,6 +190,31 @@ Error responses
 
 ---
 
+### GET /ai/analyses/{analysis_id}
+
+Purpose
+
+Retrieves a previously created Analysis belonging to the authenticated user, including its persisted `AnalysisMedicationMention` and `AnalysisInconsistency` rows. Read-only: it does not call an AI provider, run reconciliation, or modify the Analysis in any way.
+
+Authentication requirements
+
+Requires a valid Bearer token, as described in `docs/api.md`.
+
+Success response
+
+`200 OK`. See `docs/api.md` for the full response body.
+
+`medication_mentions` and `possible_inconsistencies` are returned sorted by ascending `id`. This ordering is decided when the response is built (in `sorted()` calls in the route), not by `get_analysis_for_user` itself and not via an `order_by` on the relationship, because rows persisted together in one `persist_analysis_result` transaction can share an identical `created_at` (Postgres's `now()` is constant for the duration of a transaction), so `id` is the only field guaranteed to reflect insertion order. Using `sorted()` to build new lists, rather than sorting `analysis.medication_mentions` and `analysis.possible_inconsistencies` in place, leaves the ORM-managed relationship collections on the loaded `Analysis` untouched. Both collections are loaded with `selectinload` rather than `joinedload`, since eagerly joining two independent one-to-many relationships at once would produce a cartesian product.
+
+`error_message` reflects the same sanitized message persisted on the Analysis by `mark_analysis_failed` (see Orchestration above), and is `null` for any analysis that is not `failed`. This endpoint does not generate or reformat that message; it only exposes the value already stored on the model, so it carries the same guarantee as `POST /ai/summarize`'s `503` response: no stack trace, provider exception, `ValidationError` detail, raw AI output, or SQL error is ever included.
+
+Error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: the analysis does not exist or does not belong to the current user. Both cases return the same response so a caller cannot use this endpoint to probe for the existence of another user's analysis.
+
+---
+
 ## Logging
 
 The Gemini provider logs which provider and model were used, request duration, and success or failure. `AISummaryService` logs a validation failure with the provider, model, and the number of validation errors. In every case, only the standard `logging` module and these metadata fields are used. Clinical note contents, prompts, raw model responses, and the detailed contents of a `pydantic.ValidationError` are never logged, since validation error details can echo back fragments of the model's response.
@@ -200,4 +225,3 @@ The Gemini provider logs which provider and model were used, request duration, a
 
 - No discrepancy detection or reconciliation is performed on the AI response. Persisted mentions and inconsistencies are AI observations only, never compared against the user's Medication list.
 - Only Gemini is implemented today. OpenAI, MedGemma, and OpenBioLLM are planned future providers, added behind the same `AIProvider` interface.
-- There is no endpoint yet to retrieve a persisted analysis by id, only to create one. `analysis_id` is returned so a future endpoint can use it.

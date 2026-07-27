@@ -554,6 +554,73 @@ Possible error responses
 
 ---
 
+### GET /ai/analyses/{analysis_id}
+
+Purpose
+
+Returns the metadata and persisted results of one of the authenticated user's analyses. Read-only: it does not create, rerun, or modify an analysis. See `docs/data-model.md` for the underlying `Analysis`, `AnalysisMedicationMention`, and `AnalysisInconsistency` models.
+
+Authentication requirements
+
+Requires a valid Bearer token in the `Authorization` header, as described above.
+
+Success response
+
+`200 OK`
+
+```json
+{
+  "id": 7,
+  "status": "completed",
+  "provider": "gemini",
+  "model_name": "gemini-2.0-flash",
+  "summary": "...",
+  "started_at": "2026-07-12T19:59:14.696845Z",
+  "completed_at": "2026-07-12T19:59:16.112249Z",
+  "error_message": null,
+  "created_at": "2026-07-12T19:59:14.500000Z",
+  "updated_at": "2026-07-12T19:59:16.112249Z",
+  "medication_mentions": [
+    {
+      "id": 3,
+      "medication_name": "Lisinopril",
+      "dosage": "10 mg",
+      "route": "oral",
+      "frequency": "once daily",
+      "status": "active",
+      "notes": null
+    }
+  ],
+  "possible_inconsistencies": [
+    {
+      "id": 2,
+      "description": "Lisinopril dose differs between the admission note and the discharge summary."
+    }
+  ]
+}
+```
+
+`medication_mentions` and `possible_inconsistencies` are always returned, sorted by ascending `id`, even for analyses that have none (an empty list) or that failed before persisting any results (both lists empty, `summary`, `provider`, and `model_name` are `null`).
+
+`error_message` is `null` unless `status` is `"failed"`, in which case it holds the same sanitized message returned by `POST /ai/summarize` at failure time (see that endpoint's `503` response above). It never contains a stack trace, a provider exception, `ValidationError` details, raw AI output, or a raw SQL error; only the sanitized message already stored on the Analysis is exposed.
+
+404 responses
+
+Returned if `analysis_id` does not exist or belongs to a different user. The same response is used in both cases so that a caller cannot distinguish a nonexistent analysis from one owned by someone else.
+
+```json
+{
+  "detail": "Analysis not found"
+}
+```
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: the analysis does not exist or does not belong to the current user.
+
+---
+
 ## Error Responses
 
 ### 400 Bad Request
@@ -578,11 +645,17 @@ Returned for failed login attempts and for any request to a protected endpoint t
 
 ### 404 Not Found
 
-Returned when a requested resource does not exist, or exists but does not belong to the authenticated user. Both cases return the same response so that a caller cannot tell the two apart. Used by the `/medications/{medication_id}` endpoints.
+Returned when a requested resource does not exist, or exists but does not belong to the authenticated user. Both cases return the same response so that a caller cannot tell the two apart. Used by the `/medications/{medication_id}` and `/ai/analyses/{analysis_id}` endpoints.
 
 ```json
 {
   "detail": "Medication not found"
+}
+```
+
+```json
+{
+  "detail": "Analysis not found"
 }
 ```
 
@@ -626,4 +699,4 @@ Returned by `POST /ai/summarize` when the configured AI provider cannot produce 
 
 ## Notes
 
-This API currently supports authentication, application infrastructure, clinical document management, user-owned medication list management, and AI-generated document summaries, persisted as completed analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`, `/ai/summarize`). Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.
+This API currently supports authentication, application infrastructure, clinical document management, user-owned medication list management, AI-generated document summaries persisted as analyses, and retrieval of a persisted analysis by id (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`, `/ai/summarize`, `/ai/analyses/{analysis_id}`). Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.

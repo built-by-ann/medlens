@@ -24,6 +24,47 @@ VALID_RESPONSE = json.dumps(
     }
 )
 
+NO_MEDICATIONS_RESPONSE = json.dumps(
+    {
+        "medications": [],
+        "possible_inconsistencies": ["Some inconsistency."],
+        "summary": "No medications found.",
+    }
+)
+
+NO_INCONSISTENCIES_RESPONSE = json.dumps(
+    {
+        "medications": [
+            {
+                "name": "Lisinopril",
+                "dosage": "10 mg",
+                "route": "oral",
+                "frequency": "once daily",
+                "status": "active",
+                "notes": None,
+            }
+        ],
+        "possible_inconsistencies": [],
+        "summary": "No inconsistencies found.",
+    }
+)
+
+MULTIPLE_ITEMS_RESPONSE = json.dumps(
+    {
+        "medications": [
+            {"name": "Atorvastatin", "dosage": "20 mg"},
+            {"name": "Lisinopril", "dosage": "10 mg"},
+            {"name": "Metformin", "dosage": "500 mg"},
+        ],
+        "possible_inconsistencies": [
+            "First inconsistency.",
+            "Second inconsistency.",
+            "Third inconsistency.",
+        ],
+        "summary": "Multiple items.",
+    }
+)
+
 
 def _register_and_login(client, email, password="correcthorse123"):
     client.post(
@@ -70,6 +111,23 @@ def _override_ai_service(fake_provider):
         return AISummaryService(fake_provider)
 
     return _factory
+
+
+def _create_completed_analysis(client, token, document_id, response_text=VALID_RESPONSE):
+    app.dependency_overrides[get_ai_summary_service] = _override_ai_service(
+        _FakeProvider(text=response_text)
+    )
+    try:
+        response = client.post(
+            "/ai/summarize",
+            json={"clinical_document_ids": [document_id]},
+            headers=_auth_headers(token),
+        )
+    finally:
+        app.dependency_overrides.pop(get_ai_summary_service, None)
+
+    assert response.status_code == 201
+    return response.json()["analysis_id"]
 
 
 def test_summarize_requires_authentication(client):
@@ -284,3 +342,155 @@ def test_summarize_uses_real_gemini_provider_by_default_when_key_missing(client,
     analysis = db.query(Analysis).one()
     assert analysis.status == "failed"
     assert analysis.error_message == "Gemini API key is not configured"
+
+
+def test_get_analysis_detail_requires_authentication(client):
+    response = client.get("/ai/analyses/1")
+
+    assert response.status_code == 401
+
+
+def test_get_analysis_detail_returns_persisted_analysis(client):
+    token = _register_and_login(client, "analysisdetail@example.com")
+    document = _create_document(client, token)
+    analysis_id = _create_completed_analysis(client, token, document["id"])
+
+    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["id"] == analysis_id
+    assert body["status"] == "completed"
+    assert body["provider"] == "fake"
+    assert body["model_name"] == "fake-model"
+    assert body["summary"] == "Lisinopril 10 mg noted."
+    assert body["started_at"] is not None
+    assert body["completed_at"] is not None
+    assert body["error_message"] is None
+    assert body["created_at"] is not None
+    assert "updated_at" in body
+
+    assert len(body["medication_mentions"]) == 1
+    mention = body["medication_mentions"][0]
+    assert mention["medication_name"] == "Lisinopril"
+    assert mention["dosage"] == "10 mg"
+    assert mention["route"] == "oral"
+    assert mention["frequency"] == "once daily"
+    assert mention["status"] == "active"
+    assert mention["notes"] is None
+
+    assert len(body["possible_inconsistencies"]) == 1
+    assert body["possible_inconsistencies"][0]["description"] == "Dose differs between two notes."
+
+
+def test_get_analysis_detail_with_no_medications(client):
+    token = _register_and_login(client, "detailnomedications@example.com")
+    document = _create_document(client, token)
+    analysis_id = _create_completed_analysis(
+        client, token, document["id"], response_text=NO_MEDICATIONS_RESPONSE
+    )
+
+    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    assert response.json()["medication_mentions"] == []
+    assert len(response.json()["possible_inconsistencies"]) == 1
+
+
+def test_get_analysis_detail_with_no_inconsistencies(client):
+    token = _register_and_login(client, "detailnoinconsistencies@example.com")
+    document = _create_document(client, token)
+    analysis_id = _create_completed_analysis(
+        client, token, document["id"], response_text=NO_INCONSISTENCIES_RESPONSE
+    )
+
+    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    assert response.json()["possible_inconsistencies"] == []
+    assert len(response.json()["medication_mentions"]) == 1
+
+
+def test_get_analysis_detail_returns_items_in_deterministic_order(client):
+    token = _register_and_login(client, "detailordering@example.com")
+    document = _create_document(client, token)
+    analysis_id = _create_completed_analysis(
+        client, token, document["id"], response_text=MULTIPLE_ITEMS_RESPONSE
+    )
+
+    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    body = response.json()
+
+    medication_names = [mention["medication_name"] for mention in body["medication_mentions"]]
+    assert medication_names == ["Atorvastatin", "Lisinopril", "Metformin"]
+
+    mention_ids = [mention["id"] for mention in body["medication_mentions"]]
+    assert mention_ids == sorted(mention_ids)
+
+    inconsistency_descriptions = [
+        inconsistency["description"] for inconsistency in body["possible_inconsistencies"]
+    ]
+    assert inconsistency_descriptions == [
+        "First inconsistency.",
+        "Second inconsistency.",
+        "Third inconsistency.",
+    ]
+
+    inconsistency_ids = [
+        inconsistency["id"] for inconsistency in body["possible_inconsistencies"]
+    ]
+    assert inconsistency_ids == sorted(inconsistency_ids)
+
+
+def test_get_analysis_detail_includes_sanitized_error_message_for_failed_analysis(client, db):
+    token = _register_and_login(client, "detailfailedmessage@example.com")
+    document = _create_document(client, token)
+
+    app.dependency_overrides[get_ai_summary_service] = _override_ai_service(
+        _FakeProvider(error=AIProviderError("Gemini API key is not configured"))
+    )
+    try:
+        summarize_response = client.post(
+            "/ai/summarize",
+            json={"clinical_document_ids": [document["id"]]},
+            headers=_auth_headers(token),
+        )
+    finally:
+        app.dependency_overrides.pop(get_ai_summary_service, None)
+
+    assert summarize_response.status_code == 503
+    analysis_id = db.query(Analysis).one().id
+
+    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "failed"
+    assert body["error_message"] == "Gemini API key is not configured"
+    assert body["summary"] is None
+    assert body["provider"] is None
+    assert body["model_name"] is None
+    assert body["medication_mentions"] == []
+    assert body["possible_inconsistencies"] == []
+
+
+def test_get_analysis_detail_rejects_wrong_user(client):
+    token_a = _register_and_login(client, "detailowner@example.com")
+    token_b = _register_and_login(client, "detailintruder@example.com")
+    document = _create_document(client, token_a)
+    analysis_id = _create_completed_analysis(client, token_a, document["id"])
+
+    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token_b))
+
+    assert response.status_code == 404
+
+
+def test_get_analysis_detail_rejects_nonexistent_analysis(client):
+    token = _register_and_login(client, "detailmissing@example.com")
+
+    response = client.get("/ai/analyses/999999", headers=_auth_headers(token))
+
+    assert response.status_code == 404
