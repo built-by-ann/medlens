@@ -363,6 +363,147 @@ def test_severity_mapping_is_centralized_and_conservative():
     )
 
 
+def test_no_discrepancies_when_names_and_fields_match_exactly(db):
+    user = _create_user(db, email="exactmatch@example.com")
+    document = _create_clinical_document(db, user)
+    medication = _create_medication(db, user)
+    mention = _create_mention(db, document)
+
+    findings = build_discrepancy_findings(
+        [medication], [mention], check_unsupported_entries=True
+    )
+
+    assert findings == []
+
+
+def test_case_insensitive_name_matching_links_to_same_medication(db):
+    user = _create_user(db, email="caseinsensitive@example.com")
+    document = _create_clinical_document(db, user)
+    medication = _create_medication(db, user, medication_name="LISINOPRIL", dose="10 mg")
+    mention = _create_mention(db, document, medication_name="lisinopril", dose="20 mg")
+
+    findings = build_discrepancy_findings(
+        [medication], [mention], check_unsupported_entries=False
+    )
+
+    # A single dose conflict, rather than a missing-from-list finding plus an
+    # unsupported-entry finding, proves the two names were matched as the
+    # same medication despite the case difference.
+    assert len(findings) == 1
+    assert findings[0].discrepancy_type == DiscrepancyType.DOSE_CONFLICT
+    assert findings[0].medication_id == medication.id
+
+
+def test_status_match_active_produces_no_finding(db):
+    user = _create_user(db, email="activematch@example.com")
+    document = _create_clinical_document(db, user)
+    medication = _create_medication(db, user, status="active")
+    mention = _create_mention(db, document, status="active")
+
+    findings = build_discrepancy_findings(
+        [medication], [mention], check_unsupported_entries=False
+    )
+
+    assert findings == []
+
+
+def test_status_match_discontinued_produces_no_finding(db):
+    user = _create_user(db, email="discontinuedmatch@example.com")
+    document = _create_clinical_document(db, user)
+    medication = _create_medication(db, user, status="discontinued")
+    mention = _create_mention(db, document, status="discontinued")
+
+    findings = build_discrepancy_findings(
+        [medication], [mention], check_unsupported_entries=False
+    )
+
+    assert findings == []
+
+
+def test_unrecognized_status_value_matches_itself_without_a_finding(db):
+    user = _create_user(db, email="unknownstatusmatch@example.com")
+    document = _create_clinical_document(db, user)
+    medication = _create_medication(db, user, status="on hold")
+    mention = _create_mention(db, document, status="on hold")
+
+    findings = build_discrepancy_findings(
+        [medication], [mention], check_unsupported_entries=False
+    )
+
+    assert findings == []
+
+
+def test_unrecognized_status_mismatch_produces_general_conflict_not_discontinued(db):
+    user = _create_user(db, email="unknownstatusmismatch@example.com")
+    document = _create_clinical_document(db, user)
+    medication = _create_medication(db, user, status="on hold")
+    mention = _create_mention(db, document, status="active")
+
+    findings = build_discrepancy_findings(
+        [medication], [mention], check_unsupported_entries=False
+    )
+
+    assert len(findings) == 1
+    assert findings[0].discrepancy_type == DiscrepancyType.STATUS_CONFLICT
+    assert findings[0].severity == DiscrepancySeverity.MEDIUM
+
+
+def test_dose_present_only_on_mention_produces_no_finding(db):
+    # dose is nullable=False on Medication, so "the medication has no dose"
+    # is represented as an empty string, which normalize_dose reduces to
+    # None, exercising the same early-return branch as a genuinely absent
+    # value. This is the reverse of test_no_conflict_when_mention_lacks_
+    # comparable_field, which covers the mention lacking a value instead.
+    user = _create_user(db, email="mentiondoseonly@example.com")
+    document = _create_clinical_document(db, user)
+    medication = _create_medication(db, user, dose="")
+    mention = _create_mention(db, document, dose="10 mg")
+
+    findings = build_discrepancy_findings(
+        [medication], [mention], check_unsupported_entries=False
+    )
+
+    assert findings == []
+
+
+def test_multiple_discrepancy_types_in_a_single_run(db):
+    user = _create_user(db, email="multipletypes@example.com")
+    document = _create_clinical_document(db, user)
+
+    dose_conflict_medication = _create_medication(
+        db, user, medication_name="Lisinopril", dose="10 mg"
+    )
+    unsupported_medication = _create_medication(db, user, medication_name="Metformin")
+
+    dose_conflict_mention = _create_mention(
+        db, document, medication_name="Lisinopril", dose="20 mg"
+    )
+    missing_mention = _create_mention(db, document, medication_name="Atorvastatin")
+
+    findings = build_discrepancy_findings(
+        [dose_conflict_medication, unsupported_medication],
+        [dose_conflict_mention, missing_mention],
+        check_unsupported_entries=True,
+    )
+
+    assert len(findings) == 3
+    findings_by_type = {finding.discrepancy_type: finding for finding in findings}
+    assert set(findings_by_type) == {
+        DiscrepancyType.DOSE_CONFLICT,
+        DiscrepancyType.UNSUPPORTED_MEDICATION_LIST_ENTRY,
+        DiscrepancyType.MISSING_FROM_MEDICATION_LIST,
+    }
+    assert findings_by_type[DiscrepancyType.DOSE_CONFLICT].severity == DiscrepancySeverity.MEDIUM
+    assert (
+        findings_by_type[DiscrepancyType.UNSUPPORTED_MEDICATION_LIST_ENTRY].severity
+        == DiscrepancySeverity.LOW
+    )
+    assert (
+        findings_by_type[DiscrepancyType.MISSING_FROM_MEDICATION_LIST].severity
+        == DiscrepancySeverity.HIGH
+    )
+
+
 # --- Orchestration tests (run_medication_reconciliation) ---
 
 
