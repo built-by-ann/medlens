@@ -55,3 +55,17 @@ export interface AnalysisCreateResult {
   summary: string
   possible_inconsistencies: string[]
 }
+
+export interface Medication {
+  id: number
+  user_id: number
+  medication_name: string
+  dose: string
+  route: string
+  frequency: string
+  status: string
+  source: string
+  notes: string | null
+  created_at: string
+  updated_at: string | null
+}

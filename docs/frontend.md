@@ -52,6 +52,7 @@ Routing is configured in `src/App.tsx` using `react-router-dom`.
 | `/dashboard` | `DashboardPage` | `AppLayout` | yes |
 | `/analyses/:id` | `AnalysisDetailPage` | `AppLayout` | yes |
 | `/upload` | `UploadPage` | `AppLayout` | yes |
+| `/medications` | `MedicationsPage` | `AppLayout` | yes |
 | `/` | redirects to `/dashboard` | | |
 | `*` | `NotFoundPage` | none | no |
 
@@ -65,7 +66,7 @@ Protected routes are wrapped in `ProtectedRoute` (`src/components/common/Protect
 
 `AppLayout` (`src/layouts/AppLayout.tsx`) is the shared application shell for authenticated pages: a top navigation bar (`src/components/layout/TopNav.tsx`) plus a responsive, max-width content area that renders the matched child route via `<Outlet />`.
 
-`TopNav` links to Dashboard and Upload, and shows either a "Log in" link or a "Log out" button depending on `useAuth()`'s `user` state.
+`TopNav` links to Dashboard, Upload, and Medications, and shows either a "Log in" link or a "Log out" button depending on `useAuth()`'s `user` state.
 
 ---
 
@@ -106,11 +107,11 @@ Real login and registration requests, token persistence, and session restoration
 
 `src/components/dashboard/`:
 
-- `RecentAnalysisCard`: one analysis, with a status badge (label text, never color alone), created/completed timestamps, the AI summary text, document count, and finding counts via `SummaryStat`, provider/model if present. The whole card is a single `Link` to `analysisDetailPath(analysis.id)`, with an explicit `aria-label` describing the date and status, since a screen reader would otherwise read every nested stat as part of the link's name.
+- `RecentAnalysisCard`: one analysis, with a status badge (label text, never color alone), created/completed timestamps, the AI summary text, document count, and finding counts via `SummaryStat` (`components/common/SummaryStat`), provider/model if present. The whole card is a single `Link` to `analysisDetailPath(analysis.id)`, with an explicit `aria-label` describing the date and status, since a screen reader would otherwise read every nested stat as part of the link's name.
 - `RecentAnalysesList`: a semantic `<ul>` of cards.
-- `SummaryStat`: a single `<dt>`/`<dd>` label-value pair (used inside a `<dl>`).
 - `DashboardEmptyState`: explains what MedLens does and links to Upload, shown when the user has no analyses yet.
-- `DashboardErrorState`: `role="alert"`, the error message, and a retry button, shown when the fetch fails.
+
+Loading/error states use the shared `ErrorState` component (`components/common/ErrorState`, `role="alert"` + message + retry button), also reused by the Medications page below; it was generalized from a Dashboard-only `DashboardErrorState` (a `title` prop was added) rather than duplicated, once a second feature needed the identical shape. `SummaryStat` was relocated from `components/dashboard/` to `components/common/` for the same reason.
 
 Authentication loading (session restore) and dashboard loading (fetching analyses) are two separate, sequential states. `ProtectedRoute` already renders `LoadingSpinner` and blocks rendering until `AuthContext` confirms a session, so `DashboardPage` never has to check auth itself; its own loading state only ever covers the analyses fetch.
 
@@ -139,9 +140,25 @@ Selected files are validated against the backend's actual supported types (`.txt
 
 ---
 
+## Medications
+
+`MedicationsPage` (`src/pages/MedicationsPage.tsx`) lets a user maintain their own medication list directly, independent of any uploaded clinical document. No new backend endpoints were needed: `POST/GET/PATCH/DELETE /medications` already existed with full ownership enforcement. `useMedications` (`src/hooks/useMedications.ts`) fetches the list on mount (`{ medications, isLoading, error, retry }`, the same shape as `useRecentAnalyses`) and exposes `addMedication`/`editMedication`/`removeMedication`, each calling the API layer and then updating local state directly from the response rather than refetching. These three functions intentionally don't catch their own errors — they throw, and whichever component initiated the action (the add form, or a card's own edit/delete state) owns its own submitting/error UI, the same division of responsibility `useAuthForm`'s `onSubmit` callback uses.
+
+`src/components/medications/`:
+
+- `MedicationForm`: the always-visible "add a medication" form; clears itself after a successful add.
+- `MedicationCard`: a saved medication, with in-place edit and delete, each with its own loading/error state so one card's action can't be blocked by another's.
+- `MedicationFields`: the shared set of inputs (medication name, dosage, route, frequency, status, optional notes) rendered by both `MedicationForm` and `MedicationCard`'s edit mode, so the two can't drift out of sync.
+- `MedicationList`: a semantic `<ul>` of cards, keyed by the medication's real database id (these are already-persisted rows, unlike Upload's not-yet-submitted queue).
+- `EmptyMedicationState`: a plain hint shown when the list is empty; the add form stays visible either way.
+
+Validation (`components/medications/medicationFormValidation.ts`) mirrors the backend's own rules exactly (`schemas/medication.py`): `medication_name`, `dose`, `route`, `frequency`, and `status` must all be non-empty; `notes` is optional. `source` is not a user-facing field at all — it's hardcoded to `"patient_reported"` in `api/medications.ts`, since a self-maintained list is always the user's own report, never something extracted from a document (see `docs/data-model.md`'s description of the Medication model as independent of document extraction).
+
+---
+
 ## Shared Components
 
-`src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`, `ProtectedRoute`, `PublicOnlyRoute`.
+`src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`, `ErrorState`, `SummaryStat`, `ProtectedRoute`, `PublicOnlyRoute`.
 
 These are intentionally minimal, plain-props components with no variant system (no `variant`/`size` enums, no `class-variance-authority` or similar). Introducing a design system is left until there's a real, recurring need for one.
 

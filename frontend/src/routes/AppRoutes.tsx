@@ -8,6 +8,7 @@ import { SignupPage } from '@/pages/SignupPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { AnalysisDetailPage } from '@/pages/AnalysisDetailPage'
 import { UploadPage } from '@/pages/UploadPage'
+import { MedicationsPage } from '@/pages/MedicationsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { ROUTES } from '@/routes/paths'
 
@@ -38,6 +39,7 @@ export function AppRoutes() {
         <Route path={ROUTES.dashboard} element={<DashboardPage />} />
         <Route path={ROUTES.analysisDetail} element={<AnalysisDetailPage />} />
         <Route path={ROUTES.upload} element={<UploadPage />} />
+        <Route path={ROUTES.medications} element={<MedicationsPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
