@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/utils/cn'
+import { ROUTES } from '@/routes/paths'
 
 const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -22,12 +23,12 @@ export function TopNav() {
 
         <ul className="flex items-center gap-1">
           <li>
-            <NavLink to="/dashboard" className={navLinkClassName}>
+            <NavLink to={ROUTES.dashboard} className={navLinkClassName}>
               Dashboard
             </NavLink>
           </li>
           <li>
-            <NavLink to="/upload" className={navLinkClassName}>
+            <NavLink to={ROUTES.upload} className={navLinkClassName}>
               Upload
             </NavLink>
           </li>
@@ -43,7 +44,7 @@ export function TopNav() {
               Log out
             </button>
           ) : (
-            <NavLink to="/login" className={navLinkClassName}>
+            <NavLink to={ROUTES.login} className={navLinkClassName}>
               Log in
             </NavLink>
           )}

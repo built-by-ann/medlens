@@ -7,7 +7,7 @@ interface AuthProviderProps {
 }
 
 /**
- * Holds authentication state only. Session restoration, real login/register
+ * Holds authentication state only. Session restoration, real login/signup
  * requests, and token persistence are deferred to the issues that implement
  * those flows; this provider exists so routing and the API layer have a
  * stable shape to build against.
