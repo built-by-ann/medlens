@@ -28,6 +28,11 @@ export function TopNav() {
             </NavLink>
           </li>
           <li>
+            <NavLink to={ROUTES.patients} className={navLinkClassName}>
+              Patients
+            </NavLink>
+          </li>
+          <li>
             <NavLink to={ROUTES.upload} className={navLinkClassName}>
               Upload
             </NavLink>

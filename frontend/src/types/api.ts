@@ -56,6 +56,19 @@ export interface AnalysisCreateResult {
   possible_inconsistencies: string[]
 }
 
+export interface Patient {
+  id: number
+  user_id: number
+  first_name: string
+  last_name: string
+  date_of_birth: string
+  external_mrn: string | null
+  status: string
+  notes: string | null
+  created_at: string
+  updated_at: string | null
+}
+
 export interface Medication {
   id: number
   user_id: number

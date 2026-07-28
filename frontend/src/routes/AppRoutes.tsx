@@ -9,6 +9,10 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { AnalysisDetailPage } from '@/pages/AnalysisDetailPage'
 import { UploadPage } from '@/pages/UploadPage'
 import { MedicationsPage } from '@/pages/MedicationsPage'
+import { PatientsPage } from '@/pages/PatientsPage'
+import { NewPatientPage } from '@/pages/NewPatientPage'
+import { PatientOverviewPage } from '@/pages/PatientOverviewPage'
+import { EditPatientPage } from '@/pages/EditPatientPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { ROUTES } from '@/routes/paths'
 
@@ -40,6 +44,10 @@ export function AppRoutes() {
         <Route path={ROUTES.analysisDetail} element={<AnalysisDetailPage />} />
         <Route path={ROUTES.upload} element={<UploadPage />} />
         <Route path={ROUTES.medications} element={<MedicationsPage />} />
+        <Route path={ROUTES.patients} element={<PatientsPage />} />
+        <Route path={ROUTES.newPatient} element={<NewPatientPage />} />
+        <Route path={ROUTES.patientEdit} element={<EditPatientPage />} />
+        <Route path={ROUTES.patientDetail} element={<PatientOverviewPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

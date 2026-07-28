@@ -53,6 +53,10 @@ Routing is configured in `src/App.tsx` using `react-router-dom`.
 | `/analyses/:id` | `AnalysisDetailPage` | `AppLayout` | yes |
 | `/upload` | `UploadPage` | `AppLayout` | yes |
 | `/medications` | `MedicationsPage` | `AppLayout` | yes |
+| `/patients` | `PatientsPage` | `AppLayout` | yes |
+| `/patients/new` | `NewPatientPage` | `AppLayout` | yes |
+| `/patients/:patientId` | `PatientOverviewPage` | `AppLayout` | yes |
+| `/patients/:patientId/edit` | `EditPatientPage` | `AppLayout` | yes |
 | `/` | redirects to `/dashboard` | | |
 | `*` | `NotFoundPage` | none | no |
 
@@ -66,7 +70,7 @@ Protected routes are wrapped in `ProtectedRoute` (`src/components/common/Protect
 
 `AppLayout` (`src/layouts/AppLayout.tsx`) is the shared application shell for authenticated pages: a top navigation bar (`src/components/layout/TopNav.tsx`) plus a responsive, max-width content area that renders the matched child route via `<Outlet />`.
 
-`TopNav` links to Dashboard, Upload, and Medications, and shows either a "Log in" link or a "Log out" button depending on `useAuth()`'s `user` state.
+`TopNav` links to Dashboard, Patients, Upload, and Medications, and shows either a "Log in" link or a "Log out" button depending on `useAuth()`'s `user` state.
 
 ---
 
@@ -156,6 +160,44 @@ Validation (`components/medications/medicationFormValidation.ts`) mirrors the ba
 
 ---
 
+## Patients
+
+Sprint 3.5, Issue #127: the first patient management UI, built directly against the Patient CRUD API from Issue #126 (`docs/api.md`'s `/patients` endpoints). This issue is UI only - `Medication`, `ClinicalDocument`, and `Analysis` are not yet patient-scoped (see `docs/data-model.md`), so `PatientOverviewPage` intentionally has no medication, document, or analysis sections yet, only a one-line placeholder saying so.
+
+Four routes, four pages:
+
+- `PatientsPage` (`/patients`): search, a "+ New patient" action, and the active patient list. `usePatients` (`src/hooks/usePatients.ts`) fetches the list on mount (`{ patients, isLoading, error, retry }`, the same shape as `useRecentAnalyses`/`useMedications`) and exposes `archivePatient`, which updates local state directly on success rather than refetching.
+- `NewPatientPage` (`/patients/new`): renders `PatientForm`, calls `createPatient` (`api/patients.ts`) directly on submit, and navigates to the new patient's overview on success.
+- `PatientOverviewPage` (`/patients/:patientId`): identity/demographic display (`PatientDetails`) plus Edit and Archive actions. `usePatient(patientId)` (`src/hooks/usePatient.ts`) fetches the single record; a 404 for a nonexistent or not-owned patient surfaces through the normal `error` state; there's no separate "not found" UI, since the backend's `"Patient not found"` detail already reads correctly as an error message.
+- `EditPatientPage` (`/patients/:patientId/edit`): the same `usePatient` fetch, `PatientForm` prepopulated via a `toPayload(patient)` conversion, calls `updatePatient` on submit, and navigates back to the overview on success. `status` is never read from or written to the form - the backend already ignores it on `PATCH`, so this is enforced by `PatientPayload` simply not including the field, not by any extra client-side guard.
+
+`NewPatientPage` and `EditPatientPage` don't use `usePatients`' list state at all: each is a full route change away from `/patients`, so there is nothing to keep in sync with a list array that's about to unmount anyway. Create/update are one-shot calls to `api/patients.ts`, matching how `MedicationForm`/`MedicationCard` own their own submit/error state per action.
+
+`src/components/patients/`:
+
+- `PatientForm`: shared by Create and Edit. Unlike `MedicationForm`, it never clears itself after success, since both callers navigate away entirely rather than staying on the page to add another.
+- `PatientFields`: the shared input set (first name, last name, date of birth, MRN, notes), rendered by `PatientForm`. Date of birth uses a native `<input type="date">`, whose value is already an ISO `YYYY-MM-DD` string, exactly what the backend expects, with no conversion needed.
+- `patientFormValidation.ts`: mirrors `schemas/patient.py` exactly - first name, last name, and date of birth are required; MRN and notes are optional.
+- `PatientCard` / `PatientList`: one row per patient (name, DOB, MRN if present) with View/Edit/Archive actions; unlike `MedicationCard`, there's no inline edit mode, since Edit is a full route here.
+- `PatientSearch` / `filterPatients.ts`: the backend's `GET /patients` has no search parameter, so filtering is client-side, case-insensitive, over first name, last name, full name, and MRN. `filterPatients` is a pure function (returns a new array, never mutates `patients`), kept separate from the page so it's unit-testable on its own.
+- `EmptyPatientState`: distinguishes "no patients yet" (a create CTA, like `DashboardEmptyState`) from "a search matched nothing" (a plain sentence, no CTA) via a boolean prop rather than being two separate components.
+- `PatientDetails`: the Overview page's identity/demographic card, reusing `SummaryStat` for each label/value pair exactly as `RecentAnalysisCard` does.
+- `ArchivePatientDialog`: the app's first dialog. Built on the native `<dialog>` element (`showModal()`/`close()`) rather than a hand-rolled overlay - see Accessibility below.
+
+### Archiving
+
+`DELETE /patients/{patient_id}` is a soft delete (sets `status: "archived"`, never removes the row), and the UI's copy is deliberate about that: the confirmation dialog says the patient is "removed from your active patient list," never "deleted." Archiving is reachable from both `PatientsPage` (removes the card from view) and `PatientOverviewPage` (navigates back to `/patients` on success, since there's nothing left to show). Both pages own their own `patientPendingArchive`/`isArchiving`/`archiveError` state around the one shared `ArchivePatientDialog`, rather than that state living in a hook - it's page-local UI state, not data the rest of the app needs.
+
+No toast/notification component exists anywhere in this codebase yet, so "success feedback" (per the issue) is the immediate UI change itself - the card disappearing from the list, or the redirect back to a list that no longer contains the archived patient - the same feedback pattern every other remove/delete action in this app already uses (`MedicationCard`, `NoteCard`, `UploadedFileList`). This is a deliberate reading of the issue's "if one exists" hedge, not an oversight.
+
+### Not Implemented Yet (Patients)
+
+- Medication, clinical document, and analysis sections on `PatientOverviewPage` - deferred to later Sprint 3.5 issues that patient-scope those resources first.
+- Searching or viewing archived patients (once archived, a patient is only reachable by its direct URL, not through any list).
+- Un-archiving.
+
+---
+
 ## Shared Components
 
 `src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`, `ErrorState`, `SummaryStat`, `ProtectedRoute`, `PublicOnlyRoute`.
@@ -181,6 +223,7 @@ This issue establishes baseline practices, not full WCAG compliance:
 - Every interactive element (nav links, buttons) is a native `<a>`/`<button>` element, so it's keyboard-reachable and operable by default.
 - A visible `:focus-visible` outline is defined once in `globals.css` and reused on custom components, rather than relying on (or removing) each browser's default.
 - `LoadingSpinner` uses `role="status"` with visible text, rather than an icon-only spinner, for screen reader support.
+- `ArchivePatientDialog` uses the native `<dialog>` element via `showModal()`/`close()` rather than a hand-rolled overlay, so focus trapping, Escape-to-dismiss, and focus restoration on close all come from the browser rather than custom code. `onClose` (fired for every close path) is the single place that syncs React state back to "closed," so the DOM and React state can't disagree.
 
 ---
 
@@ -222,6 +265,8 @@ npm run preview        # preview a production build
 
 Tests use Vitest, React Testing Library, and `@testing-library/user-event`, configured directly in `vite.config.ts` (reusing the same `@` alias as the app) rather than a separate Vitest config file. `test.globals` is deliberately left off, matching the rest of the codebase's explicit-import convention; since that also disables React Testing Library's automatic per-test DOM cleanup (it relies on detecting a global `afterEach`), `src/test/setup.ts` wires `afterEach(cleanup)` by hand instead.
 
+`src/test/setup.ts` also polyfills `HTMLDialogElement.showModal()`/`close()` and Escape-triggers-a-cancel-event, none of which jsdom implements (a documented jsdom limitation, not an application gap - real browsers already support all of it natively). The polyfill only toggles the `open` attribute and dispatches the same `close`/`cancel` events a real browser would, so `ArchivePatientDialog`'s own logic is exercised as-is in tests, not bypassed.
+
 The frontend does not yet have a Docker Compose service; it currently runs directly via `npm run dev` against a backend started separately (see the root `README.md` and `infra/docker-compose.yml`).
 
 ---
@@ -238,3 +283,4 @@ The following are explicitly out of scope for this issue and left for future iss
 
 - Real analysis detail display (`AnalysisDetailPage` is still a placeholder; `UploadPage` already navigates to it by id after creating an analysis)
 - A Docker Compose service for the frontend
+- Patient-scoping Medications, Upload, and the Dashboard itself (Sprint 3.5: Issue #127 only builds patient management; see "Not Implemented Yet (Patients)" above)
