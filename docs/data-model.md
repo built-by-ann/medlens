@@ -36,11 +36,15 @@ User
  │
  ├── Medication
  │
- └── Analysis
-        ├── MedicationDiscrepancy
-        ├── AnalysisMedicationMention
-        └── AnalysisInconsistency
+ ├── Analysis
+ │      ├── MedicationDiscrepancy
+ │      ├── AnalysisMedicationMention
+ │      └── AnalysisInconsistency
+ │
+ └── Patient
 ```
+
+Patient is a new, additive resource (Sprint 3.5, Issue #126): a User (provider) has many Patients, but ClinicalDocument, Medication, and Analysis are not yet linked to Patient. They still belong directly to User, exactly as before. A later migration issue moves each of them under Patient; see Design Decisions and Future Extensions.
 
 ---
 
@@ -67,6 +71,65 @@ updated_at
 User has many ClinicalDocuments
 User has many Medications
 User has many Analyses
+User has many Patients
+```
+
+---
+
+## Patient
+
+Represents a patient chart owned by a provider (User). Introduced in Sprint 3.5 as the first step of a staged migration toward a patient-centered data model, in which ClinicalDocument, Medication, and Analysis will eventually belong to Patient instead of directly to User.
+
+This issue introduces Patient on its own. ClinicalDocument, Medication, and Analysis are not yet linked to it and still belong directly to User, exactly as before - a later migration issue moves each of them under Patient. See Design Decisions.
+
+### Fields
+
+```text
+id
+user_id
+first_name
+last_name
+date_of_birth
+external_mrn
+status
+notes
+created_at
+updated_at
+```
+
+### Field Notes
+
+```text
+external_mrn
+```
+
+An optional external medical-record-number or identifier, for a future integration with an outside records system. Not read or written by anything today.
+
+```text
+status
+```
+
+Tracks whether the patient chart is active or archived.
+
+Possible values:
+
+```text
+active
+archived
+```
+
+New patients start as `active`. Archiving is a soft delete: the row is never removed, only marked `archived`. There is currently no way to reverse an archive back to `active`. `status` cannot be set at creation or changed through the update endpoint - it changes only through the archive action.
+
+```text
+notes
+```
+
+Optional free-text notes about the patient. May be null. Distinct from a ClinicalDocument, which represents actual clinical documentation.
+
+### Relationships
+
+```text
+Patient belongs to User
 ```
 
 ---
@@ -527,6 +590,9 @@ MedicationDiscrepancy references MedicationMention
 
 ```text
 User
+  1 ─── many Patient
+
+User
   1 ─── many ClinicalDocument
 
 ClinicalDocument
@@ -634,14 +700,21 @@ total_findings, high_severity_findings, medium_severity_findings, and low_severi
 
 Persisting AI summary results needed a model scoped to Analysis, but MedicationMention already existed, scoped to ClinicalDocument, with a `dose` field, and is load-bearing for the reconciliation service. Renaming or repurposing it would have broken a working, tested pipeline for a reason unrelated to that pipeline. AnalysisMedicationMention and AnalysisInconsistency are new models instead, matching the field names the AI schema and prompt already use, so the persisted record needs no translation from what was validated. Neither model is matched against Medication or read by the reconciliation service.
 
+### Patient introduced without linking ClinicalDocument, Medication, or Analysis
+
+Patient is added on its own, with only a `User` relationship, rather than migrating ClinicalDocument, Medication, and Analysis onto it in the same change. Each of those three models already has a `user_id` foreign key backing live, tested functionality; moving them to `patient_id` requires a data backfill (one legacy Patient per existing User) and touches every route and service that currently scopes by `user_id`. Bundling that with Patient's introduction would make this change more than additive. Splitting it into its own issue keeps this one reversible and low-risk, and lets the later migration issue focus solely on the cutover.
+
+A corollary: `Patient` cannot yet declare `medications`, `clinical_documents`, or `analyses` relationships. SQLAlchemy's `relationship()` requires a real foreign key or join condition to configure against, and `Medication.patient_id` (etc.) doesn't exist yet - declaring one anyway would fail at mapper configuration time for the whole application, not just for Patient. The intended future relationships are documented as a comment on the `Patient` model instead, and will become real once each of the three models gains `patient_id`.
+
 ---
 
 ## Future Extensions
 
-Potential future models include:
+Patient (see above) has moved from this list into the main Entities section, since it now exists.
+
+Other potential future models include:
 
 ```text
-Patient
 Encounter
 Organization
 Provider

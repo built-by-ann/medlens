@@ -212,6 +212,206 @@ Success response
 
 ---
 
+### POST /patients
+
+Purpose
+
+Creates a patient record owned by the authenticated user (provider).
+
+Request body
+
+```json
+{
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "date_of_birth": "1980-05-14",
+  "external_mrn": "MRN-001",
+  "notes": "Prefers morning appointments"
+}
+```
+
+`external_mrn` and `notes` are optional.
+
+Validation rules
+
+- `first_name`, `last_name`, and `date_of_birth` are required.
+- `first_name` and `last_name` must not be empty.
+- `date_of_birth` must be a valid date.
+
+Success response
+
+`201 Created`
+
+```json
+{
+  "id": 1,
+  "user_id": 1,
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "date_of_birth": "1980-05-14",
+  "external_mrn": "MRN-001",
+  "status": "active",
+  "notes": "Prefers morning appointments",
+  "created_at": "2026-07-28T19:59:14.696845Z",
+  "updated_at": null
+}
+```
+
+`status` always starts as `active` and cannot be set at creation time.
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `422 Unprocessable Entity`: a required field is missing, empty, or `date_of_birth` is not a valid date.
+
+---
+
+### GET /patients
+
+Purpose
+
+Returns every non-archived patient owned by the authenticated user.
+
+Request
+
+No parameters or body.
+
+Response
+
+`200 OK`
+
+```json
+[
+  {
+    "id": 1,
+    "user_id": 1,
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "date_of_birth": "1980-05-14",
+    "external_mrn": "MRN-001",
+    "status": "active",
+    "notes": "Prefers morning appointments",
+    "created_at": "2026-07-28T19:59:14.696845Z",
+    "updated_at": null
+  }
+]
+```
+
+Only patients belonging to the current user are returned, and archived patients (see `DELETE /patients/{patient_id}` below) are excluded. There is no way to list archived patients through this endpoint yet.
+
+---
+
+### GET /patients/{patient_id}
+
+Purpose
+
+Returns a single patient belonging to the authenticated user.
+
+Authentication requirements
+
+Requires a valid Bearer token in the `Authorization` header, as described above.
+
+Success response
+
+`200 OK`
+
+```json
+{
+  "id": 1,
+  "user_id": 1,
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "date_of_birth": "1980-05-14",
+  "external_mrn": "MRN-001",
+  "status": "active",
+  "notes": "Prefers morning appointments",
+  "created_at": "2026-07-28T19:59:14.696845Z",
+  "updated_at": null
+}
+```
+
+Unlike `GET /patients`, this endpoint returns a patient regardless of `status`, so an archived patient's own record is still reachable directly.
+
+404 responses
+
+Returned if `patient_id` does not exist or belongs to a different user. The same response is used in both cases so that a caller cannot distinguish a nonexistent patient from one owned by someone else.
+
+```json
+{
+  "detail": "Patient not found"
+}
+```
+
+---
+
+### PATCH /patients/{patient_id}
+
+Purpose
+
+Partially updates a patient belonging to the authenticated user. Only the fields included in the request body are changed.
+
+Request body
+
+```json
+{
+  "last_name": "Smith",
+  "notes": "Moved to a new address"
+}
+```
+
+Any subset of `first_name`, `last_name`, `date_of_birth`, `external_mrn`, and `notes` may be included.
+
+Validation rules
+
+- `first_name` and `last_name`, if included, must not be empty.
+- `date_of_birth`, if included, must be a valid date.
+- Fields left out of the request body are unchanged.
+- `status` cannot be changed through this endpoint. It is silently ignored if present in the request body; use `DELETE /patients/{patient_id}` to archive a patient instead.
+
+Success response
+
+`200 OK`
+
+```json
+{
+  "id": 1,
+  "user_id": 1,
+  "first_name": "Jane",
+  "last_name": "Smith",
+  "date_of_birth": "1980-05-14",
+  "external_mrn": "MRN-001",
+  "status": "active",
+  "notes": "Moved to a new address",
+  "created_at": "2026-07-28T19:59:14.696845Z",
+  "updated_at": "2026-07-28T20:04:02.112249Z"
+}
+```
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: the patient does not exist or does not belong to the current user.
+- `422 Unprocessable Entity`: an included field is empty or invalid.
+
+---
+
+### DELETE /patients/{patient_id}
+
+Purpose
+
+Archives a patient belonging to the authenticated user. This is a soft delete: the patient row is never removed, only its `status` is set to `archived`. An archived patient is excluded from `GET /patients` but remains reachable through `GET /patients/{patient_id}` and `PATCH /patients/{patient_id}`. There is currently no way to reverse an archive back to `active`.
+
+Success response
+
+`204 No Content`
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: the patient does not exist or does not belong to the current user.
+
+---
+
 ### POST /medications
 
 Purpose
