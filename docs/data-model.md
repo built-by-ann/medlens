@@ -32,7 +32,7 @@ AI is used to extract structured medication information from each document. The 
 User
  │
  ├── Patient
- │      ├── Medication
+ │      ├── Medication  (API-authoritative: patient_id, via /patients/{id}/medications)
  │      ├── ClinicalDocument
  │      │      └── MedicationMention
  │      └── Analysis
@@ -40,7 +40,6 @@ User
  │             ├── AnalysisMedicationMention
  │             └── AnalysisInconsistency
  │
- ├── Medication          (still directly, via user_id - see below)
  ├── ClinicalDocument    (still directly, via user_id - see below)
  └── Analysis            (still directly, via user_id - see below)
 ```
@@ -48,10 +47,11 @@ User
 Sprint 3.5 is migrating MedLens from a User-owned data model to a Patient-owned one:
 
 - **Issue #126** introduced `Patient` on its own, with only a `User` relationship.
-- **Issue #128** (this migration) gives `Medication`, `ClinicalDocument`, and `Analysis` each a nullable `patient_id`, backfills every existing row to a patient, and adds the corresponding `Patient.medications` / `Patient.clinical_documents` / `Patient.analyses` relationships. Their original `user_id`/`user` stay exactly as they were - **both ownership paths coexist during the migration period**, so the diagram above shows Medication/ClinicalDocument/Analysis under both User and Patient. `user_id` is temporarily retained and will be removed in a later Sprint 3.5 issue, once every API route and the frontend have moved to reading ownership through `patient_id`.
-- Later issues move the API routes and frontend over to patient-scoped ownership, and finally drop `user_id` from all three tables.
+- **Issue #128** gave `Medication`, `ClinicalDocument`, and `Analysis` each a nullable `patient_id`, backfilled every existing row to a patient, and added the corresponding `Patient.medications` / `Patient.clinical_documents` / `Patient.analyses` relationships. Their original `user_id`/`user` were left untouched - both ownership paths coexisted, with every route and service still reading `user_id` only.
+- **Issue #129** moved Medication's routes and services over to reading `patient_id` for authorization, nested under `/patients/{patient_id}/medications`. `Medication.user_id` is still there (still `NOT NULL`, still populated on every create) but is no longer read by anything - it's retained purely for backwards compatibility until a later issue drops it. ClinicalDocument and Analysis have **not** made this move yet and remain scoped by `user_id` exactly as before.
+- Later issues repeat Issue #129's cutover for ClinicalDocument and Analysis, move the frontend's remaining User-scoped pages over, and finally drop `user_id` from all three tables.
 
-See Design Decisions for the backfill strategy.
+See Design Decisions for the backfill strategy and the Medication cutover.
 
 ---
 
@@ -294,9 +294,11 @@ MedicationMention belongs to ClinicalDocument
 
 ## Medication
 
-Represents one medication in a user's own, self-maintained medication list.
+Represents one medication in a patient's self-maintained medication list.
 
-Unlike MedicationMention, a Medication record is not extracted from a clinical document. It is entered and owned directly by the user, independent of any document, and is not tied to a document's confidence or context.
+Unlike MedicationMention, a Medication record is not extracted from a clinical document. It is entered directly by the provider on the patient's behalf, independent of any document, and is not tied to a document's confidence or context.
+
+As of Sprint 3.5 (Issue #129), Medication is owned by `Patient`, not directly by `User`: every API route and service function scopes and authorizes by `patient_id`, and `user_id` is no longer read for authorization at all. See Field Notes and Design Decisions.
 
 ### Fields
 
@@ -321,7 +323,13 @@ updated_at
 patient_id
 ```
 
-Added in Sprint 3.5 (Issue #128). Nullable for now - `user_id` is temporarily retained alongside it, and both are populated for every row (see Design Decisions for the backfill that filled this in for medications that existed before Patient did). A later Sprint 3.5 issue will make this the sole ownership column and drop `user_id`.
+Added in Sprint 3.5 (Issue #128) and, as of Issue #129, the sole column every route and service uses for ownership and authorization. Still nullable at the database level only because `user_id` hasn't been dropped yet - in practice every row has one, since creation always requires an already-resolved, already-owned Patient.
+
+```text
+user_id
+```
+
+Retained temporarily for backwards compatibility (Issue #129 explicitly does not remove it), but no longer read by any route or service for authorization - `patient_id` is. Every new medication still populates it (the column remains `NOT NULL`), derived directly from the resolved patient's own `user_id` rather than accepted as a separate input, so it can never disagree with `patient_id` about who owns the row. It will be dropped in a later Sprint 3.5 issue.
 
 ```text
 source
@@ -338,8 +346,8 @@ Optional free-text notes about the medication. May be null.
 ### Relationships
 
 ```text
-Medication belongs to User
 Medication belongs to Patient
+Medication belongs to User (legacy - see Field Notes)
 ```
 
 ---
@@ -634,16 +642,16 @@ Patient
   1 ─── many Analysis
 
 User
-  1 ─── many ClinicalDocument   (temporary - see Design Decisions)
+  1 ─── many ClinicalDocument   (still API-authoritative - see Design Decisions)
 
 ClinicalDocument
   1 ─── many MedicationMention
 
 User
-  1 ─── many Medication   (temporary - see Design Decisions)
+  1 ─── many Medication   (legacy column only, not read by any route - see Design Decisions)
 
 User
-  1 ─── many Analysis   (temporary - see Design Decisions)
+  1 ─── many Analysis   (still API-authoritative - see Design Decisions)
 
 Analysis
   1 ─── many MedicationDiscrepancy
@@ -761,6 +769,16 @@ Rather than adding `patient_id` as a bare nullable column and leaving every pre-
 The backfill is idempotent by construction rather than by an explicit dedup flag: re-running finds no legacy rows left (every one already has a `patient_id`), so a user who already got a placeholder Patient created for them now has exactly one active Patient, not zero, and the "exactly one" branch reuses it rather than creating a second one.
 
 `user_id` is deliberately left in place and unmodified by this migration on all three tables - both ownership paths coexist so that every existing route, service, and the frontend keep working exactly as before. A later Sprint 3.5 issue will move routes over to reading `patient_id` and only then drop `user_id`.
+
+### Issue #129: Medication becomes the first resource to cut over to patient-scoped authorization
+
+Issue #128 gave Medication a `patient_id` column but left every route and service reading `user_id`. Issue #129 is the cutover: `GET/POST/PATCH/DELETE /medications` moved to `GET/POST/PATCH/DELETE /patients/{patient_id}/medications`, and `medication_service.py` no longer accepts or filters by `user_id` at all - every function takes `patient_id` (or, for creation, the already-resolved `Patient` itself).
+
+A new shared FastAPI dependency, `get_owned_patient` (`app/api/deps.py`), resolves and authorizes `patient_id` once - a route simply cannot receive a `Patient` it doesn't own. Every medication route depends on it rather than re-implementing the ownership check, the same way every route already depended on `get_current_user`. This is the pattern the rest of Sprint 3.5 will reuse for ClinicalDocument and Analysis.
+
+`Medication.user_id` is still a real, populated, `NOT NULL` column (Issue #129 explicitly does not drop it), but it is now vestigial from the API's point of view - nothing reads it for authorization or ever will again. It's derived automatically from the resolved patient (`medication.user_id = patient.user_id`) purely so the `NOT NULL` constraint keeps being satisfied without asking API callers to supply a value that would be redundant (and could, if accepted separately, disagree with `patient_id` about whose medication it is).
+
+`MedicationResponse` changed to expose `patient_id` instead of `user_id` - the one deliberate response-schema change in this migration (Issue #128 explicitly avoided any schema change, since its routes hadn't moved yet; here, moving the routes is the entire point, so the response reflecting the new ownership model is the correct contract, not scope creep).
 
 ---
 

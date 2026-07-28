@@ -1,12 +1,20 @@
 from sqlalchemy.orm import Session
 
 from app.models.medication import Medication
+from app.models.patient import Patient
 from app.schemas.medication import MedicationCreate, MedicationUpdate
 
 
-def _build_medication(user_id: int, medication_in: MedicationCreate) -> Medication:
+def _build_medication(patient: Patient, medication_in: MedicationCreate) -> Medication:
     return Medication(
-        user_id=user_id,
+        patient_id=patient.id,
+        # user_id is retained temporarily (Sprint 3.5 migration period) and
+        # is still NOT NULL at the database level, so every create must
+        # still populate it. Deriving it from the already-resolved,
+        # already-ownership-checked Patient - rather than accepting it as a
+        # separate parameter - guarantees user_id and patient_id can never
+        # disagree about whose medication this is.
+        user_id=patient.user_id,
         medication_name=medication_in.medication_name,
         dose=medication_in.dose,
         route=medication_in.route,
@@ -17,8 +25,8 @@ def _build_medication(user_id: int, medication_in: MedicationCreate) -> Medicati
     )
 
 
-def create_medication(db: Session, user_id: int, medication_in: MedicationCreate) -> Medication:
-    medication = _build_medication(user_id, medication_in)
+def create_medication(db: Session, patient: Patient, medication_in: MedicationCreate) -> Medication:
+    medication = _build_medication(patient, medication_in)
 
     db.add(medication)
     db.commit()
@@ -28,9 +36,9 @@ def create_medication(db: Session, user_id: int, medication_in: MedicationCreate
 
 
 def create_medications_from_rows(
-    db: Session, user_id: int, rows: list[MedicationCreate]
+    db: Session, patient: Patient, rows: list[MedicationCreate]
 ) -> int:
-    medications = [_build_medication(user_id, row) for row in rows]
+    medications = [_build_medication(patient, row) for row in rows]
 
     db.add_all(medications)
     db.commit()
@@ -38,30 +46,30 @@ def create_medications_from_rows(
     return len(medications)
 
 
-def get_medications_for_user(db: Session, user_id: int) -> list[Medication]:
+def get_medications_for_patient(db: Session, patient_id: int) -> list[Medication]:
     return (
         db.query(Medication)
-        .filter(Medication.user_id == user_id)
+        .filter(Medication.patient_id == patient_id)
         .order_by(Medication.created_at.desc())
         .all()
     )
 
 
-def get_medication(db: Session, user_id: int, medication_id: int) -> Medication | None:
+def get_medication(db: Session, patient_id: int, medication_id: int) -> Medication | None:
     return (
         db.query(Medication)
         .filter(
             Medication.id == medication_id,
-            Medication.user_id == user_id,
+            Medication.patient_id == patient_id,
         )
         .first()
     )
 
 
 def update_medication(
-    db: Session, user_id: int, medication_id: int, medication_in: MedicationUpdate
+    db: Session, patient_id: int, medication_id: int, medication_in: MedicationUpdate
 ) -> Medication | None:
-    medication = get_medication(db, user_id, medication_id)
+    medication = get_medication(db, patient_id, medication_id)
 
     if medication is None:
         return None
@@ -77,8 +85,8 @@ def update_medication(
     return medication
 
 
-def delete_medication(db: Session, user_id: int, medication_id: int) -> bool:
-    medication = get_medication(db, user_id, medication_id)
+def delete_medication(db: Session, patient_id: int, medication_id: int) -> bool:
+    medication = get_medication(db, patient_id, medication_id)
 
     if medication is None:
         return False

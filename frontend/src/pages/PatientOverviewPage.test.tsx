@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PatientOverviewPage } from '@/pages/PatientOverviewPage'
 import { archivePatient, getPatient } from '@/api/patients'
-import type { Patient } from '@/types/api'
+import { deleteMedication, listMedications, updateMedication } from '@/api/medications'
+import type { Medication, Patient } from '@/types/api'
 
 vi.mock('@/api/patients', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/patients')>()
@@ -16,8 +17,22 @@ vi.mock('@/api/patients', async (importOriginal) => {
   }
 })
 
+vi.mock('@/api/medications', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/medications')>()
+
+  return {
+    ...actual,
+    listMedications: vi.fn(),
+    updateMedication: vi.fn(),
+    deleteMedication: vi.fn(),
+  }
+})
+
 const mockedGetPatient = vi.mocked(getPatient)
 const mockedArchivePatient = vi.mocked(archivePatient)
+const mockedListMedications = vi.mocked(listMedications)
+const mockedUpdateMedication = vi.mocked(updateMedication)
+const mockedDeleteMedication = vi.mocked(deleteMedication)
 const mockNavigate = vi.fn()
 
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -42,6 +57,20 @@ const patient: Patient = {
   updated_at: null,
 }
 
+const sampleMedication: Medication = {
+  id: 5,
+  patient_id: 1,
+  medication_name: 'Lisinopril',
+  dose: '10 mg',
+  route: 'oral',
+  frequency: 'once daily',
+  status: 'active',
+  source: 'patient_reported',
+  notes: null,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: null,
+}
+
 function renderOverviewPage() {
   return render(
     <MemoryRouter initialEntries={['/patients/1']}>
@@ -56,7 +85,11 @@ describe('PatientOverviewPage', () => {
   beforeEach(() => {
     mockedGetPatient.mockReset()
     mockedArchivePatient.mockReset()
+    mockedListMedications.mockReset()
+    mockedUpdateMedication.mockReset()
+    mockedDeleteMedication.mockReset()
     mockNavigate.mockReset()
+    mockedListMedications.mockResolvedValue([])
   })
 
   it('shows a loading state while the patient is being fetched', () => {
@@ -91,6 +124,75 @@ describe('PatientOverviewPage', () => {
       'href',
       '/patients/1/edit',
     )
+  })
+
+  it('shows the empty medications state and a link to add one', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    renderOverviewPage()
+
+    expect(await screen.findByText('No medications recorded yet.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '+ Add medication' })).toHaveAttribute(
+      'href',
+      '/patients/1/medications',
+    )
+    expect(mockedListMedications).toHaveBeenCalledWith(1)
+  })
+
+  it('shows the patient medication list, reusing the shared medication card', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    mockedListMedications.mockResolvedValue([sampleMedication])
+    renderOverviewPage()
+
+    expect(await screen.findByRole('heading', { name: 'Lisinopril' })).toBeInTheDocument()
+    expect(screen.getByText('10 mg')).toBeInTheDocument()
+  })
+
+  it('shows an error state for the medication list independent of the patient details', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    mockedListMedications.mockRejectedValue({ status: 500, message: 'Could not load medications.' })
+    renderOverviewPage()
+
+    await screen.findByRole('heading', { name: 'Jane Doe' })
+    expect(await screen.findByText('Could not load medications.')).toBeInTheDocument()
+  })
+
+  it('edits a medication directly from the overview page', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    mockedListMedications.mockResolvedValue([sampleMedication])
+    mockedUpdateMedication.mockResolvedValue({ ...sampleMedication, dose: '20 mg' })
+    const user = userEvent.setup()
+    renderOverviewPage()
+
+    await screen.findByRole('heading', { name: 'Lisinopril' })
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+
+    const saveButton = screen.getByRole('button', { name: 'Save' })
+    const editForm = saveButton.closest('form')!
+    const doseInput = within(editForm).getByLabelText('Dosage')
+    await user.clear(doseInput)
+    await user.type(doseInput, '20 mg')
+    await user.click(saveButton)
+
+    await waitFor(() =>
+      expect(mockedUpdateMedication).toHaveBeenCalledWith(
+        1,
+        5,
+        expect.objectContaining({ dose: '20 mg' }),
+      ),
+    )
+  })
+
+  it('deletes a medication directly from the overview page', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    mockedListMedications.mockResolvedValue([sampleMedication])
+    mockedDeleteMedication.mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderOverviewPage()
+
+    await screen.findByRole('heading', { name: 'Lisinopril' })
+    await user.click(screen.getByRole('button', { name: 'Delete Lisinopril' }))
+
+    await waitFor(() => expect(mockedDeleteMedication).toHaveBeenCalledWith(1, 5))
   })
 
   it('opens an archive confirmation dialog naming the patient', async () => {

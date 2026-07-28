@@ -33,7 +33,7 @@ class MedicationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    user_id: int
+    patient_id: int
     medication_name: str
     dose: str
     route: str

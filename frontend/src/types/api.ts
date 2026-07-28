@@ -71,7 +71,7 @@ export interface Patient {
 
 export interface Medication {
   id: number
-  user_id: number
+  patient_id: number
   medication_name: string
   dose: string
   route: string
