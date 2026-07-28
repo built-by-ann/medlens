@@ -12,3 +12,8 @@ export interface User {
   name: string | null
   created_at: string
 }
+
+export interface AuthToken {
+  access_token: string
+  token_type: string
+}
