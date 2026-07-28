@@ -494,3 +494,73 @@ def test_get_analysis_detail_rejects_nonexistent_analysis(client):
     response = client.get("/ai/analyses/999999", headers=_auth_headers(token))
 
     assert response.status_code == 404
+
+
+def test_delete_analysis_requires_authentication(client):
+    response = client.delete("/ai/analyses/1")
+
+    assert response.status_code == 401
+
+
+def test_delete_analysis_removes_owned_analysis_and_its_children(client, db):
+    token = _register_and_login(client, "deleteanalysis@example.com")
+    document = _create_document(client, token)
+    analysis_id = _create_completed_analysis(client, token, document["id"])
+
+    response = client.delete(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    assert db.query(Analysis).filter(Analysis.id == analysis_id).first() is None
+    assert (
+        db.query(AnalysisMedicationMention)
+        .filter(AnalysisMedicationMention.analysis_id == analysis_id)
+        .count()
+        == 0
+    )
+    assert (
+        db.query(AnalysisInconsistency)
+        .filter(AnalysisInconsistency.analysis_id == analysis_id)
+        .count()
+        == 0
+    )
+
+    # No longer retrievable through the read endpoint.
+    get_response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+    assert get_response.status_code == 404
+
+
+def test_delete_analysis_leaves_clinical_document_intact(client, db):
+    token = _register_and_login(client, "deleteanalysiskeepdoc@example.com")
+    document = _create_document(client, token)
+    analysis_id = _create_completed_analysis(client, token, document["id"])
+
+    response = client.delete(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+
+    assert response.status_code == 204
+
+    document_response = client.get(
+        f"/clinical-documents/{document['id']}", headers=_auth_headers(token)
+    )
+    assert document_response.status_code == 200
+
+
+def test_delete_analysis_rejects_wrong_user(client, db):
+    token_a = _register_and_login(client, "deleteanalysisowner@example.com")
+    token_b = _register_and_login(client, "deleteanalysisintruder@example.com")
+    document = _create_document(client, token_a)
+    analysis_id = _create_completed_analysis(client, token_a, document["id"])
+
+    response = client.delete(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token_b))
+
+    assert response.status_code == 404
+    assert db.query(Analysis).filter(Analysis.id == analysis_id).first() is not None
+
+
+def test_delete_analysis_rejects_nonexistent_analysis(client):
+    token = _register_and_login(client, "deleteanalysismissing@example.com")
+
+    response = client.delete("/ai/analyses/999999", headers=_auth_headers(token))
+
+    assert response.status_code == 404

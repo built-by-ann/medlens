@@ -98,6 +98,25 @@ def get_analysis_for_user(db: Session, user_id: int, analysis_id: int) -> Analys
     )
 
 
+def delete_analysis(db: Session, user_id: int, analysis_id: int) -> bool:
+    analysis = get_analysis_for_user(db, user_id, analysis_id)
+
+    if analysis is None:
+        return False
+
+    # medication_discrepancies, medication_mentions, and possible_inconsistencies
+    # are all configured with cascade="all, delete-orphan" on this relationship,
+    # so deleting the Analysis instance is enough for SQLAlchemy to delete every
+    # analysis-scoped child row. clinical_documents is a plain many-to-many
+    # relationship with no such cascade, so the linked ClinicalDocument rows are
+    # left untouched; only the association table rows are removed, via the
+    # ON DELETE CASCADE already defined on analysis_clinical_documents.
+    db.delete(analysis)
+    db.commit()
+
+    return True
+
+
 def mark_analysis_failed(db: Session, analysis: Analysis, error_message: str) -> Analysis:
     analysis.status = "failed"
     analysis.completed_at = datetime.now(timezone.utc)
