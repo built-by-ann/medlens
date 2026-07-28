@@ -118,6 +118,27 @@ Authentication loading (session restore) and dashboard loading (fetching analyse
 
 ---
 
+## Upload
+
+`UploadPage` (`src/pages/UploadPage.tsx`) lets a user supply one or more clinical notes, either as files or pasted text, then creates an analysis from all of them. No new backend endpoints were needed here: `POST /clinical-documents` (pasted text), `/clinical-documents/upload-txt`, `/clinical-documents/upload-pdf` (files), and `POST /ai/summarize` (create the analysis) all already existed. `useCreateAnalysis` (`src/hooks/useCreateAnalysis.ts`) runs that multi-request sequence (upload every file, create every pasted note as a document, then summarize all of them) and returns the new analysis's id; `UploadPage` navigates to `analysisDetailPath(analysisId)` on success, reusing the same route `RecentAnalysisCard` links to.
+
+`src/components/upload/`:
+
+- `FileDropzone`: a `role="button"` drop target that is also click-to-open and keyboard-operable (Enter/Space), since drag-and-drop alone would exclude keyboard users. The actual `<input type="file">` is visually and semantically hidden (`sr-only`, `aria-hidden`, `tabIndex={-1}`) since the outer element is the one interactive control a screen reader or keyboard user sees.
+- `UploadedFileList`: name, size, a per-file `DocumentTypeSelect`, and a remove button, one row per selected file.
+- `ManualNoteEditor`: the "add a new note" form (optional title, required text, a `DocumentTypeSelect` defaulting to Visit note); clears itself after each add.
+- `NoteCard`: a saved note, with in-place edit (including its document type) and remove.
+- `DocumentTypeSelect`: a plain labeled `<select>` shared by `UploadedFileList`, `ManualNoteEditor`, and `NoteCard`'s edit mode, over the fixed vocabulary in `DOCUMENT_TYPES` (`api/clinicalDocuments.ts`): Visit note, Progress note, Discharge summary, Medication list, Medication reconciliation form. The backend's `document_type` column has no enum (plain `str`), but this is the same fixed set the reconciliation engine and product docs already use (`medication_list`/`medication_reconciliation_form` specifically get special treatment there); the user always chooses, since automatic classification is out of scope. Every file and note is keyed by a locally generated numeric id, not array index, since it's the only way per-item state (`NoteCard`'s edit mode, and the upload-retry cache below) can't end up attached to the wrong item after a removal shifts array positions.
+- `UploadEmptyState`: a plain hint shown when nothing has been added yet; unlike `DashboardEmptyState` this isn't a full-section replacement, since the upload/paste controls themselves stay visible either way.
+
+Selected files are validated against the backend's actual supported types (`.txt`/`text/plain`, `.pdf`/`application/pdf`, mirrored exactly from `app/api/routes/clinical_documents.py`) and de-duplicated by name+size; no file size limit is enforced, since the backend does not define one either. A pasted note's title is genuinely optional in the UI, but the backend requires a non-empty title, so an untitled note is given a generated fallback (`Note 1`, `Note 2`, ...) at submission time.
+
+### Retrying a partially failed submission
+
+`useCreateAnalysis` caches each item's resulting document id (`fileItemKey(id)`/`noteItemKey(id)` to a `Map`, held in a ref) as soon as it uploads successfully. If a later item then fails, calling `submit()` again with the same queue skips re-uploading whatever already succeeded and only retries what didn't, rather than creating duplicate ClinicalDocument rows. The cache lives inside the hook, not in `UploadPage`'s own state, since nothing outside a submission attempt needs to read it; `UploadPage` only ever calls `invalidateItem(key)`, and only when the user edits a note's text/title/document type or changes a file's document type (a cached id would otherwise silently point at now-stale content) or removes an item outright. The cache is also cleared automatically the moment an analysis is actually created, since any submission after that is a new attempt, not a retry. `failedItemLabel` (the failing file's name, or the note's title/fallback) is shown alongside the error message so a multi-item failure is attributable to a specific item, not just "something failed."
+
+---
+
 ## Shared Components
 
 `src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`, `ProtectedRoute`, `PublicOnlyRoute`.
@@ -198,6 +219,5 @@ The frontend does not yet have a Docker Compose service; it currently runs direc
 
 The following are explicitly out of scope for this issue and left for future issues:
 
-- File upload
-- AI analysis triggering and display
+- Real analysis detail display (`AnalysisDetailPage` is still a placeholder; `UploadPage` already navigates to it by id after creating an analysis)
 - A Docker Compose service for the frontend
