@@ -18,3 +18,4 @@ class User(Base):
 
     clinical_documents = relationship("ClinicalDocument", back_populates="user")
     analyses = relationship("Analysis", back_populates="user")
+    medications = relationship("Medication", back_populates="user")

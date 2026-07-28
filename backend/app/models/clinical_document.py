@@ -26,3 +26,8 @@ class ClinicalDocument(Base):
         back_populates="clinical_document",
         cascade="all, delete-orphan",
     )
+    analyses = relationship(
+        "Analysis",
+        secondary="analysis_clinical_documents",
+        back_populates="clinical_documents",
+    )

@@ -116,8 +116,11 @@ Stores:
 - Users
 - Clinical Documents
 - Medication Mentions
+- Medications
 - Analyses
 - Medication Discrepancies
+- Analysis Medication Mentions
+- Analysis Inconsistencies
 
 ---
 
@@ -136,14 +139,15 @@ Responsible for:
 
 ### Reconciliation Engine
 
-Responsible for:
+Implemented as a deterministic backend service, not an AI component. Given a user and a set of clinical documents, it:
 
-- Comparing medication information across multiple clinical documents
-- Detecting documentation inconsistencies
-- Generating discrepancy explanations
-- Producing evidence-backed reconciliation reports
+- Validates that every selected document exists and belongs to the requesting user, reusing the same validation as analysis creation.
+- Loads the user's current Medication records and the MedicationMention records extracted from the selected documents.
+- Normalizes medication names and comparable fields (dose, route, frequency, status) using fixed rules: trimming, lowercasing, whitespace collapsing, and a small set of explicit aliases such as PO to oral and QD to daily. No fuzzy matching, brand-to-generic inference, or semantic matching is performed.
+- Applies a fixed set of comparison rules to produce MedicationDiscrepancy records, each with a deterministic title, explanation, expected value, and observed value.
+- Assigns severity from a single, centralized mapping from discrepancy type to severity.
 
-The reconciliation engine combines AI-generated structured data with application business logic. Rather than relying solely on AI, MedLens performs deterministic comparisons between extracted medication information to identify potential documentation inconsistencies.
+AI is responsible only for producing the MedicationMention records that the reconciliation engine reads. The comparison logic itself never calls an AI provider, so its output is reproducible and directly testable.
 
 ---
 
@@ -164,6 +168,10 @@ The expected application workflow is:
 11. Analysis results are stored in PostgreSQL.
 12. The frontend displays discrepancy reports with supporting evidence.
 
+As of this writing, steps 9 through 11 are implemented for the reconciliation path described above: the reconciliation engine and analysis persistence exist as deterministic backend logic. AI-based extraction into MedicationMention, steps 5 through 8 as described here, is not yet implemented, so MedicationMention records must currently be created directly rather than produced by an AI service.
+
+A separate AI summary flow is implemented end to end, outside the numbered steps above: `POST /ai/summarize` sends the text of selected documents to Gemini, validates the JSON response with Pydantic, and persists the result as a completed Analysis, with the extracted medications and possible inconsistencies stored as AnalysisMedicationMention and AnalysisInconsistency rows. This flow does not populate MedicationMention and does not feed the reconciliation engine; it is a distinct, AI-authored observation of the selected documents, not reconciliation input. A persisted Analysis, including its AnalysisMedicationMention and AnalysisInconsistency rows, can be retrieved later by id through `GET /ai/analyses/{analysis_id}`, a read-only endpoint that performs no AI calls and no reconciliation. See `docs/ai.md`.
+
 ---
 
 ## Data Model
@@ -174,8 +182,12 @@ User
  ├── ClinicalDocument
  │      └── MedicationMention
  │
+ ├── Medication
+ │
  └── Analysis
-        └── MedicationDiscrepancy
+        ├── MedicationDiscrepancy
+        ├── AnalysisMedicationMention
+        └── AnalysisInconsistency
 ```
 
 ### Relationships
@@ -188,10 +200,22 @@ ClinicalDocument
  1 ─── many MedicationMention
 
 User
+ 1 ─── many Medication
+
+User
  1 ─── many Analysis
 
 Analysis
  1 ─── many MedicationDiscrepancy
+
+Analysis
+ 1 ─── many AnalysisMedicationMention
+
+Analysis
+ 1 ─── many AnalysisInconsistency
+
+Analysis
+ many ─── many ClinicalDocument
 ```
 
 ---

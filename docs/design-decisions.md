@@ -181,6 +181,207 @@ The goal is to simulate a professional software engineering workflow rather than
 
 ---
 
+# Decision 10: Database-Level ON DELETE SET NULL for Reconciliation Findings
+
+**Decision**
+
+Use `ON DELETE SET NULL` on the foreign keys from MedicationDiscrepancy to Medication and to MedicationMention, enforced at the database level.
+
+**Reasoning**
+
+Every other foreign key in the schema relies only on ORM-level cascade behavior, not a database-level `ON DELETE` action. MedicationDiscrepancy is a deliberate exception, because a reconciliation finding is a record of something that was true at analysis time. If the referenced Medication or MedicationMention is later deleted, the finding should survive with the reference cleared rather than being deleted along with it, and the referenced Medication or MedicationMention should never be deleted as a side effect of removing a finding.
+
+**Trade-offs**
+
+Pros
+
+- Findings are not silently lost when a medication or mention is later removed
+- A user's medication records and clinical evidence cannot be deleted as a side effect of finding cleanup
+- Enforced at the database level, not only through application code
+
+Cons
+
+- Introduces a schema convention that differs from every other foreign key in the project
+- Requires readers of the schema to understand why this table is treated differently
+
+---
+
+# Decision 11: Association Table for Analysis and ClinicalDocument
+
+**Decision**
+
+Represent the relationship between Analysis and ClinicalDocument with a dedicated association table, analysis_clinical_documents, using a composite primary key and `ON DELETE CASCADE` on both foreign keys, rather than a foreign key on either model.
+
+**Reasoning**
+
+An analysis can cover more than one clinical document, and the same document can be included in more than one analysis. A foreign key on Analysis or on ClinicalDocument can only represent a single direction of that relationship, so a true many to many association requires its own table. Unlike MedicationDiscrepancy's references, an association row carries no meaning of its own beyond linking one analysis to one document, so there is nothing to preserve if either side is deleted. `ON DELETE CASCADE` removes the link automatically, while leaving the analysis, its other documents, and its findings intact, and leaving the document and its other analyses intact.
+
+The table uses a composite primary key of analysis_id and clinical_document_id instead of a surrogate id column, which is a deliberate exception to this project's usual pattern of giving every table a surrogate id. The composite key already uniquely identifies each link, and the table has no other attributes that would need a single id to reference.
+
+**Trade-offs**
+
+Pros
+
+- Correctly represents a many to many relationship without duplicating document content or creating a second document table
+- Link rows are cleaned up automatically, at the database level, when either side is deleted
+- Composite primary key avoids an unused surrogate id on a table with no independent attributes
+
+Cons
+
+- First table in the project without a surrogate id column, which differs from the rest of the schema
+- Adds a table whose sole purpose is linking, which the reconciliation service must join through when loading an analysis's documents
+
+---
+
+# Decision 12: Deterministic Reconciliation Without AI or Fuzzy Matching
+
+**Decision**
+
+Implement medication reconciliation as explicit, deterministic backend logic. Medication names and fields are compared using fixed normalization rules and a small, explicit alias list. No fuzzy matching library, vector search, or LLM call is used anywhere in the comparison itself.
+
+**Reasoning**
+
+AI is responsible for producing MedicationMention records from clinical text. Deciding whether two already-structured records conflict is a comparison problem, not an extraction problem, and does not need a language model. A deterministic implementation is reproducible, directly unit testable, and does not risk inventing brand or generic equivalence, correcting misspellings, or merging medications on partial string similarity, all of which could silently hide a real documentation inconsistency instead of surfacing it.
+
+**Trade-offs**
+
+Pros
+
+- Fully reproducible and unit testable without any external service
+- Cannot silently merge genuinely different medications
+- No dependency on an AI provider being available or affordable at analysis time
+
+Cons
+
+- Will not catch a conflict where a document uses a materially different name for the same medication, such as a brand name where the list uses a generic name
+- Requires new aliases to be added explicitly as they are identified, rather than inferred automatically
+
+---
+
+# Decision 13: Narrow Assumption for the Unsupported Medication List Entry Rule
+
+**Decision**
+
+Only generate an unsupported_medication_list_entry finding when at least one of the documents selected for the analysis has a document_type of medication_list or medication_reconciliation_form.
+
+**Reasoning**
+
+This finding type asserts that a medication in the user's list is not supported by the selected documents. That assertion is only safe if the selected documents can reasonably be expected to mention every current medication. A visit note, progress note, or discharge summary is not expected to re-list every medication a patient takes, so its silence proves nothing. A medication list or medication reconciliation form is different: both document types exist specifically to represent the current medication list, so silence there is meaningful evidence. Restricting the rule this way avoids the false positives the underlying finding type is most at risk of producing.
+
+**Trade-offs**
+
+Pros
+
+- Avoids flagging medications as unsupported based on documents that were never meant to be exhaustive
+- Uses a signal, document_type, that already exists rather than inventing a new one
+
+Cons
+
+- The rule produces no findings at all for an analysis that only includes visit notes or similar documents, even if a medication genuinely appears nowhere else
+- Depends on document_type being set accurately at upload time
+
+---
+
+# Decision 14: Two-Phase Commit Boundary for Reconciliation Runs
+
+**Decision**
+
+Commit an Analysis in two separate steps before its findings exist: first as pending, then as processing. Only the remaining work, discrepancy creation and the final completed or failed transition, is committed as one atomic unit.
+
+**Reasoning**
+
+The existing Analysis service already commits each status transition independently. A single all-encompassing transaction across the entire reconciliation run would mean that if reconciliation fails, there would be no Analysis row at all to mark as failed, since the transaction that created it would also roll back. Committing pending and processing durably first guarantees a record of the run exists no matter what happens afterward, while still keeping discrepancy creation and the completion or failure fields atomic with each other, so no completed analysis can exist with a mismatched or missing set of findings.
+
+**Trade-offs**
+
+Pros
+
+- A failed reconciliation run always leaves a durable, explained record instead of no record at all
+- No completed analysis can exist with partially created discrepancies or counts that do not match them
+- Reuses the existing single-item commit functions rather than introducing a new transaction pattern
+
+Cons
+
+- Not a single database transaction for the entire run, so an external observer could see a processing analysis with no findings yet
+- Relies on rollback correctly discarding any discrepancies staged before a late failure, which must be verified by test rather than guaranteed by a single wrapping transaction
+
+---
+
+# Decision 15: Provider Abstraction for AI Integration
+
+**Decision**
+
+Define an abstract `AIProvider` interface with a single method, `generate_summary(prompt: str) -> str`, and one exception type, `AIProviderError`, that every provider raises for any failure. `AISummaryService` depends only on this interface. The first implementation, `GeminiProvider`, is the only concrete class that imports the Gemini SDK.
+
+**Reasoning**
+
+The project intends to evaluate multiple providers, including OpenAI, MedGemma, and OpenBioLLM. If business logic called a specific SDK directly, adding or swapping a provider would mean changing the service layer itself. Behind a single interface, a new provider is a new class that implements one method and translates its own SDK's exceptions into `AIProviderError`. Nothing else in the application needs to change, and nothing else needs to know which SDK is in use.
+
+**Trade-offs**
+
+Pros
+
+- A new provider can be added without touching `AISummaryService`, the prompt template, or the API route
+- Callers handle exactly one exception type regardless of which provider is active
+- The service is testable with a fake provider, with no live API call and no SDK-specific mocking required
+
+Cons
+
+- The shared interface is intentionally minimal, a single prompt in and a single string out, so providers with richer capabilities are reduced to that shape for now
+- Provider-specific configuration, such as Gemini's timeout, is not yet part of the shared interface and lives on the concrete provider instead
+
+---
+
+# Decision 16: Strict Validation of AI Responses
+
+**Decision**
+
+Parse and validate the AI provider's raw text as a single Pydantic model, `ClinicalSummary`, using `model_validate_json`. Configure both `ClinicalSummary` and its nested `Medication` model with `extra="forbid"`, so a response containing any field outside the documented shape fails validation rather than having the extra field silently dropped. Convert every failure, malformed JSON or a schema mismatch, into the existing `AIProviderError`, so this looks like any other provider failure to the rest of the application.
+
+**Reasoning**
+
+The project's existing rule is that AI responses are untrusted input and must be validated before use. A lenient parse, one that accepts and ignores unexpected fields, would hide the exact situation this rule exists to catch: the model drifting away from the prompt's contract without anyone noticing. Reusing `AIProviderError` rather than introducing a new exception type means the API route did not need to change its error handling to support validation.
+
+**Trade-offs**
+
+Pros
+
+- A response that does not match the documented shape is rejected immediately instead of silently returning incomplete or unexpected data
+- One exception type for every provider failure, network, configuration, or validation, so callers only need one `except` clause
+- `model_validate_json` reports malformed JSON and schema violations through the same `ValidationError`, so both are handled by one code path
+
+Cons
+
+- A harmless, additive change to the model's output, such as a new field the prompt did not ask for, is rejected the same as a genuinely broken response, rather than being ignored
+- The prompt's JSON shape and the Pydantic schema must be kept in sync by hand, since nothing currently generates one from the other
+
+---
+
+# Decision 17: Route Orchestrates Persistence, Service Layer Stays Single-Purpose
+
+**Decision**
+
+`POST /ai/summarize` orchestrates the full flow: create the Analysis, mark it processing, call `AISummaryService` for a validated result, then call a separate persistence function, `persist_analysis_result`, to store it. `AISummaryService` gained no database access to do this. Persistence lives in its own module, `analysis_result_service.py`, which knows about the validated `ClinicalSummary` shape and the database models, but nothing about Gemini or any provider.
+
+**Reasoning**
+
+`AISummaryService` already had one job, turning a provider's raw text into a validated `ClinicalSummary`, and adding database writes to it would have given it two responsibilities that change for different reasons: a new provider or a prompt change affects validation, while a new field to persist or a schema change affects storage. Keeping them apart means a change to one never risks breaking the other, and `AISummaryService` remains testable with a fake provider and no database at all, exactly as it already was.
+
+**Trade-offs**
+
+Pros
+
+- `AISummaryService` still requires no database session to test, even though the feature as a whole now persists data
+- Persistence logic can be reused by a future caller that already has a validated `ClinicalSummary` from somewhere other than this route
+- The route's control flow directly reflects the two-phase commit pattern (Decision 14): `pending` and `processing` committed on their own, the rest committed or rolled back together
+
+Cons
+
+- The route is less thin than the rest of this project's routes, since it now sequences four separate service calls and handles rollback itself
+- A second caller wanting the same orchestration would need to duplicate the route's sequencing and failure handling, since it is not itself extracted into a reusable function
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:

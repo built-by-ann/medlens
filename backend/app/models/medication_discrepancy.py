@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -10,29 +10,34 @@ class MedicationDiscrepancy(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     analysis_id = Column(Integer, ForeignKey("analyses.id"), nullable=False)
-
-    medication_name = Column(String, nullable=False)
-    normalized_name = Column(String, nullable=True)
-
-    source_document_a_id = Column(
+    medication_id = Column(
         Integer,
-        ForeignKey("clinical_documents.id"),
-        nullable=False,
+        ForeignKey("medications.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
-    source_document_b_id = Column(
+    medication_mention_id = Column(
         Integer,
-        ForeignKey("clinical_documents.id"),
-        nullable=False,
+        ForeignKey("medication_mentions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     discrepancy_type = Column(String, nullable=False)
-    severity = Column(String, nullable=True)
+    severity = Column(String, nullable=False)
 
+    title = Column(String, nullable=False)
     ai_explanation = Column(Text, nullable=True)
     recommendation = Column(Text, nullable=True)
-    resolved = Column(Boolean, nullable=False, default=False)
+
+    expected_value = Column(String, nullable=True)
+    observed_value = Column(String, nullable=True)
+
+    resolution_status = Column(String, nullable=False, default="open")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     analysis = relationship("Analysis", back_populates="medication_discrepancies")
+    medication = relationship("Medication", back_populates="discrepancies")
+    medication_mention = relationship("MedicationMention", back_populates="discrepancies")
