@@ -98,6 +98,23 @@ def get_analysis_for_user(db: Session, user_id: int, analysis_id: int) -> Analys
     )
 
 
+def list_analyses_for_user(db: Session, user_id: int, limit: int) -> list[Analysis]:
+    # id descending, not created_at, for the same reason documented on
+    # get_analysis_for_user's sibling callers elsewhere in this codebase:
+    # Postgres's now() is constant within a transaction, so created_at is
+    # not guaranteed to break ties between rows persisted together.
+    # selectinload avoids an N+1 query for clinical_documents (needed to
+    # compute each row's document count) across the whole page of results.
+    return (
+        db.query(Analysis)
+        .options(selectinload(Analysis.clinical_documents))
+        .filter(Analysis.user_id == user_id)
+        .order_by(Analysis.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def delete_analysis(db: Session, user_id: int, analysis_id: int) -> bool:
     analysis = get_analysis_for_user(db, user_id, analysis_id)
 

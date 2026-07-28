@@ -17,3 +17,21 @@ export interface AuthToken {
   access_token: string
   token_type: string
 }
+
+export type AnalysisStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
+export interface AnalysisSummary {
+  id: number
+  status: AnalysisStatus
+  created_at: string
+  completed_at: string | null
+  error_message: string | null
+  summary: string | null
+  document_count: number
+  total_findings: number
+  high_severity_findings: number
+  medium_severity_findings: number
+  low_severity_findings: number
+  provider: string | null
+  model_name: string | null
+}

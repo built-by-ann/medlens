@@ -564,3 +564,100 @@ def test_delete_analysis_rejects_nonexistent_analysis(client):
     response = client.delete("/ai/analyses/999999", headers=_auth_headers(token))
 
     assert response.status_code == 404
+
+
+def test_list_analyses_requires_authentication(client):
+    response = client.get("/ai/analyses")
+
+    assert response.status_code == 401
+
+
+def test_list_analyses_returns_empty_list_for_new_user(client):
+    token = _register_and_login(client, "listanalysesempty@example.com")
+
+    response = client.get("/ai/analyses", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_analyses_returns_expected_fields(client):
+    token = _register_and_login(client, "listanalysesfields@example.com")
+    document = _create_document(client, token)
+    analysis_id = _create_completed_analysis(client, token, document["id"])
+
+    response = client.get("/ai/analyses", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    item = body[0]
+    assert item["id"] == analysis_id
+    assert item["status"] == "completed"
+    assert item["document_count"] == 1
+    assert item["summary"] == "Lisinopril 10 mg noted."
+    assert item["provider"] == "fake"
+    assert item["model_name"] == "fake-model"
+    assert item["error_message"] is None
+    assert item["created_at"] is not None
+    assert item["completed_at"] is not None
+    assert "total_findings" in item
+    assert "high_severity_findings" in item
+    assert "medium_severity_findings" in item
+    assert "low_severity_findings" in item
+    # List rows never include full mention/inconsistency detail.
+    assert "medication_mentions" not in item
+    assert "possible_inconsistencies" not in item
+
+
+def test_list_analyses_only_returns_own_analyses(client):
+    token_a = _register_and_login(client, "listanalysesowner@example.com")
+    token_b = _register_and_login(client, "listanalysesintruder@example.com")
+    document_a = _create_document(client, token_a)
+    document_b = _create_document(client, token_b)
+
+    owned_analysis_id = _create_completed_analysis(client, token_a, document_a["id"])
+    _create_completed_analysis(client, token_b, document_b["id"])
+
+    response = client.get("/ai/analyses", headers=_auth_headers(token_a))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["id"] for item in body] == [owned_analysis_id]
+
+
+def test_list_analyses_orders_most_recent_first(client):
+    token = _register_and_login(client, "listanalysesorder@example.com")
+    document = _create_document(client, token)
+
+    first_id = _create_completed_analysis(client, token, document["id"])
+    second_id = _create_completed_analysis(client, token, document["id"])
+    third_id = _create_completed_analysis(client, token, document["id"])
+
+    response = client.get("/ai/analyses", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [third_id, second_id, first_id]
+
+
+def test_list_analyses_respects_limit_query_param(client):
+    token = _register_and_login(client, "listanalyseslimit@example.com")
+    document = _create_document(client, token)
+
+    for _ in range(3):
+        _create_completed_analysis(client, token, document["id"])
+
+    response = client.get("/ai/analyses?limit=2", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+
+def test_list_analyses_rejects_limit_out_of_range(client):
+    token = _register_and_login(client, "listanalyseslimitinvalid@example.com")
+
+    response = client.get("/ai/analyses?limit=0", headers=_auth_headers(token))
+    assert response.status_code == 422
+
+    response = client.get("/ai/analyses?limit=51", headers=_auth_headers(token))
+    assert response.status_code == 422

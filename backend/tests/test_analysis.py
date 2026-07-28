@@ -21,6 +21,7 @@ from app.services.analysis_service import (
     create_analysis,
     delete_analysis,
     get_analysis_for_user,
+    list_analyses_for_user,
     mark_analysis_completed,
     mark_analysis_failed,
     mark_analysis_processing,
@@ -575,3 +576,67 @@ def test_delete_analysis_leaves_unrelated_resources_intact(db):
     assert db.get(ClinicalDocument, document_id) is not None
     assert db.get(Medication, medication_id) is not None
     assert db.get(User, user_id) is not None
+
+
+def test_list_analyses_for_user_returns_empty_list_when_none_exist(db):
+    user = _create_user(db, email="listanalysesempty@example.com")
+
+    analyses = list_analyses_for_user(db, user.id, limit=10)
+
+    assert analyses == []
+
+
+def test_list_analyses_for_user_returns_only_own_analyses(db):
+    owner = _create_user(db, email="listanalysesowner@example.com")
+    other_user = _create_user(db, email="listanalysesintruder@example.com")
+    owner_document = _create_clinical_document(db, owner)
+    other_document = _create_clinical_document(db, other_user)
+
+    owned_analysis = create_analysis(
+        db, owner.id, AnalysisCreate(clinical_document_ids=[owner_document.id])
+    )
+    create_analysis(db, other_user.id, AnalysisCreate(clinical_document_ids=[other_document.id]))
+
+    analyses = list_analyses_for_user(db, owner.id, limit=10)
+
+    assert [analysis.id for analysis in analyses] == [owned_analysis.id]
+
+
+def test_list_analyses_for_user_orders_most_recent_first(db):
+    user = _create_user(db, email="listanalysesorder@example.com")
+    document = _create_clinical_document(db, user)
+
+    first = create_analysis(db, user.id, AnalysisCreate(clinical_document_ids=[document.id]))
+    second = create_analysis(db, user.id, AnalysisCreate(clinical_document_ids=[document.id]))
+    third = create_analysis(db, user.id, AnalysisCreate(clinical_document_ids=[document.id]))
+
+    analyses = list_analyses_for_user(db, user.id, limit=10)
+
+    assert [analysis.id for analysis in analyses] == [third.id, second.id, first.id]
+
+
+def test_list_analyses_for_user_respects_limit(db):
+    user = _create_user(db, email="listanaylseslimit@example.com")
+    document = _create_clinical_document(db, user)
+
+    for _ in range(3):
+        create_analysis(db, user.id, AnalysisCreate(clinical_document_ids=[document.id]))
+
+    analyses = list_analyses_for_user(db, user.id, limit=2)
+
+    assert len(analyses) == 2
+
+
+def test_list_analyses_for_user_loads_document_count_relationship(db):
+    user = _create_user(db, email="listanalysesdoccount@example.com")
+    document_a = _create_clinical_document(db, user, title="Visit Note")
+    document_b = _create_clinical_document(db, user, title="Discharge Summary")
+
+    create_analysis(
+        db, user.id, AnalysisCreate(clinical_document_ids=[document_a.id, document_b.id])
+    )
+
+    analyses = list_analyses_for_user(db, user.id, limit=10)
+
+    assert len(analyses) == 1
+    assert len(analyses[0].clinical_documents) == 2

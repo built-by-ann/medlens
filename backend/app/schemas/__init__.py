@@ -7,6 +7,7 @@ from app.schemas.analysis import (
     AnalysisMedicationMentionResponse,
     AnalysisResponse,
     AnalysisStatus,
+    AnalysisSummaryResponse,
 )
 from app.schemas.auth import Token, UserLogin
 from app.schemas.clinical_document import ClinicalDocumentCreate, ClinicalDocumentResponse
@@ -34,6 +35,7 @@ __all__ = [
     "AnalysisMedicationMentionResponse",
     "AnalysisResponse",
     "AnalysisStatus",
+    "AnalysisSummaryResponse",
     "ClinicalDocumentCreate",
     "ClinicalDocumentResponse",
     "DiscrepancySeverity",

@@ -66,6 +66,32 @@ class AnalysisDetailResponse(BaseModel):
     possible_inconsistencies: list[AnalysisInconsistencyResponse]
 
 
+class AnalysisSummaryResponse(BaseModel):
+    """A single row in the current user's recent-analyses list.
+
+    Deliberately narrower than AnalysisDetailResponse: no medication
+    mentions or inconsistencies, since a list view only needs enough to
+    identify an analysis and decide whether to open it. document_count is
+    computed (len(analysis.clinical_documents)), not a model column, so
+    this cannot be built with model_validate the way AnalysisDetailResponse
+    is; the route constructs it field by field instead.
+    """
+
+    id: int
+    status: AnalysisStatus
+    created_at: datetime
+    completed_at: datetime | None
+    error_message: str | None
+    summary: str | None
+    document_count: int = Field(ge=0)
+    total_findings: int
+    high_severity_findings: int
+    medium_severity_findings: int
+    low_severity_findings: int
+    provider: str | None
+    model_name: str | None
+
+
 class AnalysisResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
