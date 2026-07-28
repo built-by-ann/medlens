@@ -621,6 +621,39 @@ Possible error responses
 
 ---
 
+### DELETE /ai/analyses/{analysis_id}
+
+Purpose
+
+Permanently deletes one of the authenticated user's analyses, along with its persisted `AnalysisMedicationMention`, `AnalysisInconsistency`, and `MedicationDiscrepancy` rows. Does not delete clinical documents, medications, or any other reusable resource; only data scoped to this analysis is removed.
+
+Authentication requirements
+
+Requires a valid Bearer token in the `Authorization` header, as described above.
+
+Success response
+
+`204 No Content`
+
+No response body. After a successful delete, `GET /ai/analyses/{analysis_id}` for the same id returns `404`.
+
+404 responses
+
+Returned if `analysis_id` does not exist or belongs to a different user, using the same response as `GET /ai/analyses/{analysis_id}` so a caller cannot distinguish a nonexistent analysis from one owned by someone else.
+
+```json
+{
+  "detail": "Analysis not found"
+}
+```
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: the analysis does not exist or does not belong to the current user.
+
+---
+
 ## Error Responses
 
 ### 400 Bad Request
@@ -699,4 +732,4 @@ Returned by `POST /ai/summarize` when the configured AI provider cannot produce 
 
 ## Notes
 
-This API currently supports authentication, application infrastructure, clinical document management, user-owned medication list management, AI-generated document summaries persisted as analyses, and retrieval of a persisted analysis by id (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`, `/ai/summarize`, `/ai/analyses/{analysis_id}`). Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.
+This API currently supports authentication, application infrastructure, clinical document management, user-owned medication list management, AI-generated document summaries persisted as analyses, and retrieval and deletion of a persisted analysis by id (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`, `/ai/summarize`, `/ai/analyses/{analysis_id}`). Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.

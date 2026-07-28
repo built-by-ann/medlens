@@ -12,6 +12,7 @@ from app.services.analysis_result_service import persist_analysis_result
 from app.services.analysis_service import (
     InvalidClinicalDocumentIdsError,
     create_analysis,
+    delete_analysis,
     get_analysis_for_user,
     mark_analysis_failed,
     mark_analysis_processing,
@@ -120,3 +121,18 @@ def get_analysis_detail(
             analysis.possible_inconsistencies, key=lambda inconsistency: inconsistency.id
         ),
     )
+
+
+@router.delete("/analyses/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_analysis_detail(
+    analysis_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    deleted = delete_analysis(db, current_user.id, analysis_id)
+
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ANALYSIS_NOT_FOUND_DETAIL,
+        )
