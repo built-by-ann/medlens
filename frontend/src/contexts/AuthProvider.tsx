@@ -1,29 +1,98 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { User } from '@/types/api'
 import { AuthContext, type AuthContextValue } from '@/contexts/AuthContext'
+import { getCurrentUser, loginUser } from '@/api/auth'
+import { setAuthToken, setUnauthorizedHandler } from '@/api/client'
+import { clearStoredToken, getStoredToken, setStoredToken } from '@/lib/tokenStorage'
 
 interface AuthProviderProps {
   children: ReactNode
 }
 
 /**
- * Holds authentication state only. Session restoration, real login/signup
- * requests, and token persistence are deferred to the issues that implement
- * those flows; this provider exists so routing and the API layer have a
- * stable shape to build against.
+ * Owns authentication state: the current user, the access token, and
+ * whether the initial session restore is still in progress. Session
+ * persistence (localStorage) and the API client's request/response
+ * interceptors are separate modules; this provider is what keeps them in
+ * sync with React state, rather than either of them reading storage or
+ * context directly.
  */
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
-  const [isLoading] = useState(false)
+  const [token, setToken] = useState<string | null>(null)
+  // When there is no stored token there is nothing to restore, so this can
+  // be computed synchronously up front rather than always starting at true
+  // and flipping to false in an effect a moment later.
+  const [isLoading, setIsLoading] = useState(() => getStoredToken() !== null)
+
+  // Restore the session on load. A stored token is applied to the API
+  // client immediately so it is not lost if this component re-renders
+  // before the GET /users/me call resolves, then validated against the
+  // backend; an invalid or expired token is cleared rather than trusted.
+  useEffect(() => {
+    const storedToken = getStoredToken()
+
+    if (!storedToken) {
+      return
+    }
+
+    setAuthToken(storedToken)
+
+    getCurrentUser()
+      .then((currentUser) => {
+        setToken(storedToken)
+        setUser(currentUser)
+      })
+      .catch(() => {
+        clearStoredToken()
+        setAuthToken(null)
+      })
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  // A 401 on a request that was sent with a token means the session itself
+  // is no longer valid (expired or revoked), not that this one request had
+  // bad input, so it is treated the same as an explicit logout.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      clearStoredToken()
+      setAuthToken(null)
+      setToken(null)
+      setUser(null)
+    })
+
+    return () => setUnauthorizedHandler(null)
+  }, [])
+
+  const login = useCallback(async (email: string, password: string): Promise<void> => {
+    const authToken = await loginUser({ email, password })
+
+    setStoredToken(authToken.access_token)
+    setAuthToken(authToken.access_token)
+
+    const currentUser = await getCurrentUser()
+
+    setToken(authToken.access_token)
+    setUser(currentUser)
+  }, [])
+
+  const logout = useCallback((): void => {
+    clearStoredToken()
+    setAuthToken(null)
+    setToken(null)
+    setUser(null)
+  }, [])
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      token,
+      isAuthenticated: user !== null,
       isLoading,
-      login: setUser,
-      logout: () => setUser(null),
+      login,
+      logout,
     }),
-    [user, isLoading],
+    [user, token, isLoading, login, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

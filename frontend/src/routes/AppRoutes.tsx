@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { ProtectedLayout } from '@/layouts/ProtectedLayout'
+import { PublicOnlyRoute } from '@/components/common/PublicOnlyRoute'
 import { HomePage } from '@/pages/HomePage'
 import { LoginPage } from '@/pages/LoginPage'
 import { SignupPage } from '@/pages/SignupPage'
@@ -15,8 +16,22 @@ export function AppRoutes() {
     <Routes>
       <Route element={<PublicLayout />}>
         <Route path={ROUTES.home} element={<HomePage />} />
-        <Route path={ROUTES.login} element={<LoginPage />} />
-        <Route path={ROUTES.signup} element={<SignupPage />} />
+        <Route
+          path={ROUTES.login}
+          element={
+            <PublicOnlyRoute>
+              <LoginPage />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path={ROUTES.signup}
+          element={
+            <PublicOnlyRoute>
+              <SignupPage />
+            </PublicOnlyRoute>
+          }
+        />
       </Route>
 
       <Route element={<ProtectedLayout />}>

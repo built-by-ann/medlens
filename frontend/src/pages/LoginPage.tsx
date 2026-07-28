@@ -1,13 +1,17 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate, type Location } from 'react-router-dom'
 import { Card } from '@/components/common/Card'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
-import { loginUser } from '@/api/auth'
+import { useAuth } from '@/hooks/useAuth'
 import type { ApiError } from '@/api/client'
 import { isValidEmail } from '@/utils/validation'
 import { ROUTES } from '@/routes/paths'
+
+interface LocationState {
+  from?: Location
+}
 
 interface FormValues {
   email: string
@@ -39,6 +43,8 @@ function validate(values: FormValues): FormErrors {
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { login } = useAuth()
   const [values, setValues] = useState<FormValues>(initialValues)
   const [errors, setErrors] = useState<FormErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -68,20 +74,14 @@ export function LoginPage() {
     setIsSubmitting(true)
 
     try {
-      // The returned token is intentionally discarded. Storing it and
-      // updating AuthContext is out of scope for this issue; see the TODO
-      // below.
-      await loginUser({
-        email: values.email.trim(),
-        password: values.password,
-      })
+      await login(values.email.trim(), values.password)
 
-      // TODO(auth-state-management): This redirect is a placeholder. Once
-      // AuthContext is implemented, this should store the returned token,
-      // update AuthContext with the authenticated user, and redirect based
-      // on that state (e.g. back to wherever the user was headed) instead
-      // of always navigating straight to the dashboard.
-      navigate(ROUTES.dashboard, { replace: true })
+      const state = location.state as LocationState | null
+      const destination = state?.from
+        ? `${state.from.pathname}${state.from.search}`
+        : ROUTES.dashboard
+
+      navigate(destination, { replace: true })
     } catch (error) {
       const apiError = error as ApiError
 

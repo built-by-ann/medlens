@@ -23,3 +23,9 @@ export async function loginUser(payload: LoginPayload): Promise<AuthToken> {
 
   return response.data
 }
+
+export async function getCurrentUser(): Promise<User> {
+  const response = await apiClient.get<User>('/users/me')
+
+  return response.data
+}

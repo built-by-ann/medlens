@@ -3,8 +3,10 @@ import type { User } from '@/types/api'
 
 export interface AuthContextValue {
   user: User | null
+  token: string | null
+  isAuthenticated: boolean
   isLoading: boolean
-  login: (user: User) => void
+  login: (email: string, password: string) => Promise<void>
   logout: () => void
 }
 
