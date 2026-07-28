@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
+import { ROUTES } from '@/routes/paths'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -15,7 +16,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />
+    return <Navigate to={ROUTES.login} replace />
   }
 
   return <>{children}</>
