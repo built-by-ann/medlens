@@ -100,9 +100,27 @@ Real login and registration requests, token persistence, and session restoration
 
 ---
 
+## Dashboard
+
+`DashboardPage` (`src/pages/DashboardPage.tsx`) is kept to page composition only: a header with the primary "Start new analysis" action, and a "Recent analyses" section that renders one of four states. All data-fetching lives in `useRecentAnalyses` (`src/hooks/useRecentAnalyses.ts`), which calls `listRecentAnalyses()` (`src/api/analyses.ts`, `GET /ai/analyses`) and exposes `{ analyses, isLoading, error, retry }`; the page never calls the API layer directly.
+
+`src/components/dashboard/`:
+
+- `RecentAnalysisCard`: one analysis, with a status badge (label text, never color alone), created/completed timestamps, the AI summary text, document count, and finding counts via `SummaryStat`, provider/model if present. The whole card is a single `Link` to `analysisDetailPath(analysis.id)`, with an explicit `aria-label` describing the date and status, since a screen reader would otherwise read every nested stat as part of the link's name.
+- `RecentAnalysesList`: a semantic `<ul>` of cards.
+- `SummaryStat`: a single `<dt>`/`<dd>` label-value pair (used inside a `<dl>`).
+- `DashboardEmptyState`: explains what MedLens does and links to Upload, shown when the user has no analyses yet.
+- `DashboardErrorState`: `role="alert"`, the error message, and a retry button, shown when the fetch fails.
+
+Authentication loading (session restore) and dashboard loading (fetching analyses) are two separate, sequential states. `ProtectedRoute` already renders `LoadingSpinner` and blocks rendering until `AuthContext` confirms a session, so `DashboardPage` never has to check auth itself; its own loading state only ever covers the analyses fetch.
+
+`GET /ai/analyses` did not exist before this feature; it was added as the smallest secure addition needed, documented in `docs/api.md`. It returns each analysis's own `document_count` (computed from the existing `clinical_documents` relationship) alongside fields the API already exposed elsewhere (status, timestamps, finding counts, provider/model, summary); nothing was invented that the data model didn't already support.
+
+---
+
 ## Shared Components
 
-`src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`.
+`src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`, `ProtectedRoute`, `PublicOnlyRoute`.
 
 These are intentionally minimal, plain-props components with no variant system (no `variant`/`size` enums, no `class-variance-authority` or similar). Introducing a design system is left until there's a real, recurring need for one.
 
@@ -180,10 +198,6 @@ The frontend does not yet have a Docker Compose service; it currently runs direc
 
 The following are explicitly out of scope for this issue and left for future issues:
 
-- Login and registration request handling
-- Token persistence and session restoration
 - File upload
 - AI analysis triggering and display
-- Dashboard data
-- Authentication header injection in the API client
 - A Docker Compose service for the frontend

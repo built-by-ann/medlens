@@ -554,6 +554,53 @@ Possible error responses
 
 ---
 
+### GET /ai/analyses
+
+Purpose
+
+Returns a page of the authenticated user's own analyses, most recently created first, for use as a "recent analyses" list. Read-only; no query parameter can widen the result beyond the caller's own analyses.
+
+Authentication requirements
+
+Requires a valid Bearer token in the `Authorization` header, as described above.
+
+Query parameters
+
+- `limit` (optional, integer, default `10`, minimum `1`, maximum `50`): the maximum number of analyses to return.
+
+Success response
+
+`200 OK`
+
+```json
+[
+  {
+    "id": 7,
+    "status": "completed",
+    "created_at": "2026-07-12T19:59:14.500000Z",
+    "completed_at": "2026-07-12T19:59:16.112249Z",
+    "error_message": null,
+    "summary": "Reconciliation completed across 2 clinical document(s) with 1 finding(s): 0 high, 1 medium, 0 low severity.",
+    "document_count": 2,
+    "total_findings": 1,
+    "high_severity_findings": 0,
+    "medium_severity_findings": 1,
+    "low_severity_findings": 0,
+    "provider": "gemini",
+    "model_name": "gemini-2.0-flash"
+  }
+]
+```
+
+An empty list is returned if the user has no analyses yet; this is a normal, successful response, not an error. Ordering is by `id` descending, not `created_at`, since rows created together can share an identical `created_at` (Postgres's `now()` is constant within a transaction). Unlike `GET /ai/analyses/{analysis_id}`, list rows never include `medication_mentions` or `possible_inconsistencies`; fetch the detail endpoint for that.
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `422 Unprocessable Entity`: `limit` is outside the `1`-`50` range.
+
+---
+
 ### GET /ai/analyses/{analysis_id}
 
 Purpose
@@ -732,4 +779,4 @@ Returned by `POST /ai/summarize` when the configured AI provider cannot produce 
 
 ## Notes
 
-This API currently supports authentication, application infrastructure, clinical document management, user-owned medication list management, AI-generated document summaries persisted as analyses, and retrieval and deletion of a persisted analysis by id (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`, `/ai/summarize`, `/ai/analyses/{analysis_id}`). Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.
+This API currently supports authentication, application infrastructure, clinical document management, user-owned medication list management, AI-generated document summaries persisted as analyses, and listing, retrieval, and deletion of a user's own analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`, `/ai/summarize`, `/ai/analyses`, `/ai/analyses/{analysis_id}`). Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.
