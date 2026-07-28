@@ -20,8 +20,8 @@ pasting text or uploading TXT and PDF files, and generate AI-powered
 medication reconciliation analyses.
 
 The application extracts structured medication information from multiple
-clinical documents---including medication lists, visit notes, discharge
-summaries, progress notes, and medication reconciliation forms---then
+clinical documents (including medication lists, visit notes, discharge
+summaries, progress notes, and medication reconciliation forms) and
 compares information across documentation sources to identify potential
 documentation inconsistencies with evidence supporting each finding.
 
