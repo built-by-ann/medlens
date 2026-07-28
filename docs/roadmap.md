@@ -34,9 +34,9 @@ This roadmap tracks MedLens's development milestones across four sprints, from b
 
 ---
 
-## Sprint 3 (Planned)
+## Sprint 3 (In Progress)
 
-- React frontend
+- React frontend foundation (project setup, routing, layout, API client, authentication foundation): done, see `docs/frontend.md`
 - Dashboard
 - History
 - Responsive UI

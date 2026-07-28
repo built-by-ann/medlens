@@ -1,0 +1,180 @@
+# Frontend
+
+## Overview
+
+The MedLens frontend is a React and TypeScript single-page application built with Vite. This issue establishes the application's infrastructure only: project tooling, folder structure, routing, layout, the API client, and an authentication foundation. No product features (login, registration, upload, dashboard data, AI analysis) are implemented yet; each of those is deferred to a later issue and currently renders as a placeholder page.
+
+---
+
+## Technology Stack
+
+- React
+- TypeScript (`strict` mode, plus `noUncheckedIndexedAccess` and `noImplicitOverride`)
+- Vite
+- React Router (`react-router-dom`, declarative `<BrowserRouter>`/`<Routes>`, not the data-router/loader API)
+- Axios, for backend HTTP requests
+- Tailwind CSS (v4, via `@tailwindcss/vite`)
+- ESLint (flat config, `typescript-eslint`) and Prettier
+
+---
+
+## Folder Structure
+
+```text
+frontend/src/
+    api/            Backend communication (Axios client, request/response handling)
+    assets/         Static assets (images, icons)
+    components/
+        common/     Shared, reusable UI components
+        layout/     Layout-specific components (e.g. top navigation)
+    contexts/       React Context definitions and providers
+    hooks/          Shared custom hooks
+    layouts/        Route-level layout components (wrap groups of pages)
+    lib/            Small framework-adjacent utilities (e.g. environment config)
+    pages/          Route-level page components
+    styles/         Global stylesheet
+    types/          Shared TypeScript types, including frontend representations of backend response models
+    utils/          General-purpose utility functions
+```
+
+`api/` is the single location for backend communication. A separate `services/` folder was deliberately omitted, since it would only duplicate `api/`'s purpose and create ambiguity about which one new code should use.
+
+---
+
+## Routing
+
+Routing is configured in `src/App.tsx` using `react-router-dom`.
+
+| Path | Page | Layout | Protected |
+|---|---|---|---|
+| `/login` | `LoginPage` | none | no |
+| `/register` | `RegisterPage` | none | no |
+| `/dashboard` | `DashboardPage` | `AppLayout` | yes |
+| `/analyses/:id` | `AnalysisDetailPage` | `AppLayout` | yes |
+| `/upload` | `UploadPage` | `AppLayout` | yes |
+| `/` | redirects to `/dashboard` | | |
+| `*` | `NotFoundPage` | none | no |
+
+Login and registration are intentionally rendered outside `AppLayout`, since an unauthenticated user has no dashboard or upload links to navigate to. Every route currently renders a placeholder; no page contains real data-fetching or business logic yet.
+
+Protected routes are wrapped in `ProtectedRoute` (`src/components/common/ProtectedRoute.tsx`), which reads `useAuth()` and redirects to `/login` when there is no authenticated user. Since login is not implemented yet, there is currently no way to reach a protected route as an authenticated user; this only establishes the structure a future issue will rely on.
+
+---
+
+## Layout
+
+`AppLayout` (`src/layouts/AppLayout.tsx`) is the shared application shell for authenticated pages: a top navigation bar (`src/components/layout/TopNav.tsx`) plus a responsive, max-width content area that renders the matched child route via `<Outlet />`.
+
+`TopNav` links to Dashboard and Upload, and shows either a "Log in" link or a "Log out" button depending on `useAuth()`'s `user` state.
+
+---
+
+## API Layer
+
+`src/api/client.ts` exports a single configured Axios instance (`apiClient`), used for all backend requests.
+
+- The base URL comes from `env.apiBaseUrl` (see Environment Variables below); it is never hardcoded elsewhere in the codebase.
+- A response interceptor normalizes any failed request into a single `ApiError` shape (`{ status, message }`), collapsing both FastAPI's plain-string `detail` and its list-of-field-errors `detail` (returned on `422` validation failures) into one readable message.
+- No authentication header injection exists yet. It is deferred until login is implemented, since there is no token to attach and adding the interceptor now would just be dead code. When login is implemented, the interceptor will read the current token from `AuthContext` (or wherever it ends up being persisted) and attach it to outgoing requests.
+
+`src/types/api.ts` is the initial home for frontend representations of backend response models (starting with `User`), added to incrementally as each backend resource is wired up on the frontend.
+
+---
+
+## Authentication Foundation
+
+- `AuthContext` (`src/contexts/AuthContext.ts`) defines the context and its value shape (`user`, `isLoading`, `login`, `logout`).
+- `AuthProvider` (`src/contexts/AuthProvider.tsx`) holds this state in memory via `useState`. It does not call the backend, restore a session, or persist a token anywhere; `login()` simply sets the in-memory user.
+- `useAuth()` (`src/hooks/useAuth.ts`) reads the context and throws if used outside `AuthProvider`.
+- `ProtectedRoute` (`src/components/common/ProtectedRoute.tsx`) redirects to `/login` when `user` is `null`.
+
+The context and provider are defined in separate files (`AuthContext.ts` / `AuthProvider.tsx`) rather than one, so that `AuthProvider`'s file only exports a component; a file that exports both a component and a plain object (like the earlier combined version) trips React Fast Refresh's `only-export-components` lint rule.
+
+Real login and registration requests, token persistence, and session restoration are left to the issues that implement those flows.
+
+---
+
+## Shared Components
+
+`src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`.
+
+These are intentionally minimal, plain-props components with no variant system (no `variant`/`size` enums, no `class-variance-authority` or similar). Introducing a design system is left until there's a real, recurring need for one.
+
+---
+
+## Styling
+
+Tailwind CSS v4 is used throughout, configured via the `@tailwindcss/vite` plugin (no separate PostCSS config file needed). Global styles live in `src/styles/globals.css`, which imports Tailwind and sets a small number of base styles (body background/text color, a consistent `:focus-visible` outline).
+
+The layout (`AppLayout`, `TopNav`) uses a max-width, responsive container that works down to tablet widths; no attempt has been made to optimize for small mobile screens yet, since the issue only requires desktop and tablet support.
+
+---
+
+## Accessibility
+
+This issue establishes baseline practices, not full WCAG compliance:
+
+- Semantic HTML (`<header>`, `<nav>`, `<main>`, heading elements) instead of generic `<div>`s for structural roles.
+- `Input` always renders an associated `<label htmlFor>`, generating an id via `useId()` when one isn't provided.
+- Every interactive element (nav links, buttons) is a native `<a>`/`<button>` element, so it's keyboard-reachable and operable by default.
+- A visible `:focus-visible` outline is defined once in `globals.css` and reused on custom components, rather than relying on (or removing) each browser's default.
+- `LoadingSpinner` uses `role="status"` with visible text, rather than an icon-only spinner, for screen reader support.
+
+---
+
+## State Management
+
+Global state uses React Context (`AuthContext` today). No Redux or other state library is introduced; the issue's scope doesn't yet include state complex enough to justify one.
+
+---
+
+## Environment Variables
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `VITE_API_BASE_URL` | Yes | Base URL of the backend API |
+
+`VITE_API_BASE_URL` has no fallback and must be set explicitly; `src/lib/env.ts` throws a clear error at startup if it's missing, rather than silently defaulting to `localhost`. Copy `.env.example` to `.env` and adjust it for your environment before running the dev server or building.
+
+---
+
+## Development Setup
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Other scripts:
+
+```bash
+npm run build         # tsc -b && vite build
+npm run lint           # eslint .
+npm run format         # prettier --write .
+npm run format:check   # prettier --check .
+npm run preview        # preview a production build
+```
+
+The frontend does not yet have a Docker Compose service; it currently runs directly via `npm run dev` against a backend started separately (see the root `README.md` and `infra/docker-compose.yml`).
+
+---
+
+## Known Dependency Advisory
+
+`react-router-dom` currently has one open high-severity advisory ([GHSA-qwww-vcr4-c8h2](https://github.com/advisories/GHSA-qwww-vcr4-c8h2)), affecting React Router's RSC (React Server Components) mode with server actions. This application uses only the classic client-side `<BrowserRouter>`/`<Routes>` API, with no RSC, no server actions, and no data-router loaders, so this advisory's attack surface does not apply here. The installed version was chosen deliberately: every earlier `react-router-dom` release (up to 7.17.0) carries a much larger set of already-patched high-severity advisories (XSS, open redirects, unauthenticated DoS, and an arbitrary-constructor-invocation issue), all fixed by the version in use.
+
+---
+
+## Not Implemented Yet
+
+The following are explicitly out of scope for this issue and left for future issues:
+
+- Login and registration request handling
+- Token persistence and session restoration
+- File upload
+- AI analysis triggering and display
+- Dashboard data
+- Authentication header injection in the API client
+- A Docker Compose service for the frontend

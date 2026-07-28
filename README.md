@@ -206,6 +206,7 @@ medlens/
 ├── docs/
 │   ├── PRD.md
 │   ├── architecture.md
+│   ├── frontend.md
 │   ├── ai.md
 │   ├── evaluation.md
 │   ├── data-model.md
@@ -227,6 +228,7 @@ Project documentation is located in the `docs/` directory.
 
 - Product Requirements Document
 - Software Architecture
+- Frontend Architecture
 - AI Pipeline
 - Model Evaluation
 - Data Model
@@ -308,14 +310,23 @@ git clone https://github.com/built-by-ann/medlens.git
 cd medlens
 ```
 
-Start the development environment:
+Start the backend and database:
 
 ```bash
 cd infra
 docker compose up --build
 ```
 
-Additional setup instructions will be added as development progresses.
+Run the frontend:
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+See `docs/frontend.md` for the full frontend architecture and available scripts.
 
 ---
 
