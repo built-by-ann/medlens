@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/common/Card'
-import { SummaryStat } from '@/components/dashboard/SummaryStat'
+import { SummaryStat } from '@/components/common/SummaryStat'
 import { analysisDetailPath } from '@/routes/paths'
 import { cn } from '@/utils/cn'
 import type { AnalysisSummary } from '@/types/api'

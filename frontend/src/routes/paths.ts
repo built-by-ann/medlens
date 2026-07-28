@@ -4,6 +4,7 @@ export const ROUTES = {
   signup: '/signup',
   dashboard: '/dashboard',
   upload: '/upload',
+  medications: '/medications',
   analysisDetail: '/analyses/:id',
 } as const
 

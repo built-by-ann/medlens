@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { RecentAnalysesList } from '@/components/dashboard/RecentAnalysesList'
 import { DashboardEmptyState } from '@/components/dashboard/DashboardEmptyState'
-import { DashboardErrorState } from '@/components/dashboard/DashboardErrorState'
+import { ErrorState } from '@/components/common/ErrorState'
 import { useRecentAnalyses } from '@/hooks/useRecentAnalyses'
 import { useAuth } from '@/hooks/useAuth'
 import { ROUTES } from '@/routes/paths'
@@ -34,7 +34,9 @@ export function DashboardPage() {
 
         {isLoading && <LoadingSpinner label="Loading your analyses" />}
 
-        {!isLoading && error && <DashboardErrorState message={error} onRetry={retry} />}
+        {!isLoading && error && (
+          <ErrorState title="Couldn't load your analyses" message={error} onRetry={retry} />
+        )}
 
         {!isLoading && !error && analyses.length === 0 && <DashboardEmptyState />}
 
