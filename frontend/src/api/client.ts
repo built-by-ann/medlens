@@ -36,7 +36,46 @@ export const apiClient = axios.create({
   baseURL: env.apiBaseUrl,
 })
 
+// The current token is held here, in the API layer, rather than read from
+// AuthContext directly (interceptors run outside React and have no access
+// to context). AuthContext is still the single owner of the token's value;
+// it just calls setAuthToken() whenever that value changes (login, logout,
+// session restore), so this module never reads or writes storage itself.
+let currentToken: string | null = null
+
+export function setAuthToken(token: string | null): void {
+  currentToken = token
+}
+
+apiClient.interceptors.request.use((config) => {
+  if (currentToken) {
+    config.headers.Authorization = `Bearer ${currentToken}`
+  }
+
+  return config
+})
+
+// Registered by AuthContext so that a 401 on a request that was actually
+// sent with a token (meaning the session itself is no longer valid, not
+// just "these credentials were wrong") clears authentication state. This is
+// intentionally the only thing it does: it never redirects or retries, so
+// there is no risk of a loop, and once state is cleared no further request
+// carries a token, so a stale token cannot keep re-triggering this handler.
+let unauthorizedHandler: (() => void) | null = null
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => Promise.reject(toApiError(error)),
+  (error: AxiosError) => {
+    const hadAuthHeader = Boolean(error.config?.headers?.Authorization)
+
+    if (error.response?.status === 401 && hadAuthHeader) {
+      unauthorizedHandler?.()
+    }
+
+    return Promise.reject(toApiError(error))
+  },
 )
