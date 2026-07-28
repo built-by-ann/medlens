@@ -9,3 +9,36 @@ import '@testing-library/jest-dom/vitest'
 afterEach(() => {
   cleanup()
 })
+
+// jsdom does not implement HTMLDialogElement's imperative modal behavior
+// (showModal/close, or Escape triggering a cancel event) - this is a
+// documented jsdom limitation, not a gap in application code. Real browsers
+// already implement all of this natively; this polyfill only exists so
+// components built on the real <dialog> element are testable here.
+if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+    this.setAttribute('open', '')
+  }
+
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+    if (!this.open) return
+    this.removeAttribute('open')
+    this.dispatchEvent(new Event('close'))
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return
+
+    const openDialogs = document.querySelectorAll('dialog[open]')
+    const topDialog = openDialogs[openDialogs.length - 1] as HTMLDialogElement | undefined
+
+    if (!topDialog) return
+
+    const cancelEvent = new Event('cancel', { cancelable: true })
+    const notPrevented = topDialog.dispatchEvent(cancelEvent)
+
+    if (notPrevented) {
+      topDialog.close()
+    }
+  })
+}
