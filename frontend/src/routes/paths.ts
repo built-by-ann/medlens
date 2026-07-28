@@ -4,11 +4,11 @@ export const ROUTES = {
   signup: '/signup',
   dashboard: '/dashboard',
   upload: '/upload',
-  medications: '/medications',
   patients: '/patients',
   newPatient: '/patients/new',
   patientDetail: '/patients/:patientId',
   patientEdit: '/patients/:patientId/edit',
+  patientMedications: '/patients/:patientId/medications',
   analysisDetail: '/analyses/:id',
 } as const
 
@@ -22,4 +22,8 @@ export function patientDetailPath(patientId: string | number): string {
 
 export function patientEditPath(patientId: string | number): string {
   return `/patients/${patientId}/edit`
+}
+
+export function patientMedicationsPath(patientId: string | number): string {
+  return `/patients/${patientId}/medications`
 }

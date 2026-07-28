@@ -412,11 +412,15 @@ Possible error responses
 
 ---
 
-### POST /medications
+### POST /patients/{patient_id}/medications
 
 Purpose
 
-Creates a medication entry in the authenticated user's medication list.
+Creates a medication entry in the given patient's medication list. As of Sprint 3.5 (Issue #129), medications are owned by a `Patient`, not directly by the authenticated user - see `docs/data-model.md`.
+
+Authorization
+
+Every route in this section resolves `patient_id` through the same check: the patient must exist and belong to the authenticated user (`Patient.user_id == current_user.id`), via a shared dependency (`get_owned_patient`). This applies uniformly whether the patient is active or archived - an archived patient's medications remain fully manageable through these endpoints, only `GET /patients` (the active patient list) excludes them.
 
 Request body
 
@@ -446,7 +450,7 @@ Success response
 ```json
 {
   "id": 1,
-  "user_id": 1,
+  "patient_id": 1,
   "medication_name": "Lisinopril",
   "dose": "10 mg",
   "route": "oral",
@@ -462,15 +466,16 @@ Success response
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user - `{"detail": "Patient not found"}`.
 - `422 Unprocessable Entity`: a required field is missing or empty.
 
 ---
 
-### POST /medications/import
+### POST /patients/{patient_id}/medications/import
 
 Purpose
 
-Imports medications into the authenticated user's medication list from an uploaded CSV file.
+Imports medications into the given patient's medication list from an uploaded CSV file.
 
 Accepted file type
 
@@ -495,7 +500,7 @@ Row behavior
 - Surrounding whitespace is trimmed from every header and every cell value.
 - A row where every recognized column is empty is treated as a blank row and ignored. Blank rows are counted separately in the response and do not cause an error.
 - An empty `notes` cell is stored as `null`, matching the other creation endpoints.
-- Each nonblank row is validated using the same rules as `POST /medications`.
+- Each nonblank row is validated using the same rules as `POST /patients/{patient_id}/medications`.
 
 Import is atomic. Every row is validated before any medication is created. If any nonblank row fails validation, no medications are created and the response reports every invalid row.
 
@@ -549,19 +554,20 @@ Row numbers follow spreadsheet convention: the header is row 1, so the first dat
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
 - `422 Unprocessable Entity`: the file is not a CSV, the file is empty or has no header row, the header row is missing a required column, or one or more rows fail validation. When one or more rows fail validation, no medications are created.
 
 ---
 
-### GET /medications
+### GET /patients/{patient_id}/medications
 
 Purpose
 
-Returns all medications belonging to the authenticated user.
+Returns all medications belonging to the given patient.
 
 Request
 
-No parameters or body.
+No parameters or body beyond `patient_id` in the path.
 
 Response
 
@@ -571,7 +577,7 @@ Response
 [
   {
     "id": 1,
-    "user_id": 1,
+    "patient_id": 1,
     "medication_name": "Lisinopril",
     "dose": "10 mg",
     "route": "oral",
@@ -585,15 +591,18 @@ Response
 ]
 ```
 
-Only medications belonging to the current user are returned.
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
 
 ---
 
-### GET /medications/{medication_id}
+### GET /patients/{patient_id}/medications/{medication_id}
 
 Purpose
 
-Returns a single medication belonging to the authenticated user.
+Returns a single medication belonging to the given patient.
 
 Authentication requirements
 
@@ -606,7 +615,7 @@ Success response
 ```json
 {
   "id": 1,
-  "user_id": 1,
+  "patient_id": 1,
   "medication_name": "Lisinopril",
   "dose": "10 mg",
   "route": "oral",
@@ -621,7 +630,13 @@ Success response
 
 404 responses
 
-Returned if `medication_id` does not exist or belongs to a different user. The same response is used in both cases so that a caller cannot distinguish a nonexistent medication from one owned by someone else.
+Returned if `patient_id` does not exist or does not belong to the current user, or if `medication_id` does not exist or belongs to a *different* patient - including a different patient owned by the same user. The same response is used in every case so that a caller cannot distinguish a nonexistent medication from one it isn't allowed to see.
+
+```json
+{
+  "detail": "Patient not found"
+}
+```
 
 ```json
 {
@@ -631,11 +646,11 @@ Returned if `medication_id` does not exist or belongs to a different user. The s
 
 ---
 
-### PATCH /medications/{medication_id}
+### PATCH /patients/{patient_id}/medications/{medication_id}
 
 Purpose
 
-Partially updates a medication belonging to the authenticated user. Only the fields included in the request body are changed.
+Partially updates a medication belonging to the given patient. Only the fields included in the request body are changed.
 
 Request body
 
@@ -661,7 +676,7 @@ Success response
 ```json
 {
   "id": 1,
-  "user_id": 1,
+  "patient_id": 1,
   "medication_name": "Lisinopril",
   "dose": "20 mg",
   "route": "oral",
@@ -677,16 +692,16 @@ Success response
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
-- `404 Not Found`: the medication does not exist or does not belong to the current user.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user, or the medication does not exist or belongs to a different patient.
 - `422 Unprocessable Entity`: an included field is empty.
 
 ---
 
-### DELETE /medications/{medication_id}
+### DELETE /patients/{patient_id}/medications/{medication_id}
 
 Purpose
 
-Deletes a medication belonging to the authenticated user.
+Deletes a medication belonging to the given patient. Unlike archiving a patient, this is a real, permanent delete - there is no soft-delete for individual medications.
 
 Success response
 
@@ -695,7 +710,7 @@ Success response
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
-- `404 Not Found`: the medication does not exist or does not belong to the current user.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user, or the medication does not exist or belongs to a different patient.
 
 ---
 

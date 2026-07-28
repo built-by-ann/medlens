@@ -37,11 +37,6 @@ export function TopNav() {
               Upload
             </NavLink>
           </li>
-          <li>
-            <NavLink to={ROUTES.medications} className={navLinkClassName}>
-              Medications
-            </NavLink>
-          </li>
         </ul>
 
         <div>

@@ -13,7 +13,18 @@ def _auth_headers(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def _create_medication(client, token, **overrides):
+def _create_patient(client, token, **overrides):
+    payload = {
+        "first_name": "Jane",
+        "last_name": "Doe",
+        "date_of_birth": "1980-05-14",
+    }
+    payload.update(overrides)
+
+    return client.post("/patients", json=payload, headers=_auth_headers(token))
+
+
+def _create_medication(client, token, patient_id, **overrides):
     payload = {
         "medication_name": "Lisinopril",
         "dose": "10 mg",
@@ -24,12 +35,14 @@ def _create_medication(client, token, **overrides):
     }
     payload.update(overrides)
 
-    return client.post("/medications", json=payload, headers=_auth_headers(token))
+    return client.post(
+        f"/patients/{patient_id}/medications", json=payload, headers=_auth_headers(token)
+    )
 
 
 def test_create_medication_requires_authentication(client):
     response = client.post(
-        "/medications",
+        "/patients/1/medications",
         json={
             "medication_name": "Lisinopril",
             "dose": "10 mg",
@@ -45,8 +58,9 @@ def test_create_medication_requires_authentication(client):
 
 def test_create_medication_succeeds(client):
     token = _register_and_login(client, "creator@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = _create_medication(client, token, notes="Taken with breakfast")
+    response = _create_medication(client, token, patient["id"], notes="Taken with breakfast")
 
     assert response.status_code == 201
 
@@ -59,13 +73,35 @@ def test_create_medication_succeeds(client):
     assert body["source"] == "patient_reported"
     assert body["notes"] == "Taken with breakfast"
     assert "id" in body
-    assert "user_id" in body
+    assert body["patient_id"] == patient["id"]
+    assert "user_id" not in body
+
+
+def test_create_medication_requires_a_patient_owned_by_the_user(client):
+    token_a = _register_and_login(client, "owner4@example.com")
+    token_b = _register_and_login(client, "intruder4@example.com")
+    patient = _create_patient(client, token_a).json()
+
+    response = _create_medication(client, token_b, patient["id"])
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Patient not found"
+
+
+def test_create_medication_returns_404_for_unknown_patient(client):
+    token = _register_and_login(client, "unknownpatient@example.com")
+
+    response = _create_medication(client, token, 999999)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Patient not found"
 
 
 def test_create_medication_allows_missing_notes(client):
     token = _register_and_login(client, "nonotes@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = _create_medication(client, token)
+    response = _create_medication(client, token, patient["id"])
 
     assert response.status_code == 201
     assert response.json()["notes"] is None
@@ -73,30 +109,45 @@ def test_create_medication_allows_missing_notes(client):
 
 def test_create_medication_rejects_empty_name(client):
     token = _register_and_login(client, "validation@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = _create_medication(client, token, medication_name="")
+    response = _create_medication(client, token, patient["id"], medication_name="")
 
     assert response.status_code == 422
 
 
 def test_create_medication_rejects_missing_fields(client):
     token = _register_and_login(client, "missingfields@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = client.post("/medications", json={}, headers=_auth_headers(token))
+    response = client.post(
+        f"/patients/{patient['id']}/medications", json={}, headers=_auth_headers(token)
+    )
 
     assert response.status_code == 422
 
 
-def test_list_medications_returns_only_current_users_medications(client):
-    token_a = _register_and_login(client, "usera@example.com")
-    token_b = _register_and_login(client, "userb@example.com")
+def test_create_medication_succeeds_for_an_archived_patient(client):
+    token = _register_and_login(client, "archivedcreate@example.com")
+    patient = _create_patient(client, token).json()
+    client.delete(f"/patients/{patient['id']}", headers=_auth_headers(token))
 
-    _create_medication(client, token_a, medication_name="Med A1")
-    _create_medication(client, token_a, medication_name="Med A2")
-    _create_medication(client, token_b, medication_name="Med B1")
+    response = _create_medication(client, token, patient["id"])
 
-    response_a = client.get("/medications", headers=_auth_headers(token_a))
-    response_b = client.get("/medications", headers=_auth_headers(token_b))
+    assert response.status_code == 201
+
+
+def test_list_medications_returns_only_the_given_patients_medications(client):
+    token = _register_and_login(client, "usera@example.com")
+    patient_a = _create_patient(client, token, first_name="Patient A").json()
+    patient_b = _create_patient(client, token, first_name="Patient B").json()
+
+    _create_medication(client, token, patient_a["id"], medication_name="Med A1")
+    _create_medication(client, token, patient_a["id"], medication_name="Med A2")
+    _create_medication(client, token, patient_b["id"], medication_name="Med B1")
+
+    response_a = client.get(f"/patients/{patient_a['id']}/medications", headers=_auth_headers(token))
+    response_b = client.get(f"/patients/{patient_b['id']}/medications", headers=_auth_headers(token))
 
     assert response_a.status_code == 200
     assert response_b.status_code == 200
@@ -109,16 +160,29 @@ def test_list_medications_returns_only_current_users_medications(client):
 
 
 def test_list_medications_requires_authentication(client):
-    response = client.get("/medications")
+    response = client.get("/patients/1/medications")
 
     assert response.status_code == 401
 
 
+def test_list_medications_returns_404_for_another_users_patient(client):
+    token_a = _register_and_login(client, "listownera@example.com")
+    token_b = _register_and_login(client, "listintruderb@example.com")
+    patient = _create_patient(client, token_a).json()
+
+    response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token_b))
+
+    assert response.status_code == 404
+
+
 def test_get_medication_by_id_succeeds(client):
     token = _register_and_login(client, "getone@example.com")
-    created = _create_medication(client, token).json()
+    patient = _create_patient(client, token).json()
+    created = _create_medication(client, token, patient["id"]).json()
 
-    response = client.get(f"/medications/{created['id']}", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/medications/{created['id']}", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 200
     assert response.json()["id"] == created["id"]
@@ -126,29 +190,64 @@ def test_get_medication_by_id_succeeds(client):
 
 def test_get_medication_returns_404_for_unknown_id(client):
     token = _register_and_login(client, "getunknown@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = client.get("/medications/999999", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/medications/999999", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 404
 
 
-def test_get_medication_returns_404_for_other_users_medication(client):
+def test_get_medication_returns_404_for_other_users_patient(client):
     token_a = _register_and_login(client, "owner@example.com")
     token_b = _register_and_login(client, "intruder@example.com")
+    patient = _create_patient(client, token_a).json()
+    created = _create_medication(client, token_a, patient["id"]).json()
 
-    created = _create_medication(client, token_a).json()
-
-    response = client.get(f"/medications/{created['id']}", headers=_auth_headers(token_b))
+    response = client.get(
+        f"/patients/{patient['id']}/medications/{created['id']}", headers=_auth_headers(token_b)
+    )
 
     assert response.status_code == 404
+
+
+def test_get_medication_returns_404_when_accessed_through_a_different_patient(client):
+    # Cross-patient access: both patients are owned by the same user, but
+    # the medication belongs to patient_a, not patient_b - the medication
+    # id alone must not be enough to reach it through the wrong patient.
+    token = _register_and_login(client, "crosspatient@example.com")
+    patient_a = _create_patient(client, token, first_name="A").json()
+    patient_b = _create_patient(client, token, first_name="B").json()
+    created = _create_medication(client, token, patient_a["id"]).json()
+
+    response = client.get(
+        f"/patients/{patient_b['id']}/medications/{created['id']}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 404
+
+
+def test_get_medication_still_reachable_for_an_archived_patient(client):
+    token = _register_and_login(client, "getarchivedmed@example.com")
+    patient = _create_patient(client, token).json()
+    created = _create_medication(client, token, patient["id"]).json()
+    client.delete(f"/patients/{patient['id']}", headers=_auth_headers(token))
+
+    response = client.get(
+        f"/patients/{patient['id']}/medications/{created['id']}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
 
 
 def test_patch_medication_updates_only_provided_fields(client):
     token = _register_and_login(client, "patcher@example.com")
-    created = _create_medication(client, token).json()
+    patient = _create_patient(client, token).json()
+    created = _create_medication(client, token, patient["id"]).json()
 
     response = client.patch(
-        f"/medications/{created['id']}",
+        f"/patients/{patient['id']}/medications/{created['id']}",
         json={"dose": "20 mg", "status": "discontinued"},
         headers=_auth_headers(token),
     )
@@ -166,10 +265,11 @@ def test_patch_medication_updates_only_provided_fields(client):
 
 def test_patch_medication_rejects_empty_value(client):
     token = _register_and_login(client, "patchvalidation@example.com")
-    created = _create_medication(client, token).json()
+    patient = _create_patient(client, token).json()
+    created = _create_medication(client, token, patient["id"]).json()
 
     response = client.patch(
-        f"/medications/{created['id']}",
+        f"/patients/{patient['id']}/medications/{created['id']}",
         json={"dose": ""},
         headers=_auth_headers(token),
     )
@@ -179,9 +279,10 @@ def test_patch_medication_rejects_empty_value(client):
 
 def test_patch_medication_returns_404_for_unknown_id(client):
     token = _register_and_login(client, "patchunknown@example.com")
+    patient = _create_patient(client, token).json()
 
     response = client.patch(
-        "/medications/999999",
+        f"/patients/{patient['id']}/medications/999999",
         json={"dose": "20 mg"},
         headers=_auth_headers(token),
     )
@@ -189,14 +290,14 @@ def test_patch_medication_returns_404_for_unknown_id(client):
     assert response.status_code == 404
 
 
-def test_patch_medication_returns_404_for_other_users_medication(client):
+def test_patch_medication_returns_404_for_other_users_patient(client):
     token_a = _register_and_login(client, "owner2@example.com")
     token_b = _register_and_login(client, "intruder2@example.com")
-
-    created = _create_medication(client, token_a).json()
+    patient = _create_patient(client, token_a).json()
+    created = _create_medication(client, token_a, patient["id"]).json()
 
     response = client.patch(
-        f"/medications/{created['id']}",
+        f"/patients/{patient['id']}/medications/{created['id']}",
         json={"dose": "20 mg"},
         headers=_auth_headers(token_b),
     )
@@ -204,47 +305,86 @@ def test_patch_medication_returns_404_for_other_users_medication(client):
     assert response.status_code == 404
 
 
+def test_patch_medication_returns_404_when_accessed_through_a_different_patient(client):
+    token = _register_and_login(client, "crosspatchpatient@example.com")
+    patient_a = _create_patient(client, token, first_name="A").json()
+    patient_b = _create_patient(client, token, first_name="B").json()
+    created = _create_medication(client, token, patient_a["id"]).json()
+
+    response = client.patch(
+        f"/patients/{patient_b['id']}/medications/{created['id']}",
+        json={"dose": "20 mg"},
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 404
+
+
 def test_patch_medication_requires_authentication(client):
-    response = client.patch("/medications/1", json={"dose": "20 mg"})
+    response = client.patch("/patients/1/medications/1", json={"dose": "20 mg"})
 
     assert response.status_code == 401
 
 
 def test_delete_medication_succeeds(client):
     token = _register_and_login(client, "deleter@example.com")
-    created = _create_medication(client, token).json()
+    patient = _create_patient(client, token).json()
+    created = _create_medication(client, token, patient["id"]).json()
 
     delete_response = client.delete(
-        f"/medications/{created['id']}", headers=_auth_headers(token)
+        f"/patients/{patient['id']}/medications/{created['id']}", headers=_auth_headers(token)
     )
     assert delete_response.status_code == 204
 
-    get_response = client.get(f"/medications/{created['id']}", headers=_auth_headers(token))
+    get_response = client.get(
+        f"/patients/{patient['id']}/medications/{created['id']}", headers=_auth_headers(token)
+    )
     assert get_response.status_code == 404
 
 
-def test_delete_medication_returns_404_for_other_users_medication(client):
+def test_delete_medication_returns_404_for_other_users_patient(client):
     token_a = _register_and_login(client, "owner3@example.com")
     token_b = _register_and_login(client, "intruder3@example.com")
+    patient = _create_patient(client, token_a).json()
+    created = _create_medication(client, token_a, patient["id"]).json()
 
-    created = _create_medication(client, token_a).json()
-
-    response = client.delete(f"/medications/{created['id']}", headers=_auth_headers(token_b))
+    response = client.delete(
+        f"/patients/{patient['id']}/medications/{created['id']}", headers=_auth_headers(token_b)
+    )
 
     assert response.status_code == 404
 
 
+def test_delete_medication_returns_404_when_accessed_through_a_different_patient(client):
+    token = _register_and_login(client, "crossdeletepatient@example.com")
+    patient_a = _create_patient(client, token, first_name="A").json()
+    patient_b = _create_patient(client, token, first_name="B").json()
+    created = _create_medication(client, token, patient_a["id"]).json()
+
+    response = client.delete(
+        f"/patients/{patient_b['id']}/medications/{created['id']}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 404
+
+    # Untouched: still reachable through the correct patient.
+    get_response = client.get(
+        f"/patients/{patient_a['id']}/medications/{created['id']}", headers=_auth_headers(token)
+    )
+    assert get_response.status_code == 200
+
+
 def test_delete_medication_requires_authentication(client):
-    response = client.delete("/medications/1")
+    response = client.delete("/patients/1/medications/1")
 
     assert response.status_code == 401
 
 
-def _upload_csv(client, token, content, filename="medications.csv", content_type="text/csv"):
+def _upload_csv(client, token, patient_id, content, filename="medications.csv", content_type="text/csv"):
     encoded = content.encode("utf-8") if isinstance(content, str) else content
 
     return client.post(
-        "/medications/import",
+        f"/patients/{patient_id}/medications/import",
         files={"file": (filename, encoded, content_type)},
         headers=_auth_headers(token),
     )
@@ -252,6 +392,7 @@ def _upload_csv(client, token, content, filename="medications.csv", content_type
 
 def test_import_csv_succeeds_with_multiple_medications(client):
     token = _register_and_login(client, "importer@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = (
         "medication_name,dose,route,frequency,status,source,notes\n"
@@ -259,7 +400,7 @@ def test_import_csv_succeeds_with_multiple_medications(client):
         "Metformin,500 mg,oral,twice daily,active,patient_reported,\n"
     )
 
-    response = _upload_csv(client, token, csv_content)
+    response = _upload_csv(client, token, patient["id"], csv_content)
 
     assert response.status_code == 201
 
@@ -271,18 +412,19 @@ def test_import_csv_succeeds_with_multiple_medications(client):
 
 def test_import_csv_succeeds_with_notes_column_omitted(client):
     token = _register_and_login(client, "importnonotes@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = (
         "medication_name,dose,route,frequency,status,source\n"
         "Lisinopril,10 mg,oral,once daily,active,patient_reported\n"
     )
 
-    response = _upload_csv(client, token, csv_content)
+    response = _upload_csv(client, token, patient["id"], csv_content)
 
     assert response.status_code == 201
     assert response.json()["medications_created"] == 1
 
-    list_response = client.get("/medications", headers=_auth_headers(token))
+    list_response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token))
     assert list_response.json()[0]["notes"] is None
 
 
@@ -293,18 +435,39 @@ def test_import_csv_requires_authentication(client):
     )
 
     response = client.post(
-        "/medications/import",
+        "/patients/1/medications/import",
         files={"file": ("medications.csv", csv_content.encode("utf-8"), "text/csv")},
     )
 
     assert response.status_code == 401
 
 
+def test_import_csv_returns_404_for_another_users_patient(client):
+    token_a = _register_and_login(client, "importownera@example.com")
+    token_b = _register_and_login(client, "importintruderb@example.com")
+    patient = _create_patient(client, token_a).json()
+
+    csv_content = (
+        "medication_name,dose,route,frequency,status,source\n"
+        "Lisinopril,10 mg,oral,once daily,active,patient_reported\n"
+    )
+
+    response = _upload_csv(client, token_b, patient["id"], csv_content)
+
+    assert response.status_code == 404
+
+
 def test_import_csv_rejects_invalid_file_type(client):
     token = _register_and_login(client, "importbadtype@example.com")
+    patient = _create_patient(client, token).json()
 
     response = _upload_csv(
-        client, token, "not a csv file", filename="medications.txt", content_type="text/plain"
+        client,
+        token,
+        patient["id"],
+        "not a csv file",
+        filename="medications.txt",
+        content_type="text/plain",
     )
 
     assert response.status_code == 422
@@ -312,26 +475,29 @@ def test_import_csv_rejects_invalid_file_type(client):
 
 def test_import_csv_rejects_empty_file(client):
     token = _register_and_login(client, "importempty@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = _upload_csv(client, token, "")
+    response = _upload_csv(client, token, patient["id"], "")
 
     assert response.status_code == 422
 
 
 def test_import_csv_rejects_file_with_no_header_row(client):
     token = _register_and_login(client, "importnoheader@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = _upload_csv(client, token, "\n\n")
+    response = _upload_csv(client, token, patient["id"], "\n\n")
 
     assert response.status_code == 422
 
 
 def test_import_csv_rejects_missing_required_headers(client):
     token = _register_and_login(client, "importmissingheaders@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = "medication_name,dose\nLisinopril,10 mg\n"
 
-    response = _upload_csv(client, token, csv_content)
+    response = _upload_csv(client, token, patient["id"], csv_content)
 
     assert response.status_code == 422
     assert "route" in response.json()["detail"]
@@ -339,13 +505,14 @@ def test_import_csv_rejects_missing_required_headers(client):
 
 def test_import_csv_ignores_extra_unknown_headers(client):
     token = _register_and_login(client, "importextraheaders@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = (
         "medication_name,dose,route,frequency,status,source,notes,insurance_id\n"
         "Lisinopril,10 mg,oral,once daily,active,patient_reported,,12345\n"
     )
 
-    response = _upload_csv(client, token, csv_content)
+    response = _upload_csv(client, token, patient["id"], csv_content)
 
     assert response.status_code == 201
     assert response.json()["medications_created"] == 1
@@ -353,6 +520,7 @@ def test_import_csv_ignores_extra_unknown_headers(client):
 
 def test_import_csv_ignores_fully_blank_rows(client):
     token = _register_and_login(client, "importblankrows@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = (
         "medication_name,dose,route,frequency,status,source,notes\n"
@@ -361,7 +529,7 @@ def test_import_csv_ignores_fully_blank_rows(client):
         "Metformin,500 mg,oral,twice daily,active,patient_reported,\n"
     )
 
-    response = _upload_csv(client, token, csv_content)
+    response = _upload_csv(client, token, patient["id"], csv_content)
 
     assert response.status_code == 201
 
@@ -373,18 +541,19 @@ def test_import_csv_ignores_fully_blank_rows(client):
 
 def test_import_csv_trims_whitespace_from_headers_and_values(client):
     token = _register_and_login(client, "importwhitespace@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = (
         " Medication_Name , Dose , Route , Frequency , Status , Source , Notes \n"
         " Lisinopril , 10 mg , oral , once daily , active , patient_reported , Taken with breakfast \n"
     )
 
-    response = _upload_csv(client, token, csv_content)
+    response = _upload_csv(client, token, patient["id"], csv_content)
 
     assert response.status_code == 201
     assert response.json()["medications_created"] == 1
 
-    list_response = client.get("/medications", headers=_auth_headers(token))
+    list_response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token))
     medication = list_response.json()[0]
     assert medication["medication_name"] == "Lisinopril"
     assert medication["dose"] == "10 mg"
@@ -393,13 +562,14 @@ def test_import_csv_trims_whitespace_from_headers_and_values(client):
 
 def test_import_csv_rejects_invalid_field_values(client):
     token = _register_and_login(client, "importinvalidfield@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = (
         "medication_name,dose,route,frequency,status,source,notes\n"
         "Lisinopril,,oral,once daily,active,patient_reported,\n"
     )
 
-    response = _upload_csv(client, token, csv_content)
+    response = _upload_csv(client, token, patient["id"], csv_content)
 
     assert response.status_code == 422
 
@@ -410,6 +580,7 @@ def test_import_csv_rejects_invalid_field_values(client):
 
 def test_import_csv_reports_row_number_for_invalid_row_among_valid_rows(client):
     token = _register_and_login(client, "importonebad@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = (
         "medication_name,dose,route,frequency,status,source,notes\n"
@@ -418,7 +589,7 @@ def test_import_csv_reports_row_number_for_invalid_row_among_valid_rows(client):
         "Metformin,500 mg,oral,twice daily,active,patient_reported,\n"
     )
 
-    response = _upload_csv(client, token, csv_content)
+    response = _upload_csv(client, token, patient["id"], csv_content)
 
     assert response.status_code == 422
 
@@ -428,6 +599,7 @@ def test_import_csv_reports_row_number_for_invalid_row_among_valid_rows(client):
 
 def test_import_csv_creates_no_medications_when_any_row_invalid(client):
     token = _register_and_login(client, "importatomic@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = (
         "medication_name,dose,route,frequency,status,source,notes\n"
@@ -435,57 +607,60 @@ def test_import_csv_creates_no_medications_when_any_row_invalid(client):
         "BadRow,,oral,once daily,active,patient_reported,\n"
     )
 
-    response = _upload_csv(client, token, csv_content)
+    response = _upload_csv(client, token, patient["id"], csv_content)
 
     assert response.status_code == 422
 
-    list_response = client.get("/medications", headers=_auth_headers(token))
+    list_response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token))
     assert list_response.json() == []
 
 
-def test_import_csv_assigns_medications_to_authenticated_user(client):
+def test_import_csv_assigns_medications_to_the_target_patient(client):
     token = _register_and_login(client, "importowner@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = (
         "medication_name,dose,route,frequency,status,source,notes\n"
         "Lisinopril,10 mg,oral,once daily,active,patient_reported,\n"
     )
 
-    _upload_csv(client, token, csv_content)
+    _upload_csv(client, token, patient["id"], csv_content)
 
-    list_response = client.get("/medications", headers=_auth_headers(token))
+    list_response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token))
     medications = list_response.json()
 
     assert len(medications) == 1
-    assert "user_id" in medications[0]
+    assert medications[0]["patient_id"] == patient["id"]
 
 
-def test_import_csv_does_not_leak_into_other_users_list(client):
-    token_a = _register_and_login(client, "importusera@example.com")
-    token_b = _register_and_login(client, "importuserb@example.com")
+def test_import_csv_does_not_leak_into_another_patients_list(client):
+    token = _register_and_login(client, "importusera@example.com")
+    patient_a = _create_patient(client, token, first_name="A").json()
+    patient_b = _create_patient(client, token, first_name="B").json()
 
     csv_content = (
         "medication_name,dose,route,frequency,status,source,notes\n"
         "Lisinopril,10 mg,oral,once daily,active,patient_reported,\n"
     )
 
-    _upload_csv(client, token_b, csv_content)
+    _upload_csv(client, token, patient_b["id"], csv_content)
 
-    list_response_a = client.get("/medications", headers=_auth_headers(token_a))
+    list_response_a = client.get(f"/patients/{patient_a['id']}/medications", headers=_auth_headers(token))
     assert list_response_a.json() == []
 
 
 def test_imported_medications_appear_through_list_endpoint(client):
     token = _register_and_login(client, "importlist@example.com")
+    patient = _create_patient(client, token).json()
 
     csv_content = (
         "medication_name,dose,route,frequency,status,source,notes\n"
         "Lisinopril,10 mg,oral,once daily,active,patient_reported,Taken with breakfast\n"
     )
 
-    _upload_csv(client, token, csv_content)
+    _upload_csv(client, token, patient["id"], csv_content)
 
-    list_response = client.get("/medications", headers=_auth_headers(token))
+    list_response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token))
     assert list_response.status_code == 200
 
     medications = list_response.json()

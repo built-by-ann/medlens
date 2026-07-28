@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_owned_patient
 from app.db.session import get_db
-from app.models.user import User
+from app.models.patient import Patient
 from app.schemas.medication import (
     MedicationCreate,
     MedicationImportSummary,
@@ -20,11 +20,11 @@ from app.services.medication_service import (
     create_medications_from_rows,
     delete_medication,
     get_medication,
-    get_medications_for_user,
+    get_medications_for_patient,
     update_medication,
 )
 
-router = APIRouter(prefix="/medications", tags=["medications"])
+router = APIRouter(prefix="/patients/{patient_id}/medications", tags=["medications"])
 
 NOT_FOUND_DETAIL = "Medication not found"
 
@@ -36,10 +36,10 @@ NOT_FOUND_DETAIL = "Medication not found"
 )
 def create_medication_route(
     medication_in: MedicationCreate,
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> MedicationResponse:
-    return create_medication(db, current_user.id, medication_in)
+    return create_medication(db, patient, medication_in)
 
 
 @router.post(
@@ -49,7 +49,7 @@ def create_medication_route(
 )
 def import_medications(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> MedicationImportSummary:
     is_csv_extension = (file.filename or "").lower().endswith(".csv")
@@ -87,9 +87,7 @@ def import_medications(
             },
         )
 
-    medications_created = create_medications_from_rows(
-        db, current_user.id, result.medications
-    )
+    medications_created = create_medications_from_rows(db, patient, result.medications)
 
     return MedicationImportSummary(
         rows_processed=result.rows_processed,
@@ -100,19 +98,19 @@ def import_medications(
 
 @router.get("", response_model=list[MedicationResponse])
 def list_medications(
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> list[MedicationResponse]:
-    return get_medications_for_user(db, current_user.id)
+    return get_medications_for_patient(db, patient.id)
 
 
 @router.get("/{medication_id}", response_model=MedicationResponse)
 def read_medication(
     medication_id: int,
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> MedicationResponse:
-    medication = get_medication(db, current_user.id, medication_id)
+    medication = get_medication(db, patient.id, medication_id)
 
     if medication is None:
         raise HTTPException(
@@ -127,10 +125,10 @@ def read_medication(
 def patch_medication(
     medication_id: int,
     medication_in: MedicationUpdate,
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> MedicationResponse:
-    medication = update_medication(db, current_user.id, medication_id, medication_in)
+    medication = update_medication(db, patient.id, medication_id, medication_in)
 
     if medication is None:
         raise HTTPException(
@@ -144,10 +142,10 @@ def patch_medication(
 @router.delete("/{medication_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_medication(
     medication_id: int,
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> None:
-    deleted = delete_medication(db, current_user.id, medication_id)
+    deleted = delete_medication(db, patient.id, medication_id)
 
     if not deleted:
         raise HTTPException(

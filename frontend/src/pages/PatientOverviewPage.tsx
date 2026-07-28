@@ -5,9 +5,12 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
 import { PatientDetails } from '@/components/patients/PatientDetails'
 import { ArchivePatientDialog } from '@/components/patients/ArchivePatientDialog'
+import { MedicationList } from '@/components/medications/MedicationList'
+import { EmptyMedicationState } from '@/components/medications/EmptyMedicationState'
 import { usePatient } from '@/hooks/usePatient'
+import { usePatientMedications } from '@/hooks/usePatientMedications'
 import { archivePatient } from '@/api/patients'
-import { ROUTES, patientEditPath } from '@/routes/paths'
+import { ROUTES, patientEditPath, patientMedicationsPath } from '@/routes/paths'
 import type { ApiError } from '@/api/client'
 
 export function PatientOverviewPage() {
@@ -15,6 +18,14 @@ export function PatientOverviewPage() {
   const navigate = useNavigate()
   const id = Number(patientId)
   const { patient, isLoading, error, retry } = usePatient(id)
+  const {
+    medications,
+    isLoading: areMedicationsLoading,
+    error: medicationsError,
+    retry: retryMedications,
+    editMedication,
+    removeMedication,
+  } = usePatientMedications(id)
 
   const [isConfirmingArchive, setIsConfirmingArchive] = useState(false)
   const [isArchiving, setIsArchiving] = useState(false)
@@ -74,9 +85,44 @@ export function PatientOverviewPage() {
 
           <PatientDetails patient={patient} />
 
+          <section aria-labelledby="medications-heading" className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 id="medications-heading" className="text-lg font-semibold text-slate-900">
+                Medications
+              </h2>
+              <Link
+                to={patientMedicationsPath(patient.id)}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                + Add medication
+              </Link>
+            </div>
+
+            {areMedicationsLoading && <LoadingSpinner label="Loading medications" />}
+
+            {!areMedicationsLoading && medicationsError && (
+              <ErrorState
+                title="Couldn't load medications"
+                message={medicationsError}
+                onRetry={retryMedications}
+              />
+            )}
+
+            {!areMedicationsLoading && !medicationsError && medications.length === 0 && (
+              <EmptyMedicationState message="No medications recorded yet." />
+            )}
+
+            {!areMedicationsLoading && !medicationsError && medications.length > 0 && (
+              <MedicationList
+                medications={medications}
+                onEdit={editMedication}
+                onDelete={removeMedication}
+              />
+            )}
+          </section>
+
           <p className="text-sm text-slate-500">
-            Medications, clinical documents, and analysis history will appear here in a future
-            update.
+            Clinical documents and analysis history will appear here in a future update.
           </p>
         </>
       )}

@@ -52,11 +52,11 @@ Routing is configured in `src/App.tsx` using `react-router-dom`.
 | `/dashboard` | `DashboardPage` | `AppLayout` | yes |
 | `/analyses/:id` | `AnalysisDetailPage` | `AppLayout` | yes |
 | `/upload` | `UploadPage` | `AppLayout` | yes |
-| `/medications` | `MedicationsPage` | `AppLayout` | yes |
 | `/patients` | `PatientsPage` | `AppLayout` | yes |
 | `/patients/new` | `NewPatientPage` | `AppLayout` | yes |
 | `/patients/:patientId` | `PatientOverviewPage` | `AppLayout` | yes |
 | `/patients/:patientId/edit` | `EditPatientPage` | `AppLayout` | yes |
+| `/patients/:patientId/medications` | `PatientMedicationsPage` | `AppLayout` | yes |
 | `/` | redirects to `/dashboard` | | |
 | `*` | `NotFoundPage` | none | no |
 
@@ -70,7 +70,7 @@ Protected routes are wrapped in `ProtectedRoute` (`src/components/common/Protect
 
 `AppLayout` (`src/layouts/AppLayout.tsx`) is the shared application shell for authenticated pages: a top navigation bar (`src/components/layout/TopNav.tsx`) plus a responsive, max-width content area that renders the matched child route via `<Outlet />`.
 
-`TopNav` links to Dashboard, Patients, Upload, and Medications, and shows either a "Log in" link or a "Log out" button depending on `useAuth()`'s `user` state.
+`TopNav` links to Dashboard, Patients, and Upload, and shows either a "Log in" link or a "Log out" button depending on `useAuth()`'s `user` state. There is deliberately no standalone "Medications" link - as of Sprint 3.5 (Issue #129), medication management only exists within a patient's context (see Patients below), never as a global destination.
 
 ---
 
@@ -115,7 +115,7 @@ Real login and registration requests, token persistence, and session restoration
 - `RecentAnalysesList`: a semantic `<ul>` of cards.
 - `DashboardEmptyState`: explains what MedLens does and links to Upload, shown when the user has no analyses yet.
 
-Loading/error states use the shared `ErrorState` component (`components/common/ErrorState`, `role="alert"` + message + retry button), also reused by the Medications page below; it was generalized from a Dashboard-only `DashboardErrorState` (a `title` prop was added) rather than duplicated, once a second feature needed the identical shape. `SummaryStat` was relocated from `components/dashboard/` to `components/common/` for the same reason.
+Loading/error states use the shared `ErrorState` component (`components/common/ErrorState`, `role="alert"` + message + retry button), also reused throughout Patients and Medications below; it was generalized from a Dashboard-only `DashboardErrorState` (a `title` prop was added) rather than duplicated, once a second feature needed the identical shape. `SummaryStat` was relocated from `components/dashboard/` to `components/common/` for the same reason.
 
 Authentication loading (session restore) and dashboard loading (fetching analyses) are two separate, sequential states. `ProtectedRoute` already renders `LoadingSpinner` and blocks rendering until `AuthContext` confirms a session, so `DashboardPage` never has to check auth itself; its own loading state only ever covers the analyses fetch.
 
@@ -144,32 +144,17 @@ Selected files are validated against the backend's actual supported types (`.txt
 
 ---
 
-## Medications
-
-`MedicationsPage` (`src/pages/MedicationsPage.tsx`) lets a user maintain their own medication list directly, independent of any uploaded clinical document. No new backend endpoints were needed: `POST/GET/PATCH/DELETE /medications` already existed with full ownership enforcement. `useMedications` (`src/hooks/useMedications.ts`) fetches the list on mount (`{ medications, isLoading, error, retry }`, the same shape as `useRecentAnalyses`) and exposes `addMedication`/`editMedication`/`removeMedication`, each calling the API layer and then updating local state directly from the response rather than refetching. These three functions intentionally don't catch their own errors — they throw, and whichever component initiated the action (the add form, or a card's own edit/delete state) owns its own submitting/error UI, the same division of responsibility `useAuthForm`'s `onSubmit` callback uses.
-
-`src/components/medications/`:
-
-- `MedicationForm`: the always-visible "add a medication" form; clears itself after a successful add.
-- `MedicationCard`: a saved medication, with in-place edit and delete, each with its own loading/error state so one card's action can't be blocked by another's.
-- `MedicationFields`: the shared set of inputs (medication name, dosage, route, frequency, status, optional notes) rendered by both `MedicationForm` and `MedicationCard`'s edit mode, so the two can't drift out of sync.
-- `MedicationList`: a semantic `<ul>` of cards, keyed by the medication's real database id (these are already-persisted rows, unlike Upload's not-yet-submitted queue).
-- `EmptyMedicationState`: a plain hint shown when the list is empty; the add form stays visible either way.
-
-Validation (`components/medications/medicationFormValidation.ts`) mirrors the backend's own rules exactly (`schemas/medication.py`): `medication_name`, `dose`, `route`, `frequency`, and `status` must all be non-empty; `notes` is optional. `source` is not a user-facing field at all — it's hardcoded to `"patient_reported"` in `api/medications.ts`, since a self-maintained list is always the user's own report, never something extracted from a document (see `docs/data-model.md`'s description of the Medication model as independent of document extraction).
-
----
-
 ## Patients
 
-Sprint 3.5, Issue #127: the first patient management UI, built directly against the Patient CRUD API from Issue #126 (`docs/api.md`'s `/patients` endpoints). This issue is UI only - `Medication`, `ClinicalDocument`, and `Analysis` are not yet patient-scoped (see `docs/data-model.md`), so `PatientOverviewPage` intentionally has no medication, document, or analysis sections yet, only a one-line placeholder saying so.
+Sprint 3.5, Issue #127: the first patient management UI, built directly against the Patient CRUD API from Issue #126 (`docs/api.md`'s `/patients` endpoints).
 
-Four routes, four pages:
+Five routes, five pages:
 
-- `PatientsPage` (`/patients`): search, a "+ New patient" action, and the active patient list. `usePatients` (`src/hooks/usePatients.ts`) fetches the list on mount (`{ patients, isLoading, error, retry }`, the same shape as `useRecentAnalyses`/`useMedications`) and exposes `archivePatient`, which updates local state directly on success rather than refetching.
+- `PatientsPage` (`/patients`): search, a "+ New patient" action, and the active patient list. `usePatients` (`src/hooks/usePatients.ts`) fetches the list on mount (`{ patients, isLoading, error, retry }`, the same shape as `useRecentAnalyses`) and exposes `archivePatient`, which updates local state directly on success rather than refetching.
 - `NewPatientPage` (`/patients/new`): renders `PatientForm`, calls `createPatient` (`api/patients.ts`) directly on submit, and navigates to the new patient's overview on success.
-- `PatientOverviewPage` (`/patients/:patientId`): identity/demographic display (`PatientDetails`) plus Edit and Archive actions. `usePatient(patientId)` (`src/hooks/usePatient.ts`) fetches the single record; a 404 for a nonexistent or not-owned patient surfaces through the normal `error` state; there's no separate "not found" UI, since the backend's `"Patient not found"` detail already reads correctly as an error message.
+- `PatientOverviewPage` (`/patients/:patientId`): identity/demographic display (`PatientDetails`), a Medications section (see below), and Edit/Archive actions. `usePatient(patientId)` (`src/hooks/usePatient.ts`) fetches the single record; a 404 for a nonexistent or not-owned patient surfaces through the normal `error` state; there's no separate "not found" UI, since the backend's `"Patient not found"` detail already reads correctly as an error message.
 - `EditPatientPage` (`/patients/:patientId/edit`): the same `usePatient` fetch, `PatientForm` prepopulated via a `toPayload(patient)` conversion, calls `updatePatient` on submit, and navigates back to the overview on success. `status` is never read from or written to the form - the backend already ignores it on `PATCH`, so this is enforced by `PatientPayload` simply not including the field, not by any extra client-side guard.
+- `PatientMedicationsPage` (`/patients/:patientId/medications`): the full medication list and add-form for one patient - see Medications below.
 
 `NewPatientPage` and `EditPatientPage` don't use `usePatients`' list state at all: each is a full route change away from `/patients`, so there is nothing to keep in sync with a list array that's about to unmount anyway. Create/update are one-shot calls to `api/patients.ts`, matching how `MedicationForm`/`MedicationCard` own their own submit/error state per action.
 
@@ -188,13 +173,34 @@ Four routes, four pages:
 
 `DELETE /patients/{patient_id}` is a soft delete (sets `status: "archived"`, never removes the row), and the UI's copy is deliberate about that: the confirmation dialog says the patient is "removed from your active patient list," never "deleted." Archiving is reachable from both `PatientsPage` (removes the card from view) and `PatientOverviewPage` (navigates back to `/patients` on success, since there's nothing left to show). Both pages own their own `patientPendingArchive`/`isArchiving`/`archiveError` state around the one shared `ArchivePatientDialog`, rather than that state living in a hook - it's page-local UI state, not data the rest of the app needs.
 
-No toast/notification component exists anywhere in this codebase yet, so "success feedback" (per the issue) is the immediate UI change itself - the card disappearing from the list, or the redirect back to a list that no longer contains the archived patient - the same feedback pattern every other remove/delete action in this app already uses (`MedicationCard`, `NoteCard`, `UploadedFileList`). This is a deliberate reading of the issue's "if one exists" hedge, not an oversight.
+No toast/notification component exists anywhere in this codebase yet, so "success feedback" (per the issue) is the immediate UI change itself - the card disappearing from the list, or the redirect back to a list that no longer contains the archived patient - the same feedback pattern every other remove/delete action in this app already uses (`MedicationCard`, `NoteCard`, `UploadedFileList`). This is a deliberate reading of the issue's "if one exists" hedge, not an oversight. Note that archiving a patient never touches their medications, documents, or analyses - it only changes the patient's own `status`, and every one of those child resources stays fully reachable directly, exactly as before.
 
 ### Not Implemented Yet (Patients)
 
-- Medication, clinical document, and analysis sections on `PatientOverviewPage` - deferred to later Sprint 3.5 issues that patient-scope those resources first.
+- Clinical document and analysis sections on `PatientOverviewPage` - deferred to later Sprint 3.5 issues that patient-scope those resources first (see Medications below for the one that's now done).
 - Searching or viewing archived patients (once archived, a patient is only reachable by its direct URL, not through any list).
 - Un-archiving.
+
+---
+
+## Medications
+
+Sprint 3.5, Issue #129: medication management moved from a standalone `/medications` page to living entirely within a patient's context - `POST/GET/PATCH/DELETE /medications` became `POST/GET/PATCH/DELETE /patients/{patient_id}/medications` on the backend (`docs/api.md`), and there is no longer any route, page, or nav link that lists medications without a patient already selected.
+
+Two places medications now appear:
+
+- `PatientMedicationsPage` (`/patients/:patientId/medications`): the full CRUD experience - reads `:patientId` from the route, fetches the patient (`usePatient`, for the page title and a "← Back to {name}" link) and their medications (`usePatientMedications`), and renders the add form plus the full list. This is almost exactly the old `MedicationsPage`, just patient-scoped.
+- `PatientOverviewPage`'s Medications section: the same list (view/edit/delete inline, reusing `MedicationList`/`MedicationCard` directly, `usePatientMedications` called a second time with the same `patientId`) plus a "+ Add medication" link into `PatientMedicationsPage`. Deliberately does *not* embed `MedicationForm` a second time - having two separate places a medication could be created would fragment the UI, so Overview only ever links out to the one page that owns the add form.
+
+`usePatientMedications(patientId)` (`src/hooks/usePatientMedications.ts`, renamed from `useMedications`) fetches on mount and re-fetches whenever `patientId` changes, so navigating from one patient's medications to another's never shows stale data. It exposes `addMedication`/`editMedication`/`removeMedication`, each threading `patientId` through to `api/medications.ts` and then updating local state directly from the response rather than refetching - the same shape `useMedications` always had, just parameterized. These three functions still don't catch their own errors; the calling component owns its own submitting/error UI, unchanged from before.
+
+Every component in `src/components/medications/` (`MedicationForm`, `MedicationFields`, `MedicationCard`, `MedicationList`, `EmptyMedicationState`, `medicationFormValidation.ts`) is reused completely unchanged in behavior - none of them ever knew about `user_id` or ownership at all, so threading `patientId` through the hook and API layer was enough on its own. The one small addition is an optional `message` prop on `EmptyMedicationState` (default preserves its original copy), so `PatientOverviewPage` can show "No medications recorded yet." instead of the original "...use the form below" copy, which would otherwise be inaccurate there (the add form lives on a different page in that context).
+
+Validation (`medicationFormValidation.ts`) is unchanged: mirrors `schemas/medication.py` exactly - `medication_name`, `dose`, `route`, `frequency`, and `status` must all be non-empty; `notes` is optional. `source` is still hardcoded to `"patient_reported"` in `api/medications.ts`, never user-facing.
+
+### CSV import
+
+The backend's `POST /patients/{patient_id}/medications/import` endpoint exists and is fully migrated and tested (`docs/api.md`), but **no frontend UI for CSV import has ever been built** - Issue #42 never added one, so there was nothing to "move" here. Building a new CSV upload UI now would be net-new frontend work, not a migration, and is out of scope for an issue whose stated goal is changing ownership with minimal UI disruption. Deferred to whichever future issue actually builds it.
 
 ---
 
@@ -283,4 +289,5 @@ The following are explicitly out of scope for this issue and left for future iss
 
 - Real analysis detail display (`AnalysisDetailPage` is still a placeholder; `UploadPage` already navigates to it by id after creating an analysis)
 - A Docker Compose service for the frontend
-- Patient-scoping Medications, Upload, and the Dashboard itself (Sprint 3.5: Issue #127 only builds patient management; see "Not Implemented Yet (Patients)" above)
+- Patient-scoping Upload and the Dashboard itself (Sprint 3.5: Issue #129 patient-scoped Medications only; Upload and Dashboard still operate on the authenticated user directly, unrelated to any patient)
+- CSV medication import UI (the backend endpoint is fully migrated and tested; no frontend page for it has ever existed - see "CSV import" under Medications above)

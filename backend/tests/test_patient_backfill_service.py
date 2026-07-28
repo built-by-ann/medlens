@@ -276,9 +276,12 @@ def test_clear_patient_ids_nulls_out_without_deleting_placeholder_patient(db):
     assert db.query(Patient).filter(Patient.id == placeholder_patient_id).count() == 1
 
 
-def test_legacy_medication_api_still_works_after_backfill(client, db):
-    # Regression check: existing endpoints are untouched by this migration
-    # and their response shape (no patient_id) is unchanged.
+def test_medication_api_still_works_alongside_the_backfill_service(client, db):
+    # Regression check: creating/listing medications keeps working
+    # correctly for a freshly created patient, independent of whatever the
+    # backfill migration did elsewhere. As of Issue #129, medications are
+    # patient-scoped (see tests/test_medications.py for the full contract
+    # test suite) - this only checks the two aren't stepping on each other.
     register_response = client.post(
         "/auth/register",
         json={"email": "legacy-api@example.com", "password": "correcthorse123", "name": "Legacy"},
@@ -292,8 +295,15 @@ def test_legacy_medication_api_still_works_after_backfill(client, db):
     token = login_response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
+    patient_response = client.post(
+        "/patients",
+        json={"first_name": "Jane", "last_name": "Doe", "date_of_birth": "1980-05-14"},
+        headers=headers,
+    )
+    patient_id = patient_response.json()["id"]
+
     create_response = client.post(
-        "/medications",
+        f"/patients/{patient_id}/medications",
         json={
             "medication_name": "Lisinopril",
             "dose": "10 mg",
@@ -305,8 +315,8 @@ def test_legacy_medication_api_still_works_after_backfill(client, db):
         headers=headers,
     )
     assert create_response.status_code == 201
-    assert "patient_id" not in create_response.json()
+    assert create_response.json()["patient_id"] == patient_id
 
-    list_response = client.get("/medications", headers=headers)
+    list_response = client.get(f"/patients/{patient_id}/medications", headers=headers)
     assert list_response.status_code == 200
-    assert "patient_id" not in list_response.json()[0]
+    assert list_response.json()[0]["patient_id"] == patient_id
