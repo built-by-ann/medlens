@@ -1,10 +1,10 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Card } from '@/components/common/Card'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
 import { registerUser } from '@/api/auth'
+import { useAuthForm } from '@/hooks/useAuthForm'
 import type { ApiError } from '@/api/client'
 import { isValidEmail } from '@/utils/validation'
 import { ROUTES } from '@/routes/paths'
@@ -57,59 +57,44 @@ function validate(values: FormValues): FormErrors {
 
 export function SignupPage() {
   const navigate = useNavigate()
-  const [values, setValues] = useState<FormValues>(initialValues)
-  const [errors, setErrors] = useState<FormErrors>({})
-  const [formError, setFormError] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function updateField(field: keyof FormValues) {
-    return (event: ChangeEvent<HTMLInputElement>) => {
-      setValues((current) => ({ ...current, [field]: event.target.value }))
-    }
-  }
+  const {
+    values,
+    errors,
+    formError,
+    setFormError,
+    setFieldError,
+    isSubmitting,
+    updateField,
+    handleSubmit,
+  } = useAuthForm<FormValues>({
+    initialValues,
+    validate,
+    onSubmit: async (values) => {
+      try {
+        await registerUser({
+          email: values.email.trim(),
+          password: values.password,
+          name: values.fullName.trim(),
+        })
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+        navigate(ROUTES.login, { replace: true })
+      } catch (error) {
+        const apiError = error as ApiError
 
-    if (isSubmitting) {
-      return
-    }
-
-    const validationErrors = validate(values)
-    setErrors(validationErrors)
-    setFormError(null)
-
-    if (Object.keys(validationErrors).length > 0) {
-      return
-    }
-
-    setIsSubmitting(true)
-
-    try {
-      await registerUser({
-        email: values.email.trim(),
-        password: values.password,
-        name: values.fullName.trim(),
-      })
-
-      navigate(ROUTES.login, { replace: true })
-    } catch (error) {
-      const apiError = error as ApiError
-
-      // A duplicate email is specifically about the email field, so it is
-      // shown inline like any other field error rather than as a generic
-      // banner. Every other failure (unexpected validation issues, network
-      // errors) is shown as a single form-level message instead, since it
-      // is not clearly attributable to one field.
-      if (apiError.status === 409) {
-        setErrors((current) => ({ ...current, email: apiError.message }))
-      } else {
-        setFormError(apiError.message)
+        // A duplicate email is specifically about the email field, so it is
+        // shown inline like any other field error rather than as a generic
+        // banner. Every other failure (unexpected validation issues,
+        // network errors) is shown as a single form-level message instead,
+        // since it is not clearly attributable to one field.
+        if (apiError.status === 409) {
+          setFieldError('email', apiError.message)
+        } else {
+          setFormError(apiError.message)
+        }
       }
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+    },
+  })
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-12">

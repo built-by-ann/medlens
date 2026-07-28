@@ -94,6 +94,12 @@ Real login and registration requests, token persistence, and session restoration
 
 ---
 
+## Form State Management
+
+`useAuthForm` (`src/hooks/useAuthForm.ts`) is a small, shared hook used by both `LoginPage` and `SignupPage`. It owns only what was genuinely duplicated between the two: field values, field/form-level error state, `isSubmitting`, the generic input change handler, and the submit-guard/loading skeleton (`preventDefault`, block a second submit while one is in flight, toggle `isSubmitting` around an async action). It deliberately does not own validation rules or error interpretation: each page still supplies its own `validate` function and its own `onSubmit` callback, which is what keeps Signup's field-specific `409` handling and Login's deliberately-never-field-specific `401` handling fully separate and unaffected by the extraction. This is intentionally scoped to these two forms, not a general-purpose form framework.
+
+---
+
 ## Shared Components
 
 `src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`.
@@ -154,8 +160,11 @@ npm run build         # tsc -b && vite build
 npm run lint           # eslint .
 npm run format         # prettier --write .
 npm run format:check   # prettier --check .
+npm run test           # vitest run
 npm run preview        # preview a production build
 ```
+
+Tests use Vitest, React Testing Library, and `@testing-library/user-event`, configured directly in `vite.config.ts` (reusing the same `@` alias as the app) rather than a separate Vitest config file. `test.globals` is deliberately left off, matching the rest of the codebase's explicit-import convention; since that also disables React Testing Library's automatic per-test DOM cleanup (it relies on detecting a global `afterEach`), `src/test/setup.ts` wires `afterEach(cleanup)` by hand instead.
 
 The frontend does not yet have a Docker Compose service; it currently runs directly via `npm run dev` against a backend started separately (see the root `README.md` and `infra/docker-compose.yml`).
 
