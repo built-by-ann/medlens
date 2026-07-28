@@ -31,20 +31,27 @@ AI is used to extract structured medication information from each document. The 
 ```text
 User
  │
- ├── ClinicalDocument
- │      └── MedicationMention
+ ├── Patient
+ │      ├── Medication
+ │      ├── ClinicalDocument
+ │      │      └── MedicationMention
+ │      └── Analysis
+ │             ├── MedicationDiscrepancy
+ │             ├── AnalysisMedicationMention
+ │             └── AnalysisInconsistency
  │
- ├── Medication
- │
- ├── Analysis
- │      ├── MedicationDiscrepancy
- │      ├── AnalysisMedicationMention
- │      └── AnalysisInconsistency
- │
- └── Patient
+ ├── Medication          (still directly, via user_id - see below)
+ ├── ClinicalDocument    (still directly, via user_id - see below)
+ └── Analysis            (still directly, via user_id - see below)
 ```
 
-Patient is a new, additive resource (Sprint 3.5, Issue #126): a User (provider) has many Patients, but ClinicalDocument, Medication, and Analysis are not yet linked to Patient. They still belong directly to User, exactly as before. A later migration issue moves each of them under Patient; see Design Decisions and Future Extensions.
+Sprint 3.5 is migrating MedLens from a User-owned data model to a Patient-owned one:
+
+- **Issue #126** introduced `Patient` on its own, with only a `User` relationship.
+- **Issue #128** (this migration) gives `Medication`, `ClinicalDocument`, and `Analysis` each a nullable `patient_id`, backfills every existing row to a patient, and adds the corresponding `Patient.medications` / `Patient.clinical_documents` / `Patient.analyses` relationships. Their original `user_id`/`user` stay exactly as they were - **both ownership paths coexist during the migration period**, so the diagram above shows Medication/ClinicalDocument/Analysis under both User and Patient. `user_id` is temporarily retained and will be removed in a later Sprint 3.5 issue, once every API route and the frontend have moved to reading ownership through `patient_id`.
+- Later issues move the API routes and frontend over to patient-scoped ownership, and finally drop `user_id` from all three tables.
+
+See Design Decisions for the backfill strategy.
 
 ---
 
@@ -78,9 +85,7 @@ User has many Patients
 
 ## Patient
 
-Represents a patient chart owned by a provider (User). Introduced in Sprint 3.5 as the first step of a staged migration toward a patient-centered data model, in which ClinicalDocument, Medication, and Analysis will eventually belong to Patient instead of directly to User.
-
-This issue introduces Patient on its own. ClinicalDocument, Medication, and Analysis are not yet linked to it and still belong directly to User, exactly as before - a later migration issue moves each of them under Patient. See Design Decisions.
+Represents a patient chart owned by a provider (User). Introduced in Sprint 3.5 (Issue #126) as the first step of a staged migration toward a patient-centered data model. As of Issue #128, `Medication`, `ClinicalDocument`, and `Analysis` all reference Patient via a nullable `patient_id`, and every pre-existing row has been backfilled - see Design Decisions.
 
 ### Fields
 
@@ -130,6 +135,9 @@ Optional free-text notes about the patient. May be null. Distinct from a Clinica
 
 ```text
 Patient belongs to User
+Patient has many Medications
+Patient has many ClinicalDocuments
+Patient has many Analyses
 ```
 
 ---
@@ -152,6 +160,7 @@ Examples:
 ```text
 id
 user_id
+patient_id
 document_type
 title
 raw_text
@@ -162,6 +171,12 @@ updated_at
 ```
 
 ### Field Notes
+
+```text
+patient_id
+```
+
+Added in Sprint 3.5 (Issue #128). Nullable for now - `user_id` is temporarily retained alongside it, and both are populated for every row (see Design Decisions for the backfill that filled this in for documents that existed before Patient did). A later Sprint 3.5 issue will make this the sole ownership column and drop `user_id`.
 
 ```text
 document_type
@@ -191,6 +206,7 @@ Stores file format information such as `txt`, `pdf`, or `manual_entry`.
 
 ```text
 ClinicalDocument belongs to User
+ClinicalDocument belongs to Patient
 ClinicalDocument has many MedicationMentions
 ```
 
@@ -287,6 +303,7 @@ Unlike MedicationMention, a Medication record is not extracted from a clinical d
 ```text
 id
 user_id
+patient_id
 medication_name
 dose
 route
@@ -299,6 +316,12 @@ updated_at
 ```
 
 ### Field Notes
+
+```text
+patient_id
+```
+
+Added in Sprint 3.5 (Issue #128). Nullable for now - `user_id` is temporarily retained alongside it, and both are populated for every row (see Design Decisions for the backfill that filled this in for medications that existed before Patient did). A later Sprint 3.5 issue will make this the sole ownership column and drop `user_id`.
 
 ```text
 source
@@ -316,6 +339,7 @@ Optional free-text notes about the medication. May be null.
 
 ```text
 Medication belongs to User
+Medication belongs to Patient
 ```
 
 ---
@@ -336,6 +360,7 @@ An analysis can be completed by either of two separate processes, and its stored
 ```text
 id
 user_id
+patient_id
 status
 started_at
 completed_at
@@ -352,6 +377,12 @@ updated_at
 ```
 
 ### Field Notes
+
+```text
+patient_id
+```
+
+Added in Sprint 3.5 (Issue #128). Nullable for now - `user_id` is temporarily retained alongside it, and both are populated for every row (see Design Decisions for the backfill that filled this in for analyses that existed before Patient did). A later Sprint 3.5 issue will make this the sole ownership column and drop `user_id`.
 
 ```text
 status
@@ -409,6 +440,7 @@ Record which AI provider and model produced the analysis, when applicable. Both 
 
 ```text
 Analysis belongs to User
+Analysis belongs to Patient
 Analysis has many MedicationDiscrepancies
 Analysis has many AnalysisMedicationMentions
 Analysis has many AnalysisInconsistencies
@@ -592,17 +624,26 @@ MedicationDiscrepancy references MedicationMention
 User
   1 ─── many Patient
 
-User
+Patient
+  1 ─── many Medication
+
+Patient
   1 ─── many ClinicalDocument
+
+Patient
+  1 ─── many Analysis
+
+User
+  1 ─── many ClinicalDocument   (temporary - see Design Decisions)
 
 ClinicalDocument
   1 ─── many MedicationMention
 
 User
-  1 ─── many Medication
+  1 ─── many Medication   (temporary - see Design Decisions)
 
 User
-  1 ─── many Analysis
+  1 ─── many Analysis   (temporary - see Design Decisions)
 
 Analysis
   1 ─── many MedicationDiscrepancy
@@ -704,7 +745,22 @@ Persisting AI summary results needed a model scoped to Analysis, but MedicationM
 
 Patient is added on its own, with only a `User` relationship, rather than migrating ClinicalDocument, Medication, and Analysis onto it in the same change. Each of those three models already has a `user_id` foreign key backing live, tested functionality; moving them to `patient_id` requires a data backfill (one legacy Patient per existing User) and touches every route and service that currently scopes by `user_id`. Bundling that with Patient's introduction would make this change more than additive. Splitting it into its own issue keeps this one reversible and low-risk, and lets the later migration issue focus solely on the cutover.
 
-A corollary: `Patient` cannot yet declare `medications`, `clinical_documents`, or `analyses` relationships. SQLAlchemy's `relationship()` requires a real foreign key or join condition to configure against, and `Medication.patient_id` (etc.) doesn't exist yet - declaring one anyway would fail at mapper configuration time for the whole application, not just for Patient. The intended future relationships are documented as a comment on the `Patient` model instead, and will become real once each of the three models gains `patient_id`.
+A corollary, true at the time: `Patient` couldn't yet declare `medications`, `clinical_documents`, or `analyses` relationships, since SQLAlchemy's `relationship()` requires a real foreign key or join condition to configure against, and none of the three models had `patient_id` yet. Issue #128 (below) added it, and these relationships are now real.
+
+### Issue #128: patient_id added to Medication, ClinicalDocument, and Analysis, with a same-migration backfill
+
+Rather than adding `patient_id` as a bare nullable column and leaving every pre-existing row unset, the same migration backfills it for every row that existed before Patient did (`app/services/patient_backfill_service.py`, called from the Alembic migration that adds the column). Leaving old rows with a null `patient_id` indefinitely would mean two ownership models silently disagreeing about who owns old data - the whole point of this migration is that after it runs, `patient_id` is populated everywhere, even though `user_id` is still what every route and service actually reads today.
+
+**Backfill algorithm**, per user with at least one legacy (patient_id IS NULL) medication, clinical document, or analysis:
+
+- Exactly one **active** Patient exists for that user → every legacy row is assigned to it. (Archived patients don't count - an archived chart isn't a reasonable home for data nobody chose to attach to it.)
+- Zero Patients exist → a placeholder Patient is created (`first_name: "Legacy"`, `last_name: "Patient"`, `date_of_birth: 1900-01-01`, `status: "active"`, `notes: "Automatically created during patient migration."`), and every legacy row is assigned to it.
+- More than one active Patient exists → the migration **fails** for that user (`AmbiguousPatientBackfillError`) rather than guessing which patient owns the data. Since this runs inside Alembic's transactional DDL, failing partway rolls back the schema changes too, leaving the database exactly as it was.
+- A user with multiple patients but *no* legacy data at all is left alone entirely - there's no ownership decision to make for a user who never used the old Medication/ClinicalDocument/Analysis features under a single implicit "patient" (themselves).
+
+The backfill is idempotent by construction rather than by an explicit dedup flag: re-running finds no legacy rows left (every one already has a `patient_id`), so a user who already got a placeholder Patient created for them now has exactly one active Patient, not zero, and the "exactly one" branch reuses it rather than creating a second one.
+
+`user_id` is deliberately left in place and unmodified by this migration on all three tables - both ownership paths coexist so that every existing route, service, and the frontend keep working exactly as before. A later Sprint 3.5 issue will move routes over to reading `patient_id` and only then drop `user_id`.
 
 ---
 

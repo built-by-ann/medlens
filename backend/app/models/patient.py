@@ -23,14 +23,11 @@ class Patient(Base):
 
     user = relationship("User", back_populates="patients")
 
-    # Sprint 3.5 will move Medication, ClinicalDocument, and Analysis onto
-    # Patient, but none of the three has a patient_id column yet (adding one
-    # is explicitly out of scope for this issue). A relationship() cannot be
-    # declared without a real foreign key or join condition to configure
-    # against, so these are documented here rather than written as live
-    # code - writing them anyway would fail at mapper configuration time and
-    # break every other model in the app, not just this one:
-    #
-    # medications = relationship("Medication", back_populates="patient")
-    # clinical_documents = relationship("ClinicalDocument", back_populates="patient")
-    # analyses = relationship("Analysis", back_populates="patient")
+    # Added in Sprint 3.5, Issue #128, now that Medication, ClinicalDocument,
+    # and Analysis all have a patient_id column to join on. Each of those
+    # models also still has its original user_id/user - both ownership
+    # models coexist until a later issue backfills every row and drops
+    # user_id (see app/services/patient_backfill_service.py).
+    medications = relationship("Medication", back_populates="patient")
+    clinical_documents = relationship("ClinicalDocument", back_populates="patient")
+    analyses = relationship("Analysis", back_populates="patient")
