@@ -35,3 +35,23 @@ export interface AnalysisSummary {
   provider: string | null
   model_name: string | null
 }
+
+export interface ClinicalDocument {
+  id: number
+  user_id: number
+  document_type: string
+  title: string
+  raw_text: string
+  file_name: string | null
+  file_type: string | null
+  created_at: string
+  updated_at: string | null
+}
+
+export interface AnalysisCreateResult {
+  analysis_id: number
+  provider: string
+  model: string
+  summary: string
+  possible_inconsistencies: string[]
+}
