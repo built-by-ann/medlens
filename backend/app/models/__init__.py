@@ -5,6 +5,7 @@ from app.models.clinical_document import ClinicalDocument
 from app.models.medication import Medication
 from app.models.medication_discrepancy import MedicationDiscrepancy
 from app.models.medication_mention import MedicationMention
+from app.models.patient import Patient
 from app.models.user import User
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "Medication",
     "MedicationDiscrepancy",
     "MedicationMention",
+    "Patient",
     "User",
 ]
