@@ -1,11 +1,7 @@
 import { Card } from '@/components/common/Card'
 import { SummaryStat } from '@/components/common/SummaryStat'
+import { patientStatusLabel } from '@/utils/patientStatus'
 import type { Patient } from '@/types/api'
-
-const STATUS_LABELS: Record<string, string> = {
-  active: 'Active',
-  archived: 'Archived',
-}
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString(undefined, { dateStyle: 'medium' })
@@ -31,7 +27,7 @@ export function PatientDetails({ patient }: PatientDetailsProps) {
     <Card className="flex flex-col gap-4">
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <SummaryStat label="Date of birth" value={formatDate(patient.date_of_birth)} />
-        <SummaryStat label="Status" value={STATUS_LABELS[patient.status] ?? patient.status} />
+        <SummaryStat label="Status" value={patientStatusLabel(patient.status)} />
         {patient.external_mrn && <SummaryStat label="External MRN" value={patient.external_mrn} />}
         {createdAt && <SummaryStat label="Added" value={createdAt} />}
         {updatedAt && <SummaryStat label="Last updated" value={updatedAt} />}
