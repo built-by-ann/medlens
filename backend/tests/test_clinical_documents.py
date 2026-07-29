@@ -1,6 +1,3 @@
-from app.models.clinical_document import ClinicalDocument
-
-
 def _register_and_login(client, email, password="correcthorse123"):
     client.post(
         "/auth/register",
@@ -85,18 +82,6 @@ def test_create_document_succeeds(client):
     assert body["file_type"] == "manual_entry"
     assert "id" in body
     assert body["patient_id"] == patient["id"]
-    assert "user_id" not in body
-
-
-def test_create_document_derives_user_id_from_the_patient(client, db):
-    token = _register_and_login(client, "deriveuserid@example.com")
-    patient = _create_patient(client, token).json()
-
-    created = _create_document(client, token, patient["id"]).json()
-
-    document = db.query(ClinicalDocument).filter(ClinicalDocument.id == created["id"]).one()
-    assert document.user_id == patient["user_id"]
-    assert document.patient_id == patient["id"]
 
 
 def test_create_document_requires_a_patient_owned_by_the_user(client):

@@ -8,13 +8,6 @@ from app.schemas.medication import MedicationCreate, MedicationUpdate
 def _build_medication(patient: Patient, medication_in: MedicationCreate) -> Medication:
     return Medication(
         patient_id=patient.id,
-        # user_id is retained temporarily (Sprint 3.5 migration period) and
-        # is still NOT NULL at the database level, so every create must
-        # still populate it. Deriving it from the already-resolved,
-        # already-ownership-checked Patient - rather than accepting it as a
-        # separate parameter - guarantees user_id and patient_id can never
-        # disagree about whose medication this is.
-        user_id=patient.user_id,
         medication_name=medication_in.medication_name,
         dose=medication_in.dose,
         route=medication_in.route,

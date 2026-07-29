@@ -14,13 +14,6 @@ def create_clinical_document(
 ) -> ClinicalDocument:
     document = ClinicalDocument(
         patient_id=patient.id,
-        # user_id is retained temporarily (Sprint 3.5 migration period) and
-        # is still NOT NULL at the database level, so every create must
-        # still populate it. Deriving it from the already-resolved,
-        # already-ownership-checked Patient - rather than accepting it as a
-        # separate parameter - guarantees user_id and patient_id can never
-        # disagree about whose document this is.
-        user_id=patient.user_id,
         document_type=document_in.document_type,
         title=document_in.title,
         raw_text=document_in.raw_text,
@@ -46,7 +39,6 @@ def create_clinical_document_from_file(
 ) -> ClinicalDocument:
     document = ClinicalDocument(
         patient_id=patient.id,
-        user_id=patient.user_id,
         document_type=document_type,
         title=title,
         raw_text=raw_text,

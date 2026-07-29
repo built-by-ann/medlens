@@ -92,28 +92,3 @@ class AnalysisSummaryResponse(BaseModel):
     low_severity_findings: int
     provider: str | None
     model_name: str | None
-
-
-class AnalysisResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    user_id: int
-    status: AnalysisStatus
-
-    started_at: datetime | None
-    completed_at: datetime | None
-    error_message: str | None
-
-    summary: str | None
-
-    total_findings: int
-    high_severity_findings: int
-    medium_severity_findings: int
-    low_severity_findings: int
-
-    provider: str | None
-    model_name: str | None
-
-    created_at: datetime
-    updated_at: datetime | None

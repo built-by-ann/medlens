@@ -23,11 +23,9 @@ class Patient(Base):
 
     user = relationship("User", back_populates="patients")
 
-    # Added in Sprint 3.5, Issue #128, now that Medication, ClinicalDocument,
-    # and Analysis all have a patient_id column to join on. Each of those
-    # models also still has its original user_id/user - both ownership
-    # models coexist until a later issue backfills every row and drops
-    # user_id (see app/services/patient_backfill_service.py).
+    # Medication, ClinicalDocument, and Analysis are owned exclusively
+    # through Patient - none of them has a user_id of their own (see
+    # docs/data-model.md).
     medications = relationship("Medication", back_populates="patient")
     clinical_documents = relationship("ClinicalDocument", back_populates="patient")
     analyses = relationship("Analysis", back_populates="patient")

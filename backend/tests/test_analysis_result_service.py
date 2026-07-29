@@ -48,7 +48,6 @@ def _create_patient(db, user, **overrides):
 def _create_clinical_document(db, patient):
     document = ClinicalDocument(
         patient_id=patient.id,
-        user_id=patient.user_id,
         document_type="visit_note",
         title="Visit Note",
         raw_text="Patient takes Lisinopril 10 mg oral once daily.",

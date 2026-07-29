@@ -214,7 +214,6 @@ def test_summarize_persists_analysis_and_returns_summary_for_owned_documents(cli
     analysis = db.get(Analysis, body["analysis_id"])
     assert analysis.status == "completed"
     assert analysis.patient_id == patient["id"]
-    assert analysis.user_id == patient["user_id"]
     assert analysis.completed_at is not None
     assert analysis.provider == "fake"
     assert analysis.model_name == "fake-model"

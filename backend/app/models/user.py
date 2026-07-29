@@ -16,7 +16,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    clinical_documents = relationship("ClinicalDocument", back_populates="user")
-    analyses = relationship("Analysis", back_populates="user")
-    medications = relationship("Medication", back_populates="user")
+    # Medication, ClinicalDocument, and Analysis are reached only through
+    # Patient (see Patient.medications/clinical_documents/analyses) - User
+    # has no direct relationship to any of them.
     patients = relationship("Patient", back_populates="user")

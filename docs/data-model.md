@@ -32,24 +32,25 @@ AI is used to extract structured medication information from each document. The 
 User
  │
  └── Patient
-        ├── Medication        (API-authoritative: patient_id, via /patients/{id}/medications)
-        ├── ClinicalDocument  (API-authoritative: patient_id, via /patients/{id}/clinical-documents)
+        ├── Medication        (via /patients/{id}/medications)
+        ├── ClinicalDocument  (via /patients/{id}/clinical-documents)
         │      └── MedicationMention
-        └── Analysis          (API-authoritative: patient_id, via /patients/{id}/analyses)
+        └── Analysis          (via /patients/{id}/analyses)
                ├── MedicationDiscrepancy
                ├── AnalysisMedicationMention
                └── AnalysisInconsistency
 ```
 
-Sprint 3.5 is migrating MedLens from a User-owned data model to a Patient-owned one:
+Sprint 3.5 migrated MedLens from a User-owned data model to a Patient-owned one, across seven issues:
 
 - **Issue #126** introduced `Patient` on its own, with only a `User` relationship.
-- **Issue #128** gave `Medication`, `ClinicalDocument`, and `Analysis` each a nullable `patient_id`, backfilled every existing row to a patient, and added the corresponding `Patient.medications` / `Patient.clinical_documents` / `Patient.analyses` relationships. Their original `user_id`/`user` were left untouched - both ownership paths coexisted, with every route and service still reading `user_id` only.
+- **Issue #128** gave `Medication`, `ClinicalDocument`, and `Analysis` each a nullable `patient_id`, backfilled every existing row to a patient, and added the corresponding `Patient.medications` / `Patient.clinical_documents` / `Patient.analyses` relationships. Their original `user_id`/`user` were left untouched for this issue - both ownership paths coexisted temporarily, with every route and service still reading `user_id` only.
 - **Issue #129** moved Medication's routes and services over to reading `patient_id` for authorization, nested under `/patients/{patient_id}/medications`.
 - **Issue #130** repeated the same cutover for ClinicalDocument and Analysis, nested under `/patients/{patient_id}/clinical-documents` and `/patients/{patient_id}/analyses` respectively, and updated `medication_reconciliation_service` to load a patient's medications by `patient_id` instead of `user_id`. The old flat `/clinical-documents` and `/ai/summarize`/`/ai/analyses` routes were removed.
-- On all three tables, `user_id` is still there (still `NOT NULL`, still populated - derived from the resolved `Patient.user_id` on every create, never accepted independently from a request) but is no longer read by anything - it's retained purely for backwards compatibility until a later issue drops the column entirely.
+- **Issues #131/#132** built the patient-centered clinical workflow and provider dashboard on top of this - UI work, no further ownership changes.
+- **Issue #133** removed the transitional compatibility layer entirely: `user_id` is now gone from `Medication`, `ClinicalDocument`, and `Analysis` (column dropped, `User.medications`/`User.clinical_documents`/`User.analyses` relationships removed), and `patient_id` on all three was tightened from nullable to `NOT NULL`, since it is now the sole ownership column and every row has always had one. **This is the final state** - ownership for these three resources exists solely through `Patient`; `User` is used only for authentication and for owning `Patient` directly (`Patient.user_id`).
 
-See Design Decisions for the backfill strategy and the Medication/ClinicalDocument/Analysis cutover.
+See Design Decisions for the backfill strategy, the Medication/ClinicalDocument/Analysis cutover, and the final cleanup.
 
 ---
 
@@ -73,17 +74,16 @@ updated_at
 ### Relationships
 
 ```text
-User has many ClinicalDocuments
-User has many Medications
-User has many Analyses
 User has many Patients
 ```
+
+`Medication`, `ClinicalDocument`, and `Analysis` are reached only through `Patient` (`Patient.medications` / `Patient.clinical_documents` / `Patient.analyses`) - `User` has no direct relationship to any of them (see Issue #133 in Design Decisions).
 
 ---
 
 ## Patient
 
-Represents a patient chart owned by a provider (User). Introduced in Sprint 3.5 (Issue #126) as the first step of a staged migration toward a patient-centered data model. As of Issue #128, `Medication`, `ClinicalDocument`, and `Analysis` all reference Patient via a nullable `patient_id`, and every pre-existing row has been backfilled - see Design Decisions.
+Represents a patient chart owned by a provider (User). Introduced in Sprint 3.5 (Issue #126) as the first step of a staged migration toward a patient-centered data model. `Medication`, `ClinicalDocument`, and `Analysis` all reference Patient via `patient_id`, the sole ownership column for all three as of Issue #133 - see Design Decisions.
 
 ### Fields
 
@@ -144,7 +144,7 @@ Patient has many Analyses
 
 Represents any uploaded or entered documentation source that may contain medication information.
 
-As of Sprint 3.5 (Issue #130), ClinicalDocument is owned by `Patient`, not directly by `User`: every API route and service function scopes and authorizes by `patient_id`, and `user_id` is no longer read for authorization at all. See Field Notes and Design Decisions.
+ClinicalDocument is owned by `Patient`: every API route and service function scopes and authorizes by `patient_id`, the sole ownership column - there is no `user_id` on this table. See Design Decisions.
 
 Examples:
 
@@ -159,7 +159,6 @@ Examples:
 
 ```text
 id
-user_id
 patient_id
 document_type
 title
@@ -176,7 +175,7 @@ updated_at
 patient_id
 ```
 
-Added in Sprint 3.5 (Issue #128) and, as of Issue #130, the sole column every route and service uses for ownership and authorization. Still nullable at the database level only because `user_id` hasn't been dropped yet - in practice every row has one, since creation always requires an already-resolved, already-owned Patient.
+Added in Sprint 3.5 (Issue #128), the sole column every route and service uses for ownership and authorization since Issue #130, and `NOT NULL` since Issue #133 - every row has always had one, since creation has always required an already-resolved, already-owned Patient.
 
 ```text
 document_type
@@ -202,16 +201,9 @@ file_type
 
 Stores file format information such as `txt`, `pdf`, or `manual_entry`.
 
-```text
-user_id
-```
-
-Retained temporarily for backwards compatibility (Issue #130 explicitly does not remove it), but no longer read by any route or service for authorization - `patient_id` is. Every new document still populates it (the column remains `NOT NULL`), derived directly from the resolved patient's own `user_id` rather than accepted as a separate input, so it can never disagree with `patient_id` about who owns the row. It will be dropped in a later Sprint 3.5 issue.
-
 ### Relationships
 
 ```text
-ClinicalDocument belongs to User    (vestigial - see Field Notes)
 ClinicalDocument belongs to Patient
 ClinicalDocument has many MedicationMentions
 ```
@@ -304,13 +296,12 @@ Represents one medication in a patient's self-maintained medication list.
 
 Unlike MedicationMention, a Medication record is not extracted from a clinical document. It is entered directly by the provider on the patient's behalf, independent of any document, and is not tied to a document's confidence or context.
 
-As of Sprint 3.5 (Issue #129), Medication is owned by `Patient`, not directly by `User`: every API route and service function scopes and authorizes by `patient_id`, and `user_id` is no longer read for authorization at all. See Field Notes and Design Decisions.
+Medication is owned by `Patient`: every API route and service function scopes and authorizes by `patient_id`, the sole ownership column - there is no `user_id` on this table. See Design Decisions.
 
 ### Fields
 
 ```text
 id
-user_id
 patient_id
 medication_name
 dose
@@ -329,13 +320,7 @@ updated_at
 patient_id
 ```
 
-Added in Sprint 3.5 (Issue #128) and, as of Issue #129, the sole column every route and service uses for ownership and authorization. Still nullable at the database level only because `user_id` hasn't been dropped yet - in practice every row has one, since creation always requires an already-resolved, already-owned Patient.
-
-```text
-user_id
-```
-
-Retained temporarily for backwards compatibility (Issue #129 explicitly does not remove it), but no longer read by any route or service for authorization - `patient_id` is. Every new medication still populates it (the column remains `NOT NULL`), derived directly from the resolved patient's own `user_id` rather than accepted as a separate input, so it can never disagree with `patient_id` about who owns the row. It will be dropped in a later Sprint 3.5 issue.
+Added in Sprint 3.5 (Issue #128), the sole column every route and service uses for ownership and authorization since Issue #129, and `NOT NULL` since Issue #133 - every row has always had one, since creation has always required an already-resolved, already-owned Patient.
 
 ```text
 source
@@ -353,7 +338,6 @@ Optional free-text notes about the medication. May be null.
 
 ```text
 Medication belongs to Patient
-Medication belongs to User (legacy - see Field Notes)
 ```
 
 ---
@@ -369,13 +353,12 @@ An analysis can be completed by either of two separate processes, and its stored
 - The medication reconciliation service compares Medication against MedicationMention using deterministic rules and produces MedicationDiscrepancy rows, with total_findings and the severity counts reflecting what it found.
 - The AI summary service reads clinical documents directly and produces AnalysisMedicationMention and AnalysisInconsistency rows, an AI observation of what the documents say, with no comparison against the user's medication list. total_findings and the severity counts are always zero for this path, since no MedicationDiscrepancy rows are created by it.
 
-As of Sprint 3.5 (Issue #130), Analysis is owned by `Patient`, not directly by `User`: every API route and service function scopes and authorizes by `patient_id`, and `user_id` is no longer read for authorization at all. See Field Notes and Design Decisions.
+Analysis is owned by `Patient`: every API route and service function scopes and authorizes by `patient_id`, the sole ownership column - there is no `user_id` on this table. See Design Decisions.
 
 ### Fields
 
 ```text
 id
-user_id
 patient_id
 status
 started_at
@@ -398,7 +381,7 @@ updated_at
 patient_id
 ```
 
-Added in Sprint 3.5 (Issue #128) and, as of Issue #130, the sole column every route and service uses for ownership and authorization. Still nullable at the database level only because `user_id` hasn't been dropped yet - in practice every row has one, since creation always requires an already-resolved, already-owned Patient.
+Added in Sprint 3.5 (Issue #128), the sole column every route and service uses for ownership and authorization since Issue #130, and `NOT NULL` since Issue #133 - every row has always had one, since creation has always required an already-resolved, already-owned Patient.
 
 ```text
 status
@@ -452,16 +435,9 @@ model_name
 
 Record which AI provider and model produced the analysis, when applicable. Both are nullable, since not every analysis path is required to use an AI provider.
 
-```text
-user_id
-```
-
-Retained temporarily for backwards compatibility (Issue #130 explicitly does not remove it), but no longer read by any route or service for authorization - `patient_id` is. Every new analysis still populates it (the column remains `NOT NULL`), derived directly from the resolved patient's own `user_id` rather than accepted as a separate input, so it can never disagree with `patient_id` about who owns the row. It will be dropped in a later Sprint 3.5 issue.
-
 ### Relationships
 
 ```text
-Analysis belongs to User    (vestigial - see Field Notes)
 Analysis belongs to Patient
 Analysis has many MedicationDiscrepancies
 Analysis has many AnalysisMedicationMentions
@@ -655,17 +631,8 @@ Patient
 Patient
   1 ─── many Analysis
 
-User
-  1 ─── many ClinicalDocument   (legacy column only, not read by any route - see Design Decisions)
-
 ClinicalDocument
   1 ─── many MedicationMention
-
-User
-  1 ─── many Medication   (legacy column only, not read by any route - see Design Decisions)
-
-User
-  1 ─── many Analysis   (legacy column only, not read by any route - see Design Decisions)
 
 Analysis
   1 ─── many MedicationDiscrepancy
@@ -782,7 +749,7 @@ Rather than adding `patient_id` as a bare nullable column and leaving every pre-
 
 The backfill is idempotent by construction rather than by an explicit dedup flag: re-running finds no legacy rows left (every one already has a `patient_id`), so a user who already got a placeholder Patient created for them now has exactly one active Patient, not zero, and the "exactly one" branch reuses it rather than creating a second one.
 
-`user_id` is deliberately left in place and unmodified by this migration on all three tables - both ownership paths coexist so that every existing route, service, and the frontend keep working exactly as before. A later Sprint 3.5 issue will move routes over to reading `patient_id` and only then drop `user_id`.
+`user_id` is deliberately left in place and unmodified by this migration on all three tables - both ownership paths coexist so that every existing route, service, and the frontend keep working exactly as before. Issues #129/#130 move routes over to reading `patient_id`, and Issue #133 (below) is where `user_id` is finally dropped.
 
 ### Issue #129: Medication becomes the first resource to cut over to patient-scoped authorization
 
@@ -790,7 +757,7 @@ Issue #128 gave Medication a `patient_id` column but left every route and servic
 
 A new shared FastAPI dependency, `get_owned_patient` (`app/api/deps.py`), resolves and authorizes `patient_id` once - a route simply cannot receive a `Patient` it doesn't own. Every medication route depends on it rather than re-implementing the ownership check, the same way every route already depended on `get_current_user`. This is the pattern the rest of Sprint 3.5 will reuse for ClinicalDocument and Analysis.
 
-`Medication.user_id` is still a real, populated, `NOT NULL` column (Issue #129 explicitly does not drop it), but it is now vestigial from the API's point of view - nothing reads it for authorization or ever will again. It's derived automatically from the resolved patient (`medication.user_id = patient.user_id`) purely so the `NOT NULL` constraint keeps being satisfied without asking API callers to supply a value that would be redundant (and could, if accepted separately, disagree with `patient_id` about whose medication it is).
+`Medication.user_id` remained a real, populated, `NOT NULL` column at this point (Issue #129 explicitly did not drop it), vestigial from the API's point of view - nothing read it for authorization from here on. It was derived automatically from the resolved patient (`medication.user_id = patient.user_id`) purely so the `NOT NULL` constraint kept being satisfied without asking API callers to supply a value that would be redundant. Issue #133 (below) is where the column itself was finally dropped.
 
 `MedicationResponse` changed to expose `patient_id` instead of `user_id` - the one deliberate response-schema change in this migration (Issue #128 explicitly avoided any schema change, since its routes hadn't moved yet; here, moving the routes is the entire point, so the response reflecting the new ownership model is the correct contract, not scope creep).
 
@@ -806,7 +773,22 @@ Issue #130 applies Issue #129's exact pattern to the two remaining User-scoped r
 
 `ClinicalDocumentResponse.user_id` and `AnalysisSummaryResponse`/`AnalysisDetailResponse`'s implicit ownership field are replaced with `patient_id`, matching Issue #129's `MedicationResponse` change for the same reason. The test-only `AnalysisResponse` schema (still `user_id`, used only by `test_analysis.py`/`test_medication_reconciliation_service.py`, never by any route) is deliberately left untouched, since changing it would be schema churn with no live caller to justify it.
 
-`ClinicalDocument.user_id` and `Analysis.user_id` are retained exactly as `Medication.user_id` was - real, `NOT NULL`, populated, vestigial from the API's point of view, and derived from the resolved patient rather than accepted independently.
+`ClinicalDocument.user_id` and `Analysis.user_id` were retained at this point exactly as `Medication.user_id` was - real, `NOT NULL`, populated, vestigial from the API's point of view, and derived from the resolved patient rather than accepted independently.
+
+---
+
+### Issue #133: user_id dropped from Medication, ClinicalDocument, and Analysis
+
+The final Sprint 3.5 migration issue. Issues #129/#130 had already moved every route and service off `user_id` for these three tables; the column had been read by nothing for two full issues, kept only so its `NOT NULL` constraint didn't block inserts. This issue removes it outright:
+
+- **Models**: `user_id` and its `user` relationship are gone from `Medication`, `ClinicalDocument`, and `Analysis`. `patient_id` is tightened from nullable to `NOT NULL` on all three, now that it's the only ownership column - there was never actually a row without one (Issue #128's backfill guaranteed that from day one), so this only makes the schema honest about a guarantee the application already relied on. `User.medications`, `User.clinical_documents`, and `User.analyses` are removed too; `User.patients` is the only relationship `User` has left to any of this data.
+- **Alembic migration** (`3ef685b18302`): drops the `user_id` foreign key and column and applies the `NOT NULL` constraint to `patient_id`, on all three tables. Data-preserving by construction - it only removes an already-unread column and tightens a constraint every row already satisfied; `patient_id` itself is never touched. The downgrade re-derives `user_id` from `patients.user_id` via `patient_id` (a plain `UPDATE ... FROM patients`) rather than adding the column back with nothing to populate it, which Postgres would reject on any table with existing rows.
+- **A migration-history correction**: the earlier `599e0487bb6d` migration (Issue #128) originally called `app.services.patient_backfill_service.backfill_patient_ids`/`clear_patient_ids`, which queried the *live* ORM models' `user_id` attribute. That is exactly the situation `patient_backfill_service.py`'s own docstring warned about ("if any of these five models is later renamed or restructured, this module... would fail if ever replayed from scratch against an empty database") - and this issue is that restructuring. `599e0487bb6d` was updated in place to use lightweight, local `sa.table()` shadows frozen at that point in schema history instead of importing today's models, so `alembic upgrade head` still runs correctly against a brand-new database. `patient_backfill_service.py` and its test were deleted, since nothing else ever called them.
+- **Services**: `medication_service.py`, `clinical_document_service.py`, and `analysis_service.py` no longer derive or assign `user_id` on create - there is nothing left to derive it onto.
+- **Schemas**: the test-only `AnalysisResponse` (the last schema anywhere still exposing `user_id`, left alone in Issue #130 specifically because it was dead code, not because it was correct) is deleted outright, not just stripped of the field. Its two call sites (`test_analysis.py`, `test_medication_reconciliation_service.py`) were rewritten against `AnalysisDetailResponse`, the schema real routes actually use.
+- **Frontend**: required no changes at all. `types/api.ts`'s `ClinicalDocument`, `Medication`, and `AnalysisSummary` types already used only `patient_id` (Issues #129/#130); the only `user_id` field left anywhere in the frontend is `Patient.user_id`, which is correct and untouched.
+
+Verified end to end on a real database: applied `3ef685b18302` against the dev database (row counts unchanged before/after), downgraded and confirmed `user_id` was correctly re-derived to match every row's `patient.user_id`, re-upgraded, and separately ran the entire migration chain from an empty database to confirm the frozen `599e0487bb6d` logic still works when replayed from scratch.
 
 ---
 

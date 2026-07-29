@@ -39,13 +39,6 @@ def create_analysis(db: Session, patient: Patient, analysis_in: AnalysisCreate) 
 
     analysis = Analysis(
         patient_id=patient.id,
-        # user_id is retained temporarily (Sprint 3.5 migration period) and
-        # is still NOT NULL at the database level, so every create must
-        # still populate it. Derived from the already-resolved,
-        # already-ownership-checked Patient - never accepted as a separate
-        # parameter - so it can never disagree with patient_id about whose
-        # analysis this is.
-        user_id=patient.user_id,
         status="pending",
         clinical_documents=documents,
     )
