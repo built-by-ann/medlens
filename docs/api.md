@@ -975,7 +975,7 @@ Success response
 ]
 ```
 
-An empty list is returned if the patient has no analyses yet; this is a normal, successful response, not an error. Ordering is by `id` descending, not `created_at`, since rows created together can share an identical `created_at` (Postgres's `now()` is constant within a transaction). Unlike `GET /patients/{patient_id}/analyses/{analysis_id}`, list rows never include `medication_mentions` or `possible_inconsistencies`; fetch the detail endpoint for that.
+An empty list is returned if the patient has no analyses yet; this is a normal, successful response, not an error. Ordering is by `id` descending, not `created_at`, since rows created together can share an identical `created_at` (Postgres's `now()` is constant within a transaction). Unlike `GET /patients/{patient_id}/analyses/{analysis_id}`, list rows never include `medication_mentions`, `possible_inconsistencies`, or `medication_discrepancies`; fetch the detail endpoint for that.
 
 Possible error responses
 
@@ -989,7 +989,7 @@ Possible error responses
 
 Purpose
 
-Returns the metadata and persisted results of one of the given patient's analyses. Read-only: it does not create, rerun, or modify an analysis. See `docs/data-model.md` for the underlying `Analysis`, `AnalysisMedicationMention`, and `AnalysisInconsistency` models.
+Returns the metadata and persisted results of one of the given patient's analyses. Read-only: it does not create, rerun, or modify an analysis. See `docs/data-model.md` for the underlying `Analysis`, `AnalysisMedicationMention`, `AnalysisInconsistency`, and `MedicationDiscrepancy` models.
 
 Success response
 
@@ -1008,6 +1008,7 @@ Success response
   "error_message": null,
   "created_at": "2026-07-12T19:59:14.500000Z",
   "updated_at": "2026-07-12T19:59:16.112249Z",
+  "document_count": 1,
   "medication_mentions": [
     {
       "id": 3,
@@ -1024,11 +1025,62 @@ Success response
       "id": 2,
       "description": "Lisinopril dose differs between the admission note and the discharge summary."
     }
+  ],
+  "medication_discrepancies": [
+    {
+      "id": 4,
+      "analysis_id": 7,
+      "medication_id": 12,
+      "medication_mention_id": 8,
+      "discrepancy_type": "dose_conflict",
+      "severity": "medium",
+      "title": "Lisinopril dose does not match",
+      "ai_explanation": "The medication list records a dose of 10 mg for Lisinopril, but a selected document records 20 mg.",
+      "recommendation": null,
+      "expected_value": "10 mg",
+      "observed_value": "20 mg",
+      "resolution_status": "open",
+      "created_at": "2026-07-12T19:59:16.000000Z",
+      "updated_at": null,
+      "medication": {
+        "id": 12,
+        "patient_id": 1,
+        "medication_name": "Lisinopril",
+        "dose": "10 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": "active",
+        "source": "patient_reported",
+        "notes": null,
+        "created_at": "2026-06-01T12:00:00Z",
+        "updated_at": null
+      },
+      "medication_mention": {
+        "id": 8,
+        "medication_name": "Lisinopril",
+        "dose": "20 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": "active",
+        "context_text": "Patient takes Lisinopril 20mg oral daily.",
+        "clinical_document": {
+          "id": 5,
+          "title": "March Visit Note",
+          "document_type": "visit_note"
+        }
+      }
+    }
   ]
 }
 ```
 
-`medication_mentions` and `possible_inconsistencies` are always returned, sorted by ascending `id`, even for analyses that have none (an empty list) or that failed before persisting any results (both lists empty, `summary`, `provider`, and `model_name` are `null`).
+`document_count` is `len(analysis.clinical_documents)`, the same value `GET /patients/{patient_id}/analyses` already returns per row (Issue #45 added it here too, exposed via a `document_count` property on the `Analysis` model itself rather than recomputed inline, so both routes now read the same property).
+
+`medication_mentions`, `possible_inconsistencies`, and `medication_discrepancies` are always returned, sorted by ascending `id`, even for analyses that have none (an empty list) or that failed before persisting any results (all three empty, `summary`, `provider`, and `model_name` are `null`).
+
+`medication_discrepancies` (added in Issue #45) are `MedicationDiscrepancy` rows produced by the deterministic reconciliation engine (`app/services/medication_reconciliation_service.py`), not the AI summary flow this endpoint's other fields come from - **`POST /patients/{patient_id}/analyses` does not currently call the reconciliation engine**, so this list is empty for every analysis created through today's actual upload workflow. It is populated only where something else has run `run_medication_reconciliation` directly (today, that is test/fixture setup only - see `docs/architecture.md`'s Reconciliation Engine section). The field is included now so the frontend's Analysis Results page (`AnalysisDetailPage`) can render real reconciliation findings the moment a future issue wires the engine into analysis creation, with no further API changes.
+
+Each discrepancy nests its own supporting evidence rather than requiring a second request: `medication` (the patient's current `Medication` row, present when `medication_id` is set) and `medication_mention` (the `MedicationMention` extracted from a clinical document, present when `medication_mention_id` is set, itself nesting a minimal `clinical_document` citation - `id`, `title`, `document_type`, not the full document text). Either, both, or neither may be `null`, matching the nullability of the two source foreign keys (both are `ON DELETE SET NULL`, so a discrepancy always survives its linked medication or mention being deleted, just with that piece of evidence now missing). `MedicationMention` has no API exposure anywhere else in the app; this nested, read-only view is the only place its fields are ever serialized.
 
 `error_message` is `null` unless `status` is `"failed"`, in which case it holds the same sanitized message returned by `POST /patients/{patient_id}/analyses` at failure time (see that endpoint's `503` response above). It never contains a stack trace, a provider exception, `ValidationError` details, raw AI output, or a raw SQL error; only the sanitized message already stored on the Analysis is exposed.
 

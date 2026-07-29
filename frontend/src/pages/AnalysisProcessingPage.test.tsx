@@ -68,6 +68,10 @@ function makeAnalysis(overrides: Partial<AnalysisDetail> = {}): AnalysisDetail {
     error_message: null,
     created_at: '2026-01-01T12:00:00Z',
     updated_at: null,
+    document_count: 0,
+    medication_mentions: [],
+    possible_inconsistencies: [],
+    medication_discrepancies: [],
     ...overrides,
   }
 }

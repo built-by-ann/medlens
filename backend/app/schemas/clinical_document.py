@@ -21,3 +21,16 @@ class ClinicalDocumentResponse(BaseModel):
     file_type: str | None
     created_at: datetime
     updated_at: datetime | None
+
+
+class ClinicalDocumentSummaryResponse(BaseModel):
+    """Minimal document identity for citing a source document as supporting
+    evidence elsewhere (see MedicationMentionEvidenceResponse), without
+    exposing the full raw_text a citation has no need for.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    document_type: str
