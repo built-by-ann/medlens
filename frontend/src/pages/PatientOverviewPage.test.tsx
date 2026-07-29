@@ -270,6 +270,15 @@ describe('PatientOverviewPage', () => {
     )
   })
 
+  it('links Clinical documents to the existing-document analysis flow', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    renderOverviewPage()
+
+    expect(
+      await screen.findByRole('link', { name: 'Create analysis from documents' }),
+    ).toHaveAttribute('href', '/patients/1/analyses/select-documents')
+  })
+
   it('shows a breadcrumb naming Patients and the current patient', async () => {
     mockedGetPatient.mockResolvedValue(patient)
     renderOverviewPage()

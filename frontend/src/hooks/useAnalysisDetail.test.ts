@@ -27,10 +27,6 @@ const sampleAnalysis: AnalysisDetail = {
   error_message: null,
   created_at: '2026-01-01T11:59:00Z',
   updated_at: '2026-01-01T12:05:00Z',
-  document_count: 1,
-  medication_mentions: [],
-  possible_inconsistencies: [],
-  medication_discrepancies: [],
 }
 
 describe('useAnalysisDetail', () => {

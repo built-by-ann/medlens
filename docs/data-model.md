@@ -355,8 +355,6 @@ An analysis can be completed by either of two separate processes, and its stored
 
 Analysis is owned by `Patient`: every API route and service function scopes and authorizes by `patient_id`, the sole ownership column - there is no `user_id` on this table. See Design Decisions.
 
-A `document_count` property (`len(self.clinical_documents)`) is computed on the model rather than stored as a column, added in Issue #45 alongside `MedicationDiscrepancy` exposure so both `AnalysisSummaryResponse` and `AnalysisDetailResponse` can read the identical value.
-
 ### Fields
 
 ```text
@@ -519,8 +517,6 @@ Represents a potential medication reconciliation issue found during an analysis.
 A discrepancy references at most one Medication and at most one MedicationMention, since a finding may only have one side of the comparison. A medication mentioned in a document but missing from the medication list has a MedicationMention and no Medication. A medication list entry with no supporting document has a Medication and no MedicationMention.
 
 Rows in this table are produced by the medication reconciliation service, a deterministic backend process, not an AI call. Severity is assigned from a single, centralized mapping from discrepancy type to severity, described in docs/architecture.md.
-
-As of Issue #45, rows are exposed over the API - nested inside `GET /patients/{patient_id}/analyses/{analysis_id}`'s `medication_discrepancies`, each with its linked `Medication` and `MedicationMention` (the latter's source `ClinicalDocument` nested one level further, as a minimal id/title/document_type citation, not the full document) - so a provider reviewing an analysis's results can see supporting evidence without a separate request. See `docs/api.md`. This is a read path only; nothing about how or when these rows are created changed. Reconciliation is not currently invoked by analysis creation (see the Analysis entity above and `docs/architecture.md`), so this list is empty for analyses produced by the app's actual upload workflow today.
 
 ### Fields
 
