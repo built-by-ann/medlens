@@ -47,6 +47,11 @@ export interface ClinicalDocument {
   file_type: string | null
   created_at: string
   updated_at: string | null
+  // How many analyses this document has been included in (Issue #146).
+  // There is no file size field: the backend never stores the original
+  // uploaded file's bytes, only its extracted raw_text, so there is no
+  // real byte size to expose.
+  analysis_count: number
 }
 
 export interface AnalysisCreateResult {

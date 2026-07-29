@@ -752,9 +752,12 @@ Success response
   "file_name": null,
   "file_type": "manual_entry",
   "created_at": "2026-07-12T19:59:14.696845Z",
-  "updated_at": null
+  "updated_at": null,
+  "analysis_count": 0
 }
 ```
+
+`analysis_count` (added in Issue #146) is `len(document.analyses)` - how many analyses this document has been included in via `POST /patients/{patient_id}/analyses`'s `clinical_document_ids` (a computed property on the model, not a stored column; the same pattern as `AnalysisSummaryResponse.document_count`). A brand-new document always starts at `0`. There is no file-size field: the backend never stores an uploaded file's original bytes, only its extracted `raw_text`, so no real byte count exists anywhere to expose - `len(raw_text)` would not be a file size and is not substituted for one.
 
 Possible error responses
 

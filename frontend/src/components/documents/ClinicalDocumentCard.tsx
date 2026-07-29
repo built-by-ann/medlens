@@ -8,6 +8,11 @@ function formatDate(value: string): string {
   return new Date(value).toLocaleDateString(undefined, { dateStyle: 'medium' })
 }
 
+function analysisCountLabel(count: number): string {
+  if (count === 0) return 'Not yet analyzed'
+  return count === 1 ? 'Used in 1 analysis' : `Used in ${count} analyses`
+}
+
 // file_type is "manual_entry" for pasted notes, or the real upload format
 // ("txt"/"pdf") for uploaded files - there is no separate "source" field to
 // read, so this is the one place that distinction is surfaced to the user.
@@ -50,6 +55,8 @@ export function ClinicalDocumentCard({ document, onDelete }: ClinicalDocumentCar
             {documentTypeLabel(document.document_type)} · {formatDate(document.created_at)}
             {document.file_type &&
               ` · ${FILE_TYPE_LABELS[document.file_type] ?? document.file_type}`}
+            {' · '}
+            {analysisCountLabel(document.analysis_count)}
           </p>
         </div>
         <div className="flex shrink-0 gap-2">

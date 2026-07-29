@@ -8,6 +8,7 @@ export const ROUTES = {
   patientDetail: '/patients/:patientId',
   patientEdit: '/patients/:patientId/edit',
   patientMedications: '/patients/:patientId/medications',
+  patientDocuments: '/patients/:patientId/documents',
   patientUpload: '/patients/:patientId/upload',
   patientAnalyses: '/patients/:patientId/analyses',
   patientSelectDocuments: '/patients/:patientId/analyses/select-documents',
@@ -30,6 +31,10 @@ export function patientEditPath(patientId: string | number): string {
 
 export function patientMedicationsPath(patientId: string | number): string {
   return `/patients/${patientId}/medications`
+}
+
+export function patientDocumentsPath(patientId: string | number): string {
+  return `/patients/${patientId}/documents`
 }
 
 export function patientUploadPath(patientId: string | number): string {

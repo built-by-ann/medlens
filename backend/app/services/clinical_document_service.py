@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.clinical_document import ClinicalDocument
 from app.models.patient import Patient
@@ -54,8 +54,11 @@ def create_clinical_document_from_file(
 
 
 def get_clinical_documents_for_patient(db: Session, patient_id: int) -> list[ClinicalDocument]:
+    # selectinload avoids an N+1 query for analysis_count (Issue #146),
+    # which reads the analyses relationship on every returned document.
     return (
         db.query(ClinicalDocument)
+        .options(selectinload(ClinicalDocument.analyses))
         .filter(ClinicalDocument.patient_id == patient_id)
         .order_by(ClinicalDocument.created_at.desc())
         .all()
@@ -67,6 +70,7 @@ def get_clinical_document(
 ) -> ClinicalDocument | None:
     return (
         db.query(ClinicalDocument)
+        .options(selectinload(ClinicalDocument.analyses))
         .filter(
             ClinicalDocument.id == document_id,
             ClinicalDocument.patient_id == patient_id,
