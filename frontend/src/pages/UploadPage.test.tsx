@@ -1,20 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UploadPage } from '@/pages/UploadPage'
-import { fileItemKey, noteItemKey, useCreateAnalysis } from '@/hooks/useCreateAnalysis'
 import { getPatient } from '@/api/patients'
 import type { Patient } from '@/types/api'
-
-vi.mock('@/hooks/useCreateAnalysis', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/hooks/useCreateAnalysis')>()
-
-  return {
-    ...actual,
-    useCreateAnalysis: vi.fn(),
-  }
-})
 
 vi.mock('@/api/patients', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/patients')>()
@@ -25,10 +15,7 @@ vi.mock('@/api/patients', async (importOriginal) => {
   }
 })
 
-const mockedUseCreateAnalysis = vi.mocked(useCreateAnalysis)
 const mockedGetPatient = vi.mocked(getPatient)
-const submit = vi.fn()
-const invalidateItem = vi.fn()
 
 const patient: Patient = {
   id: 7,
@@ -43,11 +30,19 @@ const patient: Patient = {
   updated_at: null,
 }
 
+// Stands in for AnalysisProcessingPage: submission now happens there, so
+// UploadPage's job is just to navigate with the right router state.
+function ProcessingProbe() {
+  const location = useLocation()
+  return <div data-testid="processing-probe">{JSON.stringify(location.state)}</div>
+}
+
 function renderUploadPage() {
   return render(
     <MemoryRouter initialEntries={['/patients/7/upload']}>
       <Routes>
         <Route path="/patients/:patientId/upload" element={<UploadPage />} />
+        <Route path="/patients/:patientId/analyses/processing" element={<ProcessingProbe />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -71,17 +66,8 @@ function getFileInput(): HTMLInputElement {
 
 describe('UploadPage', () => {
   beforeEach(() => {
-    submit.mockReset()
-    invalidateItem.mockReset()
     mockedGetPatient.mockReset()
     mockedGetPatient.mockResolvedValue(patient)
-    mockedUseCreateAnalysis.mockReturnValue({
-      isSubmitting: false,
-      error: null,
-      failedItemLabel: null,
-      submit,
-      invalidateItem,
-    })
   })
 
   it('shows a loading state while the patient is being fetched', () => {
@@ -160,7 +146,7 @@ describe('UploadPage', () => {
     expect(screen.getAllByText(/note\.txt/)).toHaveLength(1)
   })
 
-  it('removes a selected file and invalidates its cached upload', async () => {
+  it('removes a selected file from the list', async () => {
     const user = userEvent.setup()
     renderUploadPage()
 
@@ -173,10 +159,9 @@ describe('UploadPage', () => {
     await user.click(screen.getByRole('button', { name: 'Remove note.txt' }))
 
     expect(screen.queryByText(/note\.txt/)).not.toBeInTheDocument()
-    expect(invalidateItem).toHaveBeenCalledWith(fileItemKey(0))
   })
 
-  it('changing a selected file’s document type invalidates its cached upload', async () => {
+  it('lets a selected file’s document type be changed', async () => {
     const user = userEvent.setup()
     const { container } = renderUploadPage()
 
@@ -187,7 +172,6 @@ describe('UploadPage', () => {
 
     await user.selectOptions(getById(container, 'file-doctype-0'), 'medication_list')
 
-    expect(invalidateItem).toHaveBeenCalledWith(fileItemKey(0))
     expect(getById(container, 'file-doctype-0')).toHaveValue('medication_list')
   })
 
@@ -211,35 +195,7 @@ describe('UploadPage', () => {
     expect(screen.getByLabelText('Note text')).toHaveValue('')
   })
 
-  it('lets a manually entered note be created with a non-default document type', async () => {
-    submit.mockResolvedValue(1)
-    const user = userEvent.setup()
-    renderUploadPage()
-
-    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
-
-    await user.type(screen.getByLabelText('Note text'), 'Metformin 500mg, Lisinopril 10mg')
-    await user.selectOptions(screen.getByLabelText('Document type'), 'medication_list')
-    await user.click(screen.getByRole('button', { name: 'Add note' }))
-
-    await user.click(screen.getByRole('button', { name: 'Start Analysis' }))
-
-    await waitFor(() =>
-      expect(submit).toHaveBeenCalledWith({
-        files: [],
-        notes: [
-          {
-            id: 0,
-            title: '',
-            rawText: 'Metformin 500mg, Lisinopril 10mg',
-            documentType: 'medication_list',
-          },
-        ],
-      }),
-    )
-  })
-
-  it('removes a manually entered note and invalidates its cached upload', async () => {
+  it('removes a manually entered note', async () => {
     const user = userEvent.setup()
     renderUploadPage()
 
@@ -252,10 +208,9 @@ describe('UploadPage', () => {
     await user.click(screen.getByRole('button', { name: /Remove Note 1/ }))
 
     expect(screen.queryByText('Some note text')).not.toBeInTheDocument()
-    expect(invalidateItem).toHaveBeenCalledWith(noteItemKey(0))
   })
 
-  it('editing a note’s text invalidates its cached upload', async () => {
+  it('lets a note’s text be edited', async () => {
     const user = userEvent.setup()
     const { container } = renderUploadPage()
 
@@ -271,7 +226,6 @@ describe('UploadPage', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(screen.getByText('Edited text')).toBeInTheDocument()
-    expect(invalidateItem).toHaveBeenCalledWith(noteItemKey(0))
   })
 
   it('blocks submission when nothing has been added', async () => {
@@ -285,11 +239,10 @@ describe('UploadPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Add at least one file or note before starting an analysis.',
     )
-    expect(submit).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('processing-probe')).not.toBeInTheDocument()
   })
 
-  it('submits the added file and note together and shows a success panel', async () => {
-    submit.mockResolvedValue(42)
+  it('navigates to the Analysis Processing page with the queued files and notes', async () => {
     const user = userEvent.setup()
     renderUploadPage()
 
@@ -303,81 +256,10 @@ describe('UploadPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Start Analysis' }))
 
-    await waitFor(() =>
-      expect(submit).toHaveBeenCalledWith({
-        files: [{ id: 0, file, documentType: 'visit_note' }],
-        notes: [{ id: 0, title: '', rawText: 'Pasted note text', documentType: 'visit_note' }],
-      }),
-    )
-
-    expect(await screen.findByRole('status')).toHaveTextContent('Analysis started successfully')
-    expect(screen.getByRole('link', { name: 'View analysis' })).toHaveAttribute(
-      'href',
-      '/patients/7/analyses/42',
-    )
-    expect(screen.getByRole('link', { name: 'View documents' })).toHaveAttribute(
-      'href',
-      '/patients/7#documents-heading',
-    )
-    expect(screen.getByRole('link', { name: 'Back to patient' })).toHaveAttribute(
-      'href',
-      '/patients/7',
-    )
-  })
-
-  it('lets the user start a fresh upload after a successful submission', async () => {
-    submit.mockResolvedValue(42)
-    const user = userEvent.setup()
-    renderUploadPage()
-
-    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
-
-    await user.type(screen.getByLabelText('Note text'), 'Pasted note text')
-    await user.click(screen.getByRole('button', { name: 'Add note' }))
-    await user.click(screen.getByRole('button', { name: 'Start Analysis' }))
-
-    await screen.findByRole('status')
-    await user.click(screen.getByRole('button', { name: 'Upload another' }))
-
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Start Analysis' })).toBeInTheDocument()
-    expect(screen.queryByText('Pasted note text')).not.toBeInTheDocument()
-  })
-
-  it('shows the submission error and which item failed, without a success panel', async () => {
-    submit.mockRejectedValue(new Error('failed'))
-    mockedUseCreateAnalysis.mockReturnValue({
-      isSubmitting: false,
-      error: 'Something went wrong on the server.',
-      failedItemLabel: 'note.txt',
-      submit,
-      invalidateItem,
+    const probe = await screen.findByTestId('processing-probe')
+    expect(JSON.parse(probe.textContent ?? 'null')).toEqual({
+      files: [{ id: 0, file: {}, documentType: 'visit_note' }],
+      notes: [{ id: 0, title: '', rawText: 'Pasted note text', documentType: 'visit_note' }],
     })
-    const user = userEvent.setup()
-    renderUploadPage()
-
-    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
-
-    await user.type(screen.getByLabelText('Note text'), 'Some text')
-    await user.click(screen.getByRole('button', { name: 'Add note' }))
-    await user.click(screen.getByRole('button', { name: 'Start Analysis' }))
-
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Something went wrong on the server.')
-    expect(alert).toHaveTextContent('note.txt')
-    expect(screen.queryByRole('link', { name: 'View analysis' })).not.toBeInTheDocument()
-  })
-
-  it('shows a loading state and disables the submit button while submitting', async () => {
-    mockedUseCreateAnalysis.mockReturnValue({
-      isSubmitting: true,
-      error: null,
-      failedItemLabel: null,
-      submit,
-      invalidateItem,
-    })
-    renderUploadPage()
-
-    expect(await screen.findByRole('button', { name: 'Starting analysis...' })).toBeDisabled()
   })
 })

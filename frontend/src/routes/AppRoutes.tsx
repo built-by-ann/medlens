@@ -7,6 +7,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { SignupPage } from '@/pages/SignupPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { AnalysisDetailPage } from '@/pages/AnalysisDetailPage'
+import { AnalysisProcessingPage } from '@/pages/AnalysisProcessingPage'
 import { PatientAnalysesPage } from '@/pages/PatientAnalysesPage'
 import { UploadPage } from '@/pages/UploadPage'
 import { PatientsPage } from '@/pages/PatientsPage'
@@ -48,6 +49,7 @@ export function AppRoutes() {
         <Route path={ROUTES.patientMedications} element={<PatientMedicationsPage />} />
         <Route path={ROUTES.patientUpload} element={<UploadPage />} />
         <Route path={ROUTES.patientAnalyses} element={<PatientAnalysesPage />} />
+        <Route path={ROUTES.patientAnalysisProcessing} element={<AnalysisProcessingPage />} />
         <Route path={ROUTES.patientAnalysisDetail} element={<AnalysisDetailPage />} />
         <Route path={ROUTES.patientDetail} element={<PatientOverviewPage />} />
 
