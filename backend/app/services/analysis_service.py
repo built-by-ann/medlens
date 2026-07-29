@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.analysis import Analysis
 from app.models.clinical_document import ClinicalDocument
+from app.models.patient import Patient
 from app.schemas.analysis import AnalysisCompletedSummary, AnalysisCreate
 
 
@@ -13,14 +14,14 @@ class InvalidClinicalDocumentIdsError(Exception):
         super().__init__(f"Invalid or inaccessible clinical document ids: {invalid_ids}")
 
 
-def create_analysis(db: Session, user_id: int, analysis_in: AnalysisCreate) -> Analysis:
+def create_analysis(db: Session, patient: Patient, analysis_in: AnalysisCreate) -> Analysis:
     requested_ids = set(analysis_in.clinical_document_ids)
 
     documents = (
         db.query(ClinicalDocument)
         .filter(
             ClinicalDocument.id.in_(requested_ids),
-            ClinicalDocument.user_id == user_id,
+            ClinicalDocument.patient_id == patient.id,
         )
         .all()
     )
@@ -28,14 +29,23 @@ def create_analysis(db: Session, user_id: int, analysis_in: AnalysisCreate) -> A
     found_ids = {document.id for document in documents}
     missing_ids = requested_ids - found_ids
 
-    # A missing id may be nonexistent or owned by another user. Both cases
-    # raise the same error so a caller cannot use this to probe whether a
-    # given id belongs to someone else.
+    # A missing id may be nonexistent, owned by a different patient
+    # (including a different patient owned by the same user), or owned by
+    # a different user entirely. All three raise the same error so a
+    # caller cannot use this to probe whether a given id belongs to
+    # someone else, or to some other patient of theirs.
     if missing_ids:
         raise InvalidClinicalDocumentIdsError(sorted(missing_ids))
 
     analysis = Analysis(
-        user_id=user_id,
+        patient_id=patient.id,
+        # user_id is retained temporarily (Sprint 3.5 migration period) and
+        # is still NOT NULL at the database level, so every create must
+        # still populate it. Derived from the already-resolved,
+        # already-ownership-checked Patient - never accepted as a separate
+        # parameter - so it can never disagree with patient_id about whose
+        # analysis this is.
+        user_id=patient.user_id,
         status="pending",
         clinical_documents=documents,
     )
@@ -78,7 +88,7 @@ def mark_analysis_completed(
     return analysis
 
 
-def get_analysis_for_user(db: Session, user_id: int, analysis_id: int) -> Analysis | None:
+def get_analysis_for_patient(db: Session, patient_id: int, analysis_id: int) -> Analysis | None:
     # selectinload avoids N+1 queries for the two child collections, and
     # avoids the cartesian product joinedload would produce when eagerly
     # loading two independent one-to-many relationships at once. Ordering
@@ -92,15 +102,15 @@ def get_analysis_for_user(db: Session, user_id: int, analysis_id: int) -> Analys
         )
         .filter(
             Analysis.id == analysis_id,
-            Analysis.user_id == user_id,
+            Analysis.patient_id == patient_id,
         )
         .first()
     )
 
 
-def list_analyses_for_user(db: Session, user_id: int, limit: int) -> list[Analysis]:
+def list_analyses_for_patient(db: Session, patient_id: int, limit: int) -> list[Analysis]:
     # id descending, not created_at, for the same reason documented on
-    # get_analysis_for_user's sibling callers elsewhere in this codebase:
+    # get_analysis_for_patient's sibling callers elsewhere in this codebase:
     # Postgres's now() is constant within a transaction, so created_at is
     # not guaranteed to break ties between rows persisted together.
     # selectinload avoids an N+1 query for clinical_documents (needed to
@@ -108,15 +118,15 @@ def list_analyses_for_user(db: Session, user_id: int, limit: int) -> list[Analys
     return (
         db.query(Analysis)
         .options(selectinload(Analysis.clinical_documents))
-        .filter(Analysis.user_id == user_id)
+        .filter(Analysis.patient_id == patient_id)
         .order_by(Analysis.id.desc())
         .limit(limit)
         .all()
     )
 
 
-def delete_analysis(db: Session, user_id: int, analysis_id: int) -> bool:
-    analysis = get_analysis_for_user(db, user_id, analysis_id)
+def delete_analysis(db: Session, patient_id: int, analysis_id: int) -> bool:
+    analysis = get_analysis_for_patient(db, patient_id, analysis_id)
 
     if analysis is None:
         return False

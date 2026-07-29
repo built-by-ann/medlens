@@ -1,8 +1,8 @@
 import { apiClient } from '@/api/client'
 import type { AnalysisCreateResult, AnalysisSummary } from '@/types/api'
 
-export async function listRecentAnalyses(limit = 10): Promise<AnalysisSummary[]> {
-  const response = await apiClient.get<AnalysisSummary[]>('/ai/analyses', {
+export async function listAnalyses(patientId: number, limit = 10): Promise<AnalysisSummary[]> {
+  const response = await apiClient.get<AnalysisSummary[]>(`/patients/${patientId}/analyses`, {
     params: { limit },
   })
 
@@ -10,9 +10,10 @@ export async function listRecentAnalyses(limit = 10): Promise<AnalysisSummary[]>
 }
 
 export async function createAnalysisFromDocuments(
+  patientId: number,
   clinicalDocumentIds: number[],
 ): Promise<AnalysisCreateResult> {
-  const response = await apiClient.post<AnalysisCreateResult>('/ai/summarize', {
+  const response = await apiClient.post<AnalysisCreateResult>(`/patients/${patientId}/analyses`, {
     clinical_document_ids: clinicalDocumentIds,
   })
 

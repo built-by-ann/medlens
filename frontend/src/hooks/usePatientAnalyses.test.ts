@@ -1,15 +1,16 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useRecentAnalyses } from '@/hooks/useRecentAnalyses'
-import { listRecentAnalyses } from '@/api/analyses'
+import { usePatientAnalyses } from '@/hooks/usePatientAnalyses'
+import { listAnalyses } from '@/api/analyses'
 import type { AnalysisSummary } from '@/types/api'
 
 vi.mock('@/api/analyses')
 
-const mockedListRecentAnalyses = vi.mocked(listRecentAnalyses)
+const mockedListAnalyses = vi.mocked(listAnalyses)
 
 const sampleAnalysis: AnalysisSummary = {
   id: 1,
+  patient_id: 7,
   status: 'completed',
   created_at: '2026-01-01T00:00:00Z',
   completed_at: '2026-01-01T00:05:00Z',
@@ -24,15 +25,15 @@ const sampleAnalysis: AnalysisSummary = {
   model_name: 'gemini-2.0-flash',
 }
 
-describe('useRecentAnalyses', () => {
+describe('usePatientAnalyses', () => {
   beforeEach(() => {
-    mockedListRecentAnalyses.mockReset()
+    mockedListAnalyses.mockReset()
   })
 
   it('starts in a loading state with no analyses and no error', () => {
-    mockedListRecentAnalyses.mockReturnValue(new Promise(() => {}))
+    mockedListAnalyses.mockReturnValue(new Promise(() => {}))
 
-    const { result } = renderHook(() => useRecentAnalyses())
+    const { result } = renderHook(() => usePatientAnalyses(7))
 
     expect(result.current.isLoading).toBe(true)
     expect(result.current.analyses).toEqual([])
@@ -40,9 +41,9 @@ describe('useRecentAnalyses', () => {
   })
 
   it('resolves with the fetched analyses and clears the loading state', async () => {
-    mockedListRecentAnalyses.mockResolvedValue([sampleAnalysis])
+    mockedListAnalyses.mockResolvedValue([sampleAnalysis])
 
-    const { result } = renderHook(() => useRecentAnalyses())
+    const { result } = renderHook(() => usePatientAnalyses(7))
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
@@ -51,9 +52,9 @@ describe('useRecentAnalyses', () => {
   })
 
   it('exposes the error message when the request fails', async () => {
-    mockedListRecentAnalyses.mockRejectedValue({ status: 500, message: 'Something went wrong.' })
+    mockedListAnalyses.mockRejectedValue({ status: 500, message: 'Something went wrong.' })
 
-    const { result } = renderHook(() => useRecentAnalyses())
+    const { result } = renderHook(() => usePatientAnalyses(7))
 
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
@@ -62,10 +63,10 @@ describe('useRecentAnalyses', () => {
   })
 
   it('retry() re-fetches and can recover from a previous error', async () => {
-    mockedListRecentAnalyses.mockRejectedValueOnce({ status: 500, message: 'Server error.' })
-    mockedListRecentAnalyses.mockResolvedValueOnce([sampleAnalysis])
+    mockedListAnalyses.mockRejectedValueOnce({ status: 500, message: 'Server error.' })
+    mockedListAnalyses.mockResolvedValueOnce([sampleAnalysis])
 
-    const { result } = renderHook(() => useRecentAnalyses())
+    const { result } = renderHook(() => usePatientAnalyses(7))
 
     await waitFor(() => expect(result.current.error).toBe('Server error.'))
 
@@ -79,14 +80,28 @@ describe('useRecentAnalyses', () => {
 
     expect(result.current.error).toBeNull()
     expect(result.current.analyses).toEqual([sampleAnalysis])
-    expect(mockedListRecentAnalyses).toHaveBeenCalledTimes(2)
+    expect(mockedListAnalyses).toHaveBeenCalledTimes(2)
   })
 
-  it('passes the given limit through to listRecentAnalyses', () => {
-    mockedListRecentAnalyses.mockReturnValue(new Promise(() => {}))
+  it('passes the given patientId and limit through to listAnalyses', () => {
+    mockedListAnalyses.mockReturnValue(new Promise(() => {}))
 
-    renderHook(() => useRecentAnalyses(5))
+    renderHook(() => usePatientAnalyses(7, 5))
 
-    expect(mockedListRecentAnalyses).toHaveBeenCalledWith(5)
+    expect(mockedListAnalyses).toHaveBeenCalledWith(7, 5)
+  })
+
+  it('re-fetches when patientId changes, scoping strictly to one patient at a time', async () => {
+    mockedListAnalyses.mockResolvedValue([sampleAnalysis])
+
+    const { rerender } = renderHook(({ patientId }) => usePatientAnalyses(patientId), {
+      initialProps: { patientId: 7 },
+    })
+
+    await waitFor(() => expect(mockedListAnalyses).toHaveBeenCalledWith(7, 10))
+
+    rerender({ patientId: 8 })
+
+    await waitFor(() => expect(mockedListAnalyses).toHaveBeenCalledWith(8, 10))
   })
 })

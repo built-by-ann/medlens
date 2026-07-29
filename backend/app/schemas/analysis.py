@@ -52,6 +52,7 @@ class AnalysisDetailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    patient_id: int
     status: AnalysisStatus
     provider: str | None
     model_name: str | None
@@ -67,7 +68,7 @@ class AnalysisDetailResponse(BaseModel):
 
 
 class AnalysisSummaryResponse(BaseModel):
-    """A single row in the current user's recent-analyses list.
+    """A single row in a patient's analysis history.
 
     Deliberately narrower than AnalysisDetailResponse: no medication
     mentions or inconsistencies, since a list view only needs enough to
@@ -78,6 +79,7 @@ class AnalysisSummaryResponse(BaseModel):
     """
 
     id: int
+    patient_id: int
     status: AnalysisStatus
     created_at: datetime
     completed_at: datetime | None

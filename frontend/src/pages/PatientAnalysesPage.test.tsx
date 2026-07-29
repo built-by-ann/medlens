@@ -1,0 +1,141 @@
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { PatientAnalysesPage } from '@/pages/PatientAnalysesPage'
+import { getPatient } from '@/api/patients'
+import { listAnalyses } from '@/api/analyses'
+import type { AnalysisSummary, Patient } from '@/types/api'
+
+vi.mock('@/api/patients', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/patients')>()
+
+  return {
+    ...actual,
+    getPatient: vi.fn(),
+  }
+})
+
+vi.mock('@/api/analyses', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/analyses')>()
+
+  return {
+    ...actual,
+    listAnalyses: vi.fn(),
+  }
+})
+
+const mockedGetPatient = vi.mocked(getPatient)
+const mockedListAnalyses = vi.mocked(listAnalyses)
+
+const patient: Patient = {
+  id: 7,
+  user_id: 1,
+  first_name: 'Jane',
+  last_name: 'Doe',
+  date_of_birth: '1980-05-14',
+  external_mrn: null,
+  status: 'active',
+  notes: null,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: null,
+}
+
+const sampleAnalysis: AnalysisSummary = {
+  id: 42,
+  patient_id: 7,
+  status: 'completed',
+  created_at: '2026-01-01T12:00:00Z',
+  completed_at: '2026-01-01T12:05:00Z',
+  error_message: null,
+  summary: 'Reconciliation completed with 1 finding.',
+  document_count: 2,
+  total_findings: 1,
+  high_severity_findings: 1,
+  medium_severity_findings: 0,
+  low_severity_findings: 0,
+  provider: 'gemini',
+  model_name: 'gemini-2.0-flash',
+}
+
+function renderPage() {
+  return render(
+    <MemoryRouter initialEntries={['/patients/7/analyses']}>
+      <Routes>
+        <Route path="/patients/:patientId/analyses" element={<PatientAnalysesPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+describe('PatientAnalysesPage', () => {
+  beforeEach(() => {
+    mockedGetPatient.mockReset()
+    mockedListAnalyses.mockReset()
+    mockedGetPatient.mockResolvedValue(patient)
+    mockedListAnalyses.mockResolvedValue([])
+  })
+
+  it('shows a loading state while the patient is being fetched', () => {
+    mockedGetPatient.mockReturnValue(new Promise(() => {}))
+    renderPage()
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading patient')
+  })
+
+  it('fetches only this patient’s analyses, scoped by patientId', async () => {
+    mockedListAnalyses.mockResolvedValue([])
+    renderPage()
+
+    await screen.findByRole('heading', { name: /Analyses for Jane Doe/ })
+    expect(mockedListAnalyses).toHaveBeenCalledWith(7, 10)
+  })
+
+  it('shows a back link to the patient overview and a link to start an analysis', async () => {
+    mockedListAnalyses.mockResolvedValue([])
+    renderPage()
+
+    expect(await screen.findByRole('link', { name: /Back to Jane Doe/ })).toHaveAttribute(
+      'href',
+      '/patients/7',
+    )
+    expect(screen.getByRole('link', { name: '+ Start analysis' })).toHaveAttribute(
+      'href',
+      '/patients/7/upload',
+    )
+  })
+
+  it('shows the empty state with a link to start the first analysis', async () => {
+    mockedListAnalyses.mockResolvedValue([])
+    renderPage()
+
+    expect(await screen.findByText('No analyses yet')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Start an analysis' })).toHaveAttribute(
+      'href',
+      '/patients/7/upload',
+    )
+  })
+
+  it('lists this patient’s analyses, linking each to the patient-scoped detail route', async () => {
+    mockedListAnalyses.mockResolvedValue([sampleAnalysis])
+    renderPage()
+
+    const cardLink = await screen.findByRole('link', { name: /status: Completed/ })
+    expect(cardLink).toHaveAttribute('href', '/patients/7/analyses/42')
+    expect(screen.getByText('Reconciliation completed with 1 finding.')).toBeInTheDocument()
+  })
+
+  it('shows an error state for the analysis list independent of the patient details', async () => {
+    mockedListAnalyses.mockRejectedValue({ status: 500, message: 'Could not load analyses.' })
+    renderPage()
+
+    await screen.findByRole('heading', { name: /Analyses for Jane Doe/ })
+    expect(await screen.findByText('Could not load analyses.')).toBeInTheDocument()
+  })
+
+  it('shows a not-found error when the patient does not exist or is not owned by the user', async () => {
+    mockedGetPatient.mockRejectedValue({ status: 404, message: 'Patient not found' })
+    renderPage()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Patient not found')
+  })
+})

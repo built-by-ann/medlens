@@ -32,11 +32,6 @@ export function TopNav() {
               Patients
             </NavLink>
           </li>
-          <li>
-            <NavLink to={ROUTES.upload} className={navLinkClassName}>
-              Upload
-            </NavLink>
-          </li>
         </ul>
 
         <div>

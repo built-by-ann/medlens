@@ -1,6 +1,6 @@
 """End-to-end integration test for the complete analysis workflow.
 
-Unlike the per-component tests in test_ai_routes.py and test_analysis.py,
+Unlike the per-component tests in test_analyses.py and test_analysis.py,
 which each exercise one endpoint or function in isolation, this test chains
 the whole workflow together in a single run (register, authenticate, upload
 documents, summarize, retrieve, and confirm ownership enforcement) and
@@ -58,9 +58,20 @@ def _auth_headers(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def _create_document(client, token, title, raw_text):
+def _create_patient(client, token, **overrides):
+    payload = {
+        "first_name": "Jane",
+        "last_name": "Doe",
+        "date_of_birth": "1980-05-14",
+    }
+    payload.update(overrides)
+
+    return client.post("/patients", json=payload, headers=_auth_headers(token))
+
+
+def _create_document(client, token, patient_id, title, raw_text):
     response = client.post(
-        "/clinical-documents",
+        f"/patients/{patient_id}/clinical-documents",
         json={"document_type": "visit_note", "title": title, "raw_text": raw_text},
         headers=_auth_headers(token),
     )
@@ -91,31 +102,34 @@ def test_complete_analysis_workflow_from_summarize_through_retrieval(client):
     token = _register_and_login(client, "workflow@example.com")
     assert token
 
-    # 3. Prerequisite data: two clinical documents, so the fake response's
-    # "possible_inconsistencies" entry plausibly reflects disagreement
-    # between sources.
+    # 3. Prerequisite data: a patient, and two clinical documents scoped to
+    # that patient, so the fake response's "possible_inconsistencies" entry
+    # plausibly reflects disagreement between sources.
+    patient = _create_patient(client, token).json()
     document_a = _create_document(
         client,
         token,
+        patient["id"],
         "Visit Note",
         "Patient takes Lisinopril 10 mg oral once daily.",
     )
     document_b = _create_document(
         client,
         token,
+        patient["id"],
         "Discharge Summary",
         "Continue Metformin 500 mg oral twice daily. Lisinopril dose unclear.",
     )
 
-    # 4-6. Submit to /ai/summarize with only the AI provider mocked; request
-    # validation, authentication, the AIProvider abstraction, Pydantic
-    # validation, and persistence all run for real.
+    # 4-6. Submit to /patients/{patient_id}/analyses with only the AI
+    # provider mocked; request validation, authentication, the AIProvider
+    # abstraction, Pydantic validation, and persistence all run for real.
     app.dependency_overrides[get_ai_summary_service] = _override_ai_service(
         _FakeProvider(RESPONSE_TEXT)
     )
     try:
         summarize_response = client.post(
-            "/ai/summarize",
+            f"/patients/{patient['id']}/analyses",
             json={"clinical_document_ids": [document_a["id"], document_b["id"]]},
             headers=_auth_headers(token),
         )
@@ -140,7 +154,9 @@ def test_complete_analysis_workflow_from_summarize_through_retrieval(client):
     ]
 
     # 8. Retrieve the saved analysis through the read endpoint.
-    detail_response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+    detail_response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
 
     assert detail_response.status_code == 200
     detail_body = detail_response.json()
@@ -149,6 +165,7 @@ def test_complete_analysis_workflow_from_summarize_through_retrieval(client):
     # assertion the issue requires: status, provider metadata, model_name,
     # timestamps, persisted mentions, and persisted inconsistencies.
     assert detail_body["id"] == analysis_id
+    assert detail_body["patient_id"] == patient["id"]
     assert detail_body["status"] == "completed"
     assert detail_body["provider"] == "fake-provider"
     assert detail_body["model_name"] == "fake-model-v1"
@@ -181,7 +198,8 @@ def test_complete_analysis_workflow_from_summarize_through_retrieval(client):
     other_user_token = _register_and_login(client, "workflow-intruder@example.com")
 
     forbidden_response = client.get(
-        f"/ai/analyses/{analysis_id}", headers=_auth_headers(other_user_token)
+        f"/patients/{patient['id']}/analyses/{analysis_id}",
+        headers=_auth_headers(other_user_token),
     )
 
     assert forbidden_response.status_code == 404

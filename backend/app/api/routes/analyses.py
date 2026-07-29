@@ -4,22 +4,22 @@ from sqlalchemy.orm import Session
 from app.ai.providers.base import AIProviderError
 from app.ai.schemas import ClinicalNoteSummaryRequest, ClinicalNoteSummaryResponse
 from app.ai.service import AISummaryService, get_ai_summary_service
-from app.api.deps import get_current_user
+from app.api.deps import get_owned_patient
 from app.db.session import get_db
-from app.models.user import User
+from app.models.patient import Patient
 from app.schemas.analysis import AnalysisCreate, AnalysisDetailResponse, AnalysisSummaryResponse
 from app.services.analysis_result_service import persist_analysis_result
 from app.services.analysis_service import (
     InvalidClinicalDocumentIdsError,
     create_analysis,
     delete_analysis,
-    get_analysis_for_user,
-    list_analyses_for_user,
+    get_analysis_for_patient,
+    list_analyses_for_patient,
     mark_analysis_failed,
     mark_analysis_processing,
 )
 
-router = APIRouter(prefix="/ai", tags=["ai"])
+router = APIRouter(prefix="/patients/{patient_id}/analyses", tags=["analyses"])
 
 NOT_FOUND_DETAIL = "Clinical document not found"
 ANALYSIS_NOT_FOUND_DETAIL = "Analysis not found"
@@ -33,20 +33,20 @@ def _safe_error_message(error: Exception) -> str:
 
 
 @router.post(
-    "/summarize",
+    "",
     response_model=ClinicalNoteSummaryResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def summarize_clinical_documents(
     request: ClinicalNoteSummaryRequest,
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
     ai_summary_service: AISummaryService = Depends(get_ai_summary_service),
 ) -> ClinicalNoteSummaryResponse:
     try:
         analysis = create_analysis(
             db,
-            current_user.id,
+            patient,
             AnalysisCreate(clinical_document_ids=request.clinical_document_ids),
         )
     except InvalidClinicalDocumentIdsError:
@@ -86,17 +86,18 @@ def summarize_clinical_documents(
     )
 
 
-@router.get("/analyses", response_model=list[AnalysisSummaryResponse])
+@router.get("", response_model=list[AnalysisSummaryResponse])
 def list_analyses(
     limit: int = Query(default=10, ge=1, le=50),
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> list[AnalysisSummaryResponse]:
-    analyses = list_analyses_for_user(db, current_user.id, limit=limit)
+    analyses = list_analyses_for_patient(db, patient.id, limit=limit)
 
     return [
         AnalysisSummaryResponse(
             id=analysis.id,
+            patient_id=analysis.patient_id,
             status=analysis.status,
             created_at=analysis.created_at,
             completed_at=analysis.completed_at,
@@ -114,13 +115,13 @@ def list_analyses(
     ]
 
 
-@router.get("/analyses/{analysis_id}", response_model=AnalysisDetailResponse)
+@router.get("/{analysis_id}", response_model=AnalysisDetailResponse)
 def get_analysis_detail(
     analysis_id: int,
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> AnalysisDetailResponse:
-    analysis = get_analysis_for_user(db, current_user.id, analysis_id)
+    analysis = get_analysis_for_patient(db, patient.id, analysis_id)
 
     if analysis is None:
         raise HTTPException(
@@ -136,6 +137,7 @@ def get_analysis_detail(
     # relationship collections on `analysis` are left untouched.
     return AnalysisDetailResponse(
         id=analysis.id,
+        patient_id=analysis.patient_id,
         status=analysis.status,
         provider=analysis.provider,
         model_name=analysis.model_name,
@@ -152,13 +154,13 @@ def get_analysis_detail(
     )
 
 
-@router.delete("/analyses/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_analysis_detail(
     analysis_id: int,
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> None:
-    deleted = delete_analysis(db, current_user.id, analysis_id)
+    deleted = delete_analysis(db, patient.id, analysis_id)
 
     if not deleted:
         raise HTTPException(

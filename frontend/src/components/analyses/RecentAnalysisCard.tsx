@@ -44,7 +44,7 @@ export function RecentAnalysisCard({ analysis }: RecentAnalysisCardProps) {
   return (
     <Card className="p-0">
       <Link
-        to={analysisDetailPath(analysis.id)}
+        to={analysisDetailPath(analysis.patient_id, analysis.id)}
         aria-label={`View analysis from ${createdAt ?? 'an unknown date'}, status: ${statusLabel}`}
         className="flex flex-col gap-3 rounded-lg p-6 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
       >

@@ -13,7 +13,7 @@ class ClinicalDocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    user_id: int
+    patient_id: int
     document_type: str
     title: str
     raw_text: str

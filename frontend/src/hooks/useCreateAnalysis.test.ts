@@ -17,10 +17,12 @@ const mockedUploadFile = vi.mocked(uploadClinicalDocumentFile)
 const mockedCreateFromText = vi.mocked(createClinicalDocumentFromText)
 const mockedCreateAnalysis = vi.mocked(createAnalysisFromDocuments)
 
+const PATIENT_ID = 7
+
 function fakeDocument(id: number): ClinicalDocument {
   return {
     id,
-    user_id: 1,
+    patient_id: PATIENT_ID,
     document_type: 'visit_note',
     title: `Document ${id}`,
     raw_text: 'text',
@@ -63,20 +65,20 @@ describe('useCreateAnalysis', () => {
 
     const file = queuedFile(0, 'note.txt', 'medication_list')
     const note = queuedNote(0, { title: 'My note', documentType: 'discharge_summary' })
-    const { result } = renderHook(() => useCreateAnalysis())
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
 
     let analysisId: number | undefined
     await act(async () => {
       analysisId = await result.current.submit({ files: [file], notes: [note] })
     })
 
-    expect(mockedUploadFile).toHaveBeenCalledWith(file.file, 'medication_list')
-    expect(mockedCreateFromText).toHaveBeenCalledWith({
+    expect(mockedUploadFile).toHaveBeenCalledWith(PATIENT_ID, file.file, 'medication_list')
+    expect(mockedCreateFromText).toHaveBeenCalledWith(PATIENT_ID, {
       title: 'My note',
       rawText: note.rawText,
       documentType: 'discharge_summary',
     })
-    expect(mockedCreateAnalysis).toHaveBeenCalledWith([1, 2])
+    expect(mockedCreateAnalysis).toHaveBeenCalledWith(PATIENT_ID, [1, 2])
     expect(analysisId).toBe(99)
     expect(result.current.error).toBeNull()
   })
@@ -85,13 +87,16 @@ describe('useCreateAnalysis', () => {
     mockedCreateFromText.mockResolvedValue(fakeDocument(1))
     mockedCreateAnalysis.mockResolvedValue(fakeAnalysisResult(1))
 
-    const { result } = renderHook(() => useCreateAnalysis())
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
 
     await act(async () => {
       await result.current.submit({ files: [], notes: [queuedNote(0, { title: '' })] })
     })
 
-    expect(mockedCreateFromText).toHaveBeenCalledWith(expect.objectContaining({ title: 'Note 1' }))
+    expect(mockedCreateFromText).toHaveBeenCalledWith(
+      PATIENT_ID,
+      expect.objectContaining({ title: 'Note 1' }),
+    )
   })
 
   it('on retry, reuses ids already uploaded and only retries the item that failed', async () => {
@@ -100,7 +105,7 @@ describe('useCreateAnalysis', () => {
 
     const file = queuedFile(0)
     const note = queuedNote(0)
-    const { result } = renderHook(() => useCreateAnalysis())
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
 
     await act(async () => {
       await expect(result.current.submit({ files: [file], notes: [note] })).rejects.toBeTruthy()
@@ -121,7 +126,7 @@ describe('useCreateAnalysis', () => {
     // last time) was attempted again.
     expect(mockedUploadFile).toHaveBeenCalledTimes(1)
     expect(mockedCreateFromText).toHaveBeenCalledTimes(2)
-    expect(mockedCreateAnalysis).toHaveBeenCalledWith([1, 2])
+    expect(mockedCreateAnalysis).toHaveBeenCalledWith(PATIENT_ID, [1, 2])
     expect(analysisId).toBe(42)
   })
 
@@ -129,7 +134,7 @@ describe('useCreateAnalysis', () => {
     mockedUploadFile.mockRejectedValue({ status: 422, message: 'Unsupported file' })
 
     const file = queuedFile(0, 'bad-note.txt')
-    const { result } = renderHook(() => useCreateAnalysis())
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
 
     await act(async () => {
       await expect(result.current.submit({ files: [file], notes: [] })).rejects.toBeTruthy()
@@ -149,7 +154,7 @@ describe('useCreateAnalysis', () => {
 
     const file = queuedFile(0)
     const note = queuedNote(0)
-    const { result } = renderHook(() => useCreateAnalysis())
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
 
     await act(async () => {
       await expect(result.current.submit({ files: [file], notes: [note] })).rejects.toBeTruthy()
@@ -174,7 +179,7 @@ describe('useCreateAnalysis', () => {
     // The invalidated file was uploaded again; the still-cached note was not.
     expect(mockedUploadFile).toHaveBeenCalledTimes(2)
     expect(mockedCreateFromText).toHaveBeenCalledTimes(1)
-    expect(mockedCreateAnalysis).toHaveBeenLastCalledWith([3, 2])
+    expect(mockedCreateAnalysis).toHaveBeenLastCalledWith(PATIENT_ID, [3, 2])
   })
 
   it('clears the upload cache after a successful analysis is created', async () => {
@@ -182,7 +187,7 @@ describe('useCreateAnalysis', () => {
     mockedCreateAnalysis.mockResolvedValue(fakeAnalysisResult(1))
 
     const file = queuedFile(0)
-    const { result } = renderHook(() => useCreateAnalysis())
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
 
     await act(async () => {
       await result.current.submit({ files: [file], notes: [] })
@@ -206,7 +211,7 @@ describe('useCreateAnalysis', () => {
       message: 'Only .txt or text/plain files are supported',
     })
 
-    const { result } = renderHook(() => useCreateAnalysis())
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
 
     await act(async () => {
       await expect(
@@ -230,7 +235,7 @@ describe('useCreateAnalysis', () => {
     )
     mockedCreateAnalysis.mockResolvedValue(fakeAnalysisResult(1))
 
-    const { result } = renderHook(() => useCreateAnalysis())
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
 
     let submitPromise!: Promise<number>
     act(() => {

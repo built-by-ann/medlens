@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_owned_patient
 from app.core.pdf import PdfExtractionError, extract_text_from_pdf
 from app.db.session import get_db
-from app.models.user import User
+from app.models.patient import Patient
 from app.schemas.clinical_document import ClinicalDocumentCreate, ClinicalDocumentResponse
 from app.services.clinical_document_service import (
     PDF_FILE_TYPE,
@@ -13,10 +13,12 @@ from app.services.clinical_document_service import (
     create_clinical_document_from_file,
     delete_clinical_document,
     get_clinical_document,
-    get_clinical_documents_for_user,
+    get_clinical_documents_for_patient,
 )
 
-router = APIRouter(prefix="/clinical-documents", tags=["clinical-documents"])
+router = APIRouter(
+    prefix="/patients/{patient_id}/clinical-documents", tags=["clinical-documents"]
+)
 
 NOT_FOUND_DETAIL = "Clinical document not found"
 
@@ -28,10 +30,10 @@ NOT_FOUND_DETAIL = "Clinical document not found"
 )
 def create_document(
     document_in: ClinicalDocumentCreate,
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> ClinicalDocumentResponse:
-    return create_clinical_document(db, current_user.id, document_in)
+    return create_clinical_document(db, patient, document_in)
 
 
 @router.post(
@@ -43,7 +45,7 @@ def upload_txt_document(
     document_type: str = Form(min_length=1),
     title: str = Form(min_length=1),
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> ClinicalDocumentResponse:
     is_txt_extension = (file.filename or "").lower().endswith(".txt")
@@ -73,7 +75,7 @@ def upload_txt_document(
 
     return create_clinical_document_from_file(
         db,
-        current_user.id,
+        patient,
         document_type=document_type,
         title=title,
         raw_text=raw_text,
@@ -91,7 +93,7 @@ def upload_pdf_document(
     document_type: str = Form(min_length=1),
     title: str = Form(min_length=1),
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> ClinicalDocumentResponse:
     is_pdf_extension = (file.filename or "").lower().endswith(".pdf")
@@ -127,7 +129,7 @@ def upload_pdf_document(
 
     return create_clinical_document_from_file(
         db,
-        current_user.id,
+        patient,
         document_type=document_type,
         title=title,
         raw_text=raw_text,
@@ -138,19 +140,19 @@ def upload_pdf_document(
 
 @router.get("", response_model=list[ClinicalDocumentResponse])
 def list_documents(
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> list[ClinicalDocumentResponse]:
-    return get_clinical_documents_for_user(db, current_user.id)
+    return get_clinical_documents_for_patient(db, patient.id)
 
 
 @router.get("/{document_id}", response_model=ClinicalDocumentResponse)
 def read_document(
     document_id: int,
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> ClinicalDocumentResponse:
-    document = get_clinical_document(db, current_user.id, document_id)
+    document = get_clinical_document(db, patient.id, document_id)
 
     if document is None:
         raise HTTPException(
@@ -164,10 +166,10 @@ def read_document(
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_document(
     document_id: int,
-    current_user: User = Depends(get_current_user),
+    patient: Patient = Depends(get_owned_patient),
     db: Session = Depends(get_db),
 ) -> None:
-    deleted = delete_clinical_document(db, current_user.id, document_id)
+    deleted = delete_clinical_document(db, patient.id, document_id)
 
     if not deleted:
         raise HTTPException(

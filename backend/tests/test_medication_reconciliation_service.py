@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 from app.core.security import hash_password
@@ -6,6 +8,7 @@ from app.models.clinical_document import ClinicalDocument
 from app.models.medication import Medication
 from app.models.medication_discrepancy import MedicationDiscrepancy
 from app.models.medication_mention import MedicationMention
+from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.analysis import AnalysisResponse, AnalysisStatus
 from app.schemas.medication_discrepancy import (
@@ -34,9 +37,27 @@ def _create_user(db, email="reconciliation.user@example.com"):
     return user
 
 
-def _create_clinical_document(db, user, document_type="visit_note", title="Visit Note"):
+def _create_patient(db, user, **overrides):
+    defaults = {
+        "first_name": "Jane",
+        "last_name": "Doe",
+        "date_of_birth": date(1980, 5, 14),
+        "status": "active",
+    }
+    defaults.update(overrides)
+
+    patient = Patient(user_id=user.id, **defaults)
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+
+    return patient
+
+
+def _create_clinical_document(db, patient, document_type="visit_note", title="Visit Note"):
     document = ClinicalDocument(
-        user_id=user.id,
+        patient_id=patient.id,
+        user_id=patient.user_id,
         document_type=document_type,
         title=title,
         raw_text="Patient takes Lisinopril 10 mg oral once daily.",
@@ -48,7 +69,7 @@ def _create_clinical_document(db, user, document_type="visit_note", title="Visit
     return document
 
 
-def _create_medication(db, user, **overrides):
+def _create_medication(db, patient, **overrides):
     payload = {
         "medication_name": "Lisinopril",
         "dose": "10 mg",
@@ -59,7 +80,7 @@ def _create_medication(db, user, **overrides):
     }
     payload.update(overrides)
 
-    medication = Medication(user_id=user.id, **payload)
+    medication = Medication(patient_id=patient.id, user_id=patient.user_id, **payload)
     db.add(medication)
     db.commit()
     db.refresh(medication)
@@ -90,7 +111,8 @@ def _create_mention(db, document, **overrides):
 
 def test_missing_from_medication_list_finding(db):
     user = _create_user(db, email="missing@example.com")
-    document = _create_clinical_document(db, user)
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
     mention = _create_mention(db, document, medication_name="Atorvastatin")
 
     findings = build_discrepancy_findings([], [mention], check_unsupported_entries=False)
@@ -109,8 +131,9 @@ def test_missing_from_medication_list_finding(db):
 
 def test_discontinued_status_conflict_finding(db):
     user = _create_user(db, email="discontinued@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, status="active")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, status="active")
     mention = _create_mention(db, document, status="discontinued")
 
     findings = build_discrepancy_findings(
@@ -129,8 +152,9 @@ def test_discontinued_status_conflict_finding(db):
 
 def test_dose_conflict_finding(db):
     user = _create_user(db, email="doseconflict@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, dose="10 mg")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, dose="10 mg")
     mention = _create_mention(db, document, dose="20 mg")
 
     findings = build_discrepancy_findings(
@@ -149,8 +173,9 @@ def test_dose_conflict_finding(db):
 
 def test_route_conflict_finding(db):
     user = _create_user(db, email="routeconflict@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, route="oral")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, route="oral")
     mention = _create_mention(db, document, route="intravenous")
 
     findings = build_discrepancy_findings(
@@ -164,8 +189,9 @@ def test_route_conflict_finding(db):
 
 def test_frequency_conflict_finding(db):
     user = _create_user(db, email="frequencyconflict@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, frequency="once daily")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, frequency="once daily")
     mention = _create_mention(db, document, frequency="twice daily")
 
     findings = build_discrepancy_findings(
@@ -179,8 +205,9 @@ def test_frequency_conflict_finding(db):
 
 def test_general_status_conflict_finding(db):
     user = _create_user(db, email="statusconflict@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, status="discontinued")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, status="discontinued")
     mention = _create_mention(db, document, status="active")
 
     findings = build_discrepancy_findings(
@@ -194,8 +221,9 @@ def test_general_status_conflict_finding(db):
 
 def test_general_status_conflict_for_non_discontinued_mismatch(db):
     user = _create_user(db, email="statusstarted@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, status="active")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, status="active")
     mention = _create_mention(db, document, status="started")
 
     findings = build_discrepancy_findings(
@@ -208,7 +236,8 @@ def test_general_status_conflict_for_non_discontinued_mismatch(db):
 
 def test_unsupported_medication_list_entry_finding_when_eligible(db):
     user = _create_user(db, email="unsupported@example.com")
-    medication = _create_medication(db, user, medication_name="Metformin")
+    patient = _create_patient(db, user)
+    medication = _create_medication(db, patient, medication_name="Metformin")
 
     findings = build_discrepancy_findings([medication], [], check_unsupported_entries=True)
 
@@ -224,7 +253,8 @@ def test_unsupported_medication_list_entry_finding_when_eligible(db):
 
 def test_no_unsupported_medication_list_entry_finding_when_not_eligible(db):
     user = _create_user(db, email="notchecked@example.com")
-    medication = _create_medication(db, user, medication_name="Metformin")
+    patient = _create_patient(db, user)
+    medication = _create_medication(db, patient, medication_name="Metformin")
 
     findings = build_discrepancy_findings([medication], [], check_unsupported_entries=False)
 
@@ -233,8 +263,9 @@ def test_no_unsupported_medication_list_entry_finding_when_not_eligible(db):
 
 def test_no_conflict_when_mention_lacks_comparable_field(db):
     user = _create_user(db, email="missingfield@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, dose="10 mg")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, dose="10 mg")
     mention = _create_mention(db, document, dose=None)
 
     findings = build_discrepancy_findings(
@@ -246,10 +277,11 @@ def test_no_conflict_when_mention_lacks_comparable_field(db):
 
 def test_no_findings_for_equivalent_values_after_normalization(db):
     user = _create_user(db, email="equivalent@example.com")
-    document = _create_clinical_document(db, user)
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
     medication = _create_medication(
         db,
-        user,
+        patient,
         medication_name="Lisinopril",
         dose="10 MG",
         route="PO",
@@ -275,8 +307,9 @@ def test_no_findings_for_equivalent_values_after_normalization(db):
 
 def test_duplicate_identical_mentions_produce_one_finding(db):
     user = _create_user(db, email="duplicate@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, dose="10 mg")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, dose="10 mg")
     mention_a = _create_mention(db, document, dose="20 mg")
     mention_b = _create_mention(db, document, dose="20 mg")
 
@@ -290,8 +323,9 @@ def test_duplicate_identical_mentions_produce_one_finding(db):
 
 def test_multiple_distinct_dose_values_create_separate_findings(db):
     user = _create_user(db, email="multipledistinct@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, dose="10 mg")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, dose="10 mg")
     mention_a = _create_mention(db, document, dose="20 mg")
     mention_b = _create_mention(db, document, dose="30 mg")
 
@@ -305,8 +339,9 @@ def test_multiple_distinct_dose_values_create_separate_findings(db):
 
 def test_one_matching_mention_and_one_contradictory_mention(db):
     user = _create_user(db, email="onematching@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, dose="10 mg")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, dose="10 mg")
     matching_mention = _create_mention(db, document, dose="10 mg")
     conflicting_mention = _create_mention(db, document, dose="20 mg")
 
@@ -323,9 +358,10 @@ def test_one_matching_mention_and_one_contradictory_mention(db):
 
 def test_findings_link_to_correct_medication_and_mention(db):
     user = _create_user(db, email="correctlinks@example.com")
-    document = _create_clinical_document(db, user)
-    medication_a = _create_medication(db, user, medication_name="Lisinopril", dose="10 mg")
-    medication_b = _create_medication(db, user, medication_name="Metformin", dose="500 mg")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication_a = _create_medication(db, patient, medication_name="Lisinopril", dose="10 mg")
+    medication_b = _create_medication(db, patient, medication_name="Metformin", dose="500 mg")
     mention_a = _create_mention(db, document, medication_name="Lisinopril", dose="20 mg")
     mention_b = _create_mention(db, document, medication_name="Metformin", dose="750 mg")
 
@@ -365,8 +401,9 @@ def test_severity_mapping_is_centralized_and_conservative():
 
 def test_no_discrepancies_when_names_and_fields_match_exactly(db):
     user = _create_user(db, email="exactmatch@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user)
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient)
     mention = _create_mention(db, document)
 
     findings = build_discrepancy_findings(
@@ -378,8 +415,9 @@ def test_no_discrepancies_when_names_and_fields_match_exactly(db):
 
 def test_case_insensitive_name_matching_links_to_same_medication(db):
     user = _create_user(db, email="caseinsensitive@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, medication_name="LISINOPRIL", dose="10 mg")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, medication_name="LISINOPRIL", dose="10 mg")
     mention = _create_mention(db, document, medication_name="lisinopril", dose="20 mg")
 
     findings = build_discrepancy_findings(
@@ -396,8 +434,9 @@ def test_case_insensitive_name_matching_links_to_same_medication(db):
 
 def test_status_match_active_produces_no_finding(db):
     user = _create_user(db, email="activematch@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, status="active")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, status="active")
     mention = _create_mention(db, document, status="active")
 
     findings = build_discrepancy_findings(
@@ -409,8 +448,9 @@ def test_status_match_active_produces_no_finding(db):
 
 def test_status_match_discontinued_produces_no_finding(db):
     user = _create_user(db, email="discontinuedmatch@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, status="discontinued")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, status="discontinued")
     mention = _create_mention(db, document, status="discontinued")
 
     findings = build_discrepancy_findings(
@@ -422,8 +462,9 @@ def test_status_match_discontinued_produces_no_finding(db):
 
 def test_unrecognized_status_value_matches_itself_without_a_finding(db):
     user = _create_user(db, email="unknownstatusmatch@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, status="on hold")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, status="on hold")
     mention = _create_mention(db, document, status="on hold")
 
     findings = build_discrepancy_findings(
@@ -435,8 +476,9 @@ def test_unrecognized_status_value_matches_itself_without_a_finding(db):
 
 def test_unrecognized_status_mismatch_produces_general_conflict_not_discontinued(db):
     user = _create_user(db, email="unknownstatusmismatch@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, status="on hold")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, status="on hold")
     mention = _create_mention(db, document, status="active")
 
     findings = build_discrepancy_findings(
@@ -455,8 +497,9 @@ def test_dose_present_only_on_mention_produces_no_finding(db):
     # value. This is the reverse of test_no_conflict_when_mention_lacks_
     # comparable_field, which covers the mention lacking a value instead.
     user = _create_user(db, email="mentiondoseonly@example.com")
-    document = _create_clinical_document(db, user)
-    medication = _create_medication(db, user, dose="")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    medication = _create_medication(db, patient, dose="")
     mention = _create_mention(db, document, dose="10 mg")
 
     findings = build_discrepancy_findings(
@@ -468,12 +511,13 @@ def test_dose_present_only_on_mention_produces_no_finding(db):
 
 def test_multiple_discrepancy_types_in_a_single_run(db):
     user = _create_user(db, email="multipletypes@example.com")
-    document = _create_clinical_document(db, user)
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
 
     dose_conflict_medication = _create_medication(
-        db, user, medication_name="Lisinopril", dose="10 mg"
+        db, patient, medication_name="Lisinopril", dose="10 mg"
     )
-    unsupported_medication = _create_medication(db, user, medication_name="Metformin")
+    unsupported_medication = _create_medication(db, patient, medication_name="Metformin")
 
     dose_conflict_mention = _create_mention(
         db, document, medication_name="Lisinopril", dose="20 mg"
@@ -509,11 +553,12 @@ def test_multiple_discrepancy_types_in_a_single_run(db):
 
 def test_run_medication_reconciliation_completes_with_correct_counts(db):
     user = _create_user(db, email="counts@example.com")
-    document = _create_clinical_document(db, user)
-    _create_medication(db, user, dose="10 mg")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    _create_medication(db, patient, dose="10 mg")
     _create_mention(db, document, dose="20 mg")
 
-    analysis = run_medication_reconciliation(db, user.id, [document.id])
+    analysis = run_medication_reconciliation(db, patient, [document.id])
 
     assert analysis.status == "completed"
     assert analysis.total_findings == 1
@@ -524,10 +569,11 @@ def test_run_medication_reconciliation_completes_with_correct_counts(db):
 
 def test_run_medication_reconciliation_sets_timestamps(db):
     user = _create_user(db, email="timestamps@example.com")
-    document = _create_clinical_document(db, user)
-    _create_medication(db, user)
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    _create_medication(db, patient)
 
-    analysis = run_medication_reconciliation(db, user.id, [document.id])
+    analysis = run_medication_reconciliation(db, patient, [document.id])
 
     assert analysis.started_at is not None
     assert analysis.completed_at is not None
@@ -536,11 +582,12 @@ def test_run_medication_reconciliation_sets_timestamps(db):
 
 def test_run_medication_reconciliation_preserves_provider_and_model(db):
     user = _create_user(db, email="providermodel@example.com")
-    document = _create_clinical_document(db, user)
-    _create_medication(db, user)
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    _create_medication(db, patient)
 
     analysis = run_medication_reconciliation(
-        db, user.id, [document.id], provider="google", model_name="gemini-pro"
+        db, patient, [document.id], provider="google", model_name="gemini-pro"
     )
 
     assert analysis.provider == "google"
@@ -549,30 +596,48 @@ def test_run_medication_reconciliation_preserves_provider_and_model(db):
 
 def test_run_medication_reconciliation_rejects_nonexistent_document(db):
     user = _create_user(db, email="nonexistentdoc@example.com")
+    patient = _create_patient(db, user)
 
     with pytest.raises(InvalidClinicalDocumentIdsError):
-        run_medication_reconciliation(db, user.id, [999999])
+        run_medication_reconciliation(db, patient, [999999])
 
-    assert db.query(Analysis).filter(Analysis.user_id == user.id).count() == 0
+    assert db.query(Analysis).filter(Analysis.patient_id == patient.id).count() == 0
 
 
 def test_run_medication_reconciliation_rejects_document_owned_by_another_user(db):
     user = _create_user(db, email="reconowner@example.com")
     other_user = _create_user(db, email="reconintruder@example.com")
-    other_document = _create_clinical_document(db, other_user)
+    patient = _create_patient(db, user)
+    other_patient = _create_patient(db, other_user)
+    other_document = _create_clinical_document(db, other_patient)
 
     with pytest.raises(InvalidClinicalDocumentIdsError):
-        run_medication_reconciliation(db, user.id, [other_document.id])
+        run_medication_reconciliation(db, patient, [other_document.id])
 
-    assert db.query(Analysis).filter(Analysis.user_id == user.id).count() == 0
+    assert db.query(Analysis).filter(Analysis.patient_id == patient.id).count() == 0
+
+
+def test_run_medication_reconciliation_rejects_document_of_a_different_patient_of_the_same_user(
+    db,
+):
+    user = _create_user(db, email="reconcrosspatient@example.com")
+    patient_a = _create_patient(db, user, first_name="A")
+    patient_b = _create_patient(db, user, first_name="B")
+    document_a = _create_clinical_document(db, patient_a)
+
+    with pytest.raises(InvalidClinicalDocumentIdsError):
+        run_medication_reconciliation(db, patient_b, [document_a.id])
+
+    assert db.query(Analysis).filter(Analysis.patient_id == patient_b.id).count() == 0
 
 
 def test_run_medication_reconciliation_succeeds_with_document_with_no_mentions(db):
     user = _create_user(db, email="nomentions@example.com")
-    document = _create_clinical_document(db, user)
-    _create_medication(db, user)
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    _create_medication(db, patient)
 
-    analysis = run_medication_reconciliation(db, user.id, [document.id])
+    analysis = run_medication_reconciliation(db, patient, [document.id])
 
     assert analysis.status == "completed"
     assert analysis.total_findings == 0
@@ -580,8 +645,9 @@ def test_run_medication_reconciliation_succeeds_with_document_with_no_mentions(d
 
 def test_run_medication_reconciliation_marks_failed_on_unexpected_error(db, monkeypatch):
     user = _create_user(db, email="failure@example.com")
-    document = _create_clinical_document(db, user)
-    _create_medication(db, user)
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    _create_medication(db, patient)
 
     def _boom(*args, **kwargs):
         raise RuntimeError("simulated failure with sensitive detail: password=hunter2")
@@ -590,7 +656,7 @@ def test_run_medication_reconciliation_marks_failed_on_unexpected_error(db, monk
         "app.services.medication_reconciliation_service.build_discrepancy_findings", _boom
     )
 
-    analysis = run_medication_reconciliation(db, user.id, [document.id])
+    analysis = run_medication_reconciliation(db, patient, [document.id])
 
     assert analysis.status == "failed"
     assert analysis.error_message == "Reconciliation failed due to an internal error (RuntimeError)."
@@ -611,8 +677,9 @@ def test_run_medication_reconciliation_rolls_back_staged_discrepancies_on_late_f
     db, monkeypatch
 ):
     user = _create_user(db, email="latefailure@example.com")
-    document = _create_clinical_document(db, user)
-    _create_medication(db, user, dose="10 mg")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    _create_medication(db, patient, dose="10 mg")
     _create_mention(db, document, dose="20 mg")
 
     def _boom(*args, **kwargs):
@@ -622,7 +689,7 @@ def test_run_medication_reconciliation_rolls_back_staged_discrepancies_on_late_f
         "app.services.medication_reconciliation_service.mark_analysis_completed", _boom
     )
 
-    analysis = run_medication_reconciliation(db, user.id, [document.id])
+    analysis = run_medication_reconciliation(db, patient, [document.id])
 
     assert analysis.status == "failed"
     assert (
@@ -636,12 +703,40 @@ def test_run_medication_reconciliation_rolls_back_staged_discrepancies_on_late_f
 def test_run_medication_reconciliation_does_not_use_other_users_medications(db):
     user_a = _create_user(db, email="crossusera@example.com")
     user_b = _create_user(db, email="crossuserb@example.com")
+    patient_a = _create_patient(db, user_a)
+    patient_b = _create_patient(db, user_b)
 
-    document_a = _create_clinical_document(db, user_a)
-    _create_medication(db, user_b, medication_name="Lisinopril", dose="10 mg")
+    document_a = _create_clinical_document(db, patient_a)
+    _create_medication(db, patient_b, medication_name="Lisinopril", dose="10 mg")
     _create_mention(db, document_a, medication_name="Lisinopril", dose="20 mg")
 
-    analysis = run_medication_reconciliation(db, user_a.id, [document_a.id])
+    analysis = run_medication_reconciliation(db, patient_a, [document_a.id])
+
+    assert analysis.status == "completed"
+    assert analysis.total_findings == 1
+
+    finding = analysis.medication_discrepancies[0]
+    assert finding.discrepancy_type == "missing_from_medication_list"
+    assert finding.medication_id is None
+
+
+def test_run_medication_reconciliation_does_not_use_another_patients_medications_of_the_same_user(
+    db,
+):
+    # Distinct from test_run_medication_reconciliation_does_not_use_other_users_medications:
+    # here both patients belong to the SAME user, so this proves the
+    # reconciliation medication lookup is scoped by patient_id and not
+    # merely by the wider set of every medication that user has ever
+    # entered across all of their patients.
+    user = _create_user(db, email="crosspatientreconciliation@example.com")
+    patient_a = _create_patient(db, user, first_name="A")
+    patient_b = _create_patient(db, user, first_name="B")
+
+    document_a = _create_clinical_document(db, patient_a)
+    _create_medication(db, patient_b, medication_name="Lisinopril", dose="10 mg")
+    _create_mention(db, document_a, medication_name="Lisinopril", dose="20 mg")
+
+    analysis = run_medication_reconciliation(db, patient_a, [document_a.id])
 
     assert analysis.status == "completed"
     assert analysis.total_findings == 1
@@ -653,11 +748,12 @@ def test_run_medication_reconciliation_does_not_use_other_users_medications(db):
 
 def test_completed_analysis_and_discrepancy_serialize_through_response_schemas(db):
     user = _create_user(db, email="serialize@example.com")
-    document = _create_clinical_document(db, user)
-    _create_medication(db, user, dose="10 mg")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    _create_medication(db, patient, dose="10 mg")
     _create_mention(db, document, dose="20 mg")
 
-    analysis = run_medication_reconciliation(db, user.id, [document.id])
+    analysis = run_medication_reconciliation(db, patient, [document.id])
 
     analysis_response = AnalysisResponse.model_validate(analysis)
     assert analysis_response.status == AnalysisStatus.COMPLETED
