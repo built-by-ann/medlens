@@ -137,7 +137,8 @@ export function AnalysisProcessingPage() {
         />
         <Card className="flex flex-col items-center gap-4 py-12 text-center">
           <p className="max-w-md text-sm text-slate-600">
-            This page only works right after starting an analysis from the upload page.
+            This page only works right after starting an analysis, either by uploading documents or
+            selecting existing ones.
           </p>
           <Link
             to={patientUploadPath(patient.id)}

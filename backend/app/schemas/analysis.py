@@ -3,8 +3,6 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.medication_discrepancy import MedicationDiscrepancyDetailResponse
-
 
 class AnalysisStatus(str, Enum):
     PENDING = "pending"
@@ -65,19 +63,19 @@ class AnalysisDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime | None
 
-    document_count: int = Field(ge=0)
-
     medication_mentions: list[AnalysisMedicationMentionResponse]
     possible_inconsistencies: list[AnalysisInconsistencyResponse]
-    medication_discrepancies: list[MedicationDiscrepancyDetailResponse]
 
 
 class AnalysisSummaryResponse(BaseModel):
     """A single row in a patient's analysis history.
 
     Deliberately narrower than AnalysisDetailResponse: no medication
-    mentions, inconsistencies, or discrepancies, since a list view only
-    needs enough to identify an analysis and decide whether to open it.
+    mentions or inconsistencies, since a list view only needs enough to
+    identify an analysis and decide whether to open it. document_count is
+    computed (len(analysis.clinical_documents)), not a model column, so
+    this cannot be built with model_validate the way AnalysisDetailResponse
+    is; the route constructs it field by field instead.
     """
 
     id: int

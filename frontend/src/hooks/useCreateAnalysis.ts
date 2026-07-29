@@ -19,6 +19,12 @@ export interface QueuedNote {
 export interface SubmitInput {
   files: QueuedFile[]
   notes: QueuedNote[]
+  // Ids of clinical documents the patient already has on file, selected for
+  // reuse rather than uploaded in this submission (Issue #145). These never
+  // go through the upload/cache logic below - they're already real
+  // ClinicalDocument rows - and are simply included in the same
+  // createAnalysisFromDocuments call alongside anything newly uploaded.
+  existingDocumentIds?: number[]
 }
 
 interface UseCreateAnalysisResult {
@@ -39,7 +45,9 @@ export function noteItemKey(id: number): string {
 
 /**
  * Uploads every selected file and pasted note as a ClinicalDocument, then
- * creates an analysis from all of them.
+ * creates an analysis from all of them, together with any already-existing
+ * documents passed via existingDocumentIds (Issue #145 - selected from a
+ * patient's prior uploads rather than uploaded again here).
  *
  * Each item's resulting document id is cached as soon as it succeeds,
  * keyed by its stable queue id (fileItemKey/noteItemKey), not its position.
@@ -67,13 +75,13 @@ export function useCreateAnalysis(patientId: number): UseCreateAnalysisResult {
   }, [])
 
   const submit = useCallback(
-    async ({ files, notes }: SubmitInput): Promise<number> => {
+    async ({ files, notes, existingDocumentIds = [] }: SubmitInput): Promise<number> => {
       setIsSubmitting(true)
       setError(null)
       setFailedItemLabel(null)
 
       try {
-        const clinicalDocumentIds: number[] = []
+        const clinicalDocumentIds: number[] = [...existingDocumentIds]
 
         for (const queuedFile of files) {
           const key = fileItemKey(queuedFile.id)

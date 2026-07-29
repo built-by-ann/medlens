@@ -3,9 +3,6 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.clinical_document import ClinicalDocumentSummaryResponse
-from app.schemas.medication import MedicationResponse
-
 
 class DiscrepancyType(str, Enum):
     MISSING_FROM_MEDICATION_LIST = "missing_from_medication_list"
@@ -69,36 +66,3 @@ class MedicationDiscrepancyResponse(BaseModel):
 
     created_at: datetime
     updated_at: datetime | None
-
-
-class MedicationMentionEvidenceResponse(BaseModel):
-    """A MedicationMention as supporting evidence for a discrepancy.
-
-    MedicationMention has no API exposure of its own elsewhere in the app -
-    this is a purpose-built, read-only view of it for this one use, not a
-    general-purpose mention schema.
-    """
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    medication_name: str
-    dose: str | None
-    route: str | None
-    frequency: str | None
-    status: str | None
-    context_text: str | None
-    clinical_document: ClinicalDocumentSummaryResponse
-
-
-class MedicationDiscrepancyDetailResponse(MedicationDiscrepancyResponse):
-    """MedicationDiscrepancyResponse plus the supporting evidence a provider
-    needs to evaluate the finding, without a separate request: the patient's
-    own Medication row (when medication_id is set) and/or the MedicationMention
-    that was actually extracted from a clinical document (when
-    medication_mention_id is set). Either, both, or neither may be present,
-    matching the nullability of the two source foreign keys.
-    """
-
-    medication: MedicationResponse | None = None
-    medication_mention: MedicationMentionEvidenceResponse | None = None

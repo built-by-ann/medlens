@@ -23,6 +23,7 @@ import {
   patientEditPath,
   patientMedicationsPath,
   patientUploadPath,
+  selectDocumentsPath,
 } from '@/routes/paths'
 import type { ApiError } from '@/api/client'
 
@@ -135,9 +136,17 @@ export function PatientOverviewPage() {
           </nav>
 
           <section aria-labelledby="documents-heading" className="flex flex-col gap-4">
-            <h2 id="documents-heading" className="text-lg font-semibold text-slate-900">
-              Clinical documents
-            </h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 id="documents-heading" className="text-lg font-semibold text-slate-900">
+                Clinical documents
+              </h2>
+              <Link
+                to={selectDocumentsPath(patient.id)}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                Create analysis from documents
+              </Link>
+            </div>
 
             {areDocumentsLoading && <LoadingSpinner label="Loading documents" />}
 

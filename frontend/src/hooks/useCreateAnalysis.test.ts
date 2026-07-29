@@ -226,6 +226,44 @@ describe('useCreateAnalysis', () => {
     expect(mockedCreateAnalysis).not.toHaveBeenCalled()
   })
 
+  it('creates an analysis from existing document ids without uploading anything', async () => {
+    mockedCreateAnalysis.mockResolvedValue(fakeAnalysisResult(7))
+
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
+
+    let analysisId: number | undefined
+    await act(async () => {
+      analysisId = await result.current.submit({
+        files: [],
+        notes: [],
+        existingDocumentIds: [11, 12],
+      })
+    })
+
+    expect(mockedUploadFile).not.toHaveBeenCalled()
+    expect(mockedCreateFromText).not.toHaveBeenCalled()
+    expect(mockedCreateAnalysis).toHaveBeenCalledWith(PATIENT_ID, [11, 12])
+    expect(analysisId).toBe(7)
+  })
+
+  it('combines existing document ids with newly uploaded files and notes', async () => {
+    mockedUploadFile.mockResolvedValue(fakeDocument(1))
+    mockedCreateFromText.mockResolvedValue(fakeDocument(2))
+    mockedCreateAnalysis.mockResolvedValue(fakeAnalysisResult(9))
+
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
+
+    await act(async () => {
+      await result.current.submit({
+        files: [queuedFile(0)],
+        notes: [queuedNote(0)],
+        existingDocumentIds: [50],
+      })
+    })
+
+    expect(mockedCreateAnalysis).toHaveBeenCalledWith(PATIENT_ID, [50, 1, 2])
+  })
+
   it('sets isSubmitting while the sequence is in flight', async () => {
     let resolveUpload: (document: ClinicalDocument) => void = () => {}
     mockedUploadFile.mockReturnValue(

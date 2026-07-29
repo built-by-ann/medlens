@@ -10,6 +10,7 @@ export const ROUTES = {
   patientMedications: '/patients/:patientId/medications',
   patientUpload: '/patients/:patientId/upload',
   patientAnalyses: '/patients/:patientId/analyses',
+  patientSelectDocuments: '/patients/:patientId/analyses/select-documents',
   patientAnalysisProcessing: '/patients/:patientId/analyses/processing',
   patientAnalysisDetail: '/patients/:patientId/analyses/:analysisId',
   // Pre-Sprint-3.5 global routes, kept only as redirect targets (see
@@ -37,6 +38,10 @@ export function patientUploadPath(patientId: string | number): string {
 
 export function patientAnalysesPath(patientId: string | number): string {
   return `/patients/${patientId}/analyses`
+}
+
+export function selectDocumentsPath(patientId: string | number): string {
+  return `/patients/${patientId}/analyses/select-documents`
 }
 
 export function analysisProcessingPath(patientId: string | number): string {
