@@ -1,4 +1,4 @@
-import { RecentAnalysisCard } from '@/components/dashboard/RecentAnalysisCard'
+import { RecentAnalysisCard } from '@/components/analyses/RecentAnalysisCard'
 import type { AnalysisSummary } from '@/types/api'
 
 interface RecentAnalysesListProps {

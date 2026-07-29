@@ -22,6 +22,7 @@ export type AnalysisStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
 export interface AnalysisSummary {
   id: number
+  patient_id: number
   status: AnalysisStatus
   created_at: string
   completed_at: string | null
@@ -38,7 +39,7 @@ export interface AnalysisSummary {
 
 export interface ClinicalDocument {
   id: number
-  user_id: number
+  patient_id: number
   document_type: string
   title: string
   raw_text: string

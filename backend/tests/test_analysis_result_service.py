@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 from app.ai.schemas import ClinicalSummary
@@ -6,6 +8,7 @@ from app.models.analysis import Analysis
 from app.models.analysis_inconsistency import AnalysisInconsistency
 from app.models.analysis_medication_mention import AnalysisMedicationMention
 from app.models.clinical_document import ClinicalDocument
+from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.analysis import AnalysisCreate
 from app.services.analysis_result_service import persist_analysis_result
@@ -25,9 +28,27 @@ def _create_user(db, email="result.user@example.com"):
     return user
 
 
-def _create_clinical_document(db, user):
+def _create_patient(db, user, **overrides):
+    defaults = {
+        "first_name": "Jane",
+        "last_name": "Doe",
+        "date_of_birth": date(1980, 5, 14),
+        "status": "active",
+    }
+    defaults.update(overrides)
+
+    patient = Patient(user_id=user.id, **defaults)
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+
+    return patient
+
+
+def _create_clinical_document(db, patient):
     document = ClinicalDocument(
-        user_id=user.id,
+        patient_id=patient.id,
+        user_id=patient.user_id,
         document_type="visit_note",
         title="Visit Note",
         raw_text="Patient takes Lisinopril 10 mg oral once daily.",
@@ -41,9 +62,10 @@ def _create_clinical_document(db, user):
 
 def _create_pending_analysis(db, email):
     user = _create_user(db, email=email)
-    document = _create_clinical_document(db, user)
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
 
-    return create_analysis(db, user.id, AnalysisCreate(clinical_document_ids=[document.id]))
+    return create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
 
 def _clinical_summary(**overrides):

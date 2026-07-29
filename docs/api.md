@@ -714,11 +714,182 @@ Possible error responses
 
 ---
 
-### POST /ai/summarize
+### POST /patients/{patient_id}/clinical-documents
 
 Purpose
 
-Summarizes one or more of the authenticated user's clinical documents using the configured AI provider, and persists the result as a completed Analysis. See `docs/ai.md` for the provider architecture and `docs/data-model.md` for what is stored.
+Creates a clinical document from pasted text, belonging to the given patient. As of Sprint 3.5 (Issue #130), clinical documents are owned by a `Patient`, not directly by the authenticated user - see `docs/data-model.md`.
+
+Authorization
+
+Every route in this section resolves `patient_id` through the same shared `get_owned_patient` dependency used by the medication routes: the patient must exist and belong to the authenticated user. This applies uniformly whether the patient is active or archived - an archived patient's clinical documents remain fully manageable through these endpoints, only `GET /patients` (the active patient list) excludes them.
+
+Request body
+
+```json
+{
+  "document_type": "visit_note",
+  "title": "Initial Visit",
+  "raw_text": "Patient presents with hypertension."
+}
+```
+
+Validation rules
+
+- `document_type`, `title`, and `raw_text` are required and must not be empty.
+
+Success response
+
+`201 Created`
+
+```json
+{
+  "id": 1,
+  "patient_id": 1,
+  "document_type": "visit_note",
+  "title": "Initial Visit",
+  "raw_text": "Patient presents with hypertension.",
+  "file_name": null,
+  "file_type": "manual_entry",
+  "created_at": "2026-07-12T19:59:14.696845Z",
+  "updated_at": null
+}
+```
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user - `{"detail": "Patient not found"}`.
+- `422 Unprocessable Entity`: a required field is missing or empty.
+
+---
+
+### POST /patients/{patient_id}/clinical-documents/upload-txt
+
+Purpose
+
+Creates a clinical document belonging to the given patient from an uploaded `.txt` file. `document_type` and `title` are sent as form fields alongside the file.
+
+Accepted file type
+
+`.txt` file extension or `text/plain` content type.
+
+Validation rules
+
+- The file must decode as valid UTF-8 text.
+- The decoded text must not be empty.
+
+Success response
+
+`201 Created` - same shape as `POST /patients/{patient_id}/clinical-documents`, with `file_name` set to the uploaded file's name and `file_type` set to `"txt"`.
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
+- `422 Unprocessable Entity`: the file is not a `.txt`/`text/plain` file, is not valid UTF-8, or decodes to empty text.
+
+---
+
+### POST /patients/{patient_id}/clinical-documents/upload-pdf
+
+Purpose
+
+Creates a clinical document belonging to the given patient from an uploaded `.pdf` file, extracting its text content.
+
+Accepted file type
+
+`.pdf` file extension or `application/pdf` content type.
+
+Validation rules
+
+- The file must not be empty.
+- The file must be a valid, parseable PDF.
+- The PDF must contain extractable text.
+
+Success response
+
+`201 Created` - same shape as `POST /patients/{patient_id}/clinical-documents`, with `file_name` set to the uploaded file's name and `file_type` set to `"pdf"`.
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
+- `422 Unprocessable Entity`: the file is not a `.pdf`/`application/pdf` file, is empty, is malformed, or has no extractable text.
+
+---
+
+### GET /patients/{patient_id}/clinical-documents
+
+Purpose
+
+Returns all clinical documents belonging to the given patient, most recently created first.
+
+Success response
+
+`200 OK` - a list of objects shaped like the `POST /patients/{patient_id}/clinical-documents` response.
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
+
+---
+
+### GET /patients/{patient_id}/clinical-documents/{document_id}
+
+Purpose
+
+Returns a single clinical document belonging to the given patient.
+
+Success response
+
+`200 OK` - shaped like the `POST /patients/{patient_id}/clinical-documents` response.
+
+404 responses
+
+Returned if `patient_id` does not exist or does not belong to the current user, or if `document_id` does not exist or belongs to a *different* patient - including a different patient owned by the same user. The same response is used in every case so that a caller cannot distinguish a nonexistent document from one it isn't allowed to see.
+
+```json
+{
+  "detail": "Patient not found"
+}
+```
+
+```json
+{
+  "detail": "Clinical document not found"
+}
+```
+
+---
+
+### DELETE /patients/{patient_id}/clinical-documents/{document_id}
+
+Purpose
+
+Deletes a clinical document belonging to the given patient. This is a real, permanent delete.
+
+Success response
+
+`204 No Content`
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user, or the document does not exist or belongs to a different patient.
+
+---
+
+### POST /patients/{patient_id}/analyses
+
+Purpose
+
+Summarizes one or more of the given patient's clinical documents using the configured AI provider, and persists the result as a completed Analysis. As of Sprint 3.5 (Issue #130), analyses are owned by a `Patient`, not directly by the authenticated user - see `docs/data-model.md`. See `docs/ai.md` for the provider architecture.
+
+Authorization
+
+Resolves `patient_id` through the same shared `get_owned_patient` dependency as the medication and clinical-document routes. Every requested `clinical_document_ids` entry must also exist and belong to this same patient - a mixed set spanning more than one patient, or referencing a document belonging to a different patient (including a different patient owned by the same user), is rejected in full and no Analysis is created.
 
 Request body
 
@@ -758,26 +929,22 @@ Success response
 
 `medications`, `possible_inconsistencies`, and `summary` are the provider's response, parsed as JSON and validated against a Pydantic schema. `analysis_id` identifies the Analysis this request created, whose fields, medication mentions, and inconsistencies are persisted before the response is returned. No discrepancy detection or reconciliation is performed on it. See `docs/ai.md` for the full response schema.
 
-If a requested document does not exist or is not owned by the caller, no Analysis is created at all. If the AI provider or persistence fails after the Analysis is created, it is marked `failed` with a sanitized error message rather than left in an incomplete state. See Error Responses below.
+If a requested document does not exist or does not belong to this patient, no Analysis is created at all. If the AI provider or persistence fails after the Analysis is created, it is marked `failed` with a sanitized error message rather than left in an incomplete state. See Error Responses below.
 
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
-- `404 Not Found`: a requested document does not exist or does not belong to the current user.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user, or a requested document does not exist or does not belong to this patient.
 - `422 Unprocessable Entity`: `clinical_document_ids` is missing or empty.
 - `503 Service Unavailable`: the AI provider could not produce a usable response, including a missing API key, a request failure, a timeout, malformed JSON, or a response that fails schema validation.
 
 ---
 
-### GET /ai/analyses
+### GET /patients/{patient_id}/analyses
 
 Purpose
 
-Returns a page of the authenticated user's own analyses, most recently created first, for use as a "recent analyses" list. Read-only; no query parameter can widen the result beyond the caller's own analyses.
-
-Authentication requirements
-
-Requires a valid Bearer token in the `Authorization` header, as described above.
+Returns a page of the given patient's analyses, most recently created first, for use as a "recent analyses" list. Read-only; no query parameter can widen the result beyond this patient's own analyses.
 
 Query parameters
 
@@ -791,6 +958,7 @@ Success response
 [
   {
     "id": 7,
+    "patient_id": 1,
     "status": "completed",
     "created_at": "2026-07-12T19:59:14.500000Z",
     "completed_at": "2026-07-12T19:59:16.112249Z",
@@ -807,24 +975,21 @@ Success response
 ]
 ```
 
-An empty list is returned if the user has no analyses yet; this is a normal, successful response, not an error. Ordering is by `id` descending, not `created_at`, since rows created together can share an identical `created_at` (Postgres's `now()` is constant within a transaction). Unlike `GET /ai/analyses/{analysis_id}`, list rows never include `medication_mentions` or `possible_inconsistencies`; fetch the detail endpoint for that.
+An empty list is returned if the patient has no analyses yet; this is a normal, successful response, not an error. Ordering is by `id` descending, not `created_at`, since rows created together can share an identical `created_at` (Postgres's `now()` is constant within a transaction). Unlike `GET /patients/{patient_id}/analyses/{analysis_id}`, list rows never include `medication_mentions` or `possible_inconsistencies`; fetch the detail endpoint for that.
 
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
 - `422 Unprocessable Entity`: `limit` is outside the `1`-`50` range.
 
 ---
 
-### GET /ai/analyses/{analysis_id}
+### GET /patients/{patient_id}/analyses/{analysis_id}
 
 Purpose
 
-Returns the metadata and persisted results of one of the authenticated user's analyses. Read-only: it does not create, rerun, or modify an analysis. See `docs/data-model.md` for the underlying `Analysis`, `AnalysisMedicationMention`, and `AnalysisInconsistency` models.
-
-Authentication requirements
-
-Requires a valid Bearer token in the `Authorization` header, as described above.
+Returns the metadata and persisted results of one of the given patient's analyses. Read-only: it does not create, rerun, or modify an analysis. See `docs/data-model.md` for the underlying `Analysis`, `AnalysisMedicationMention`, and `AnalysisInconsistency` models.
 
 Success response
 
@@ -833,6 +998,7 @@ Success response
 ```json
 {
   "id": 7,
+  "patient_id": 1,
   "status": "completed",
   "provider": "gemini",
   "model_name": "gemini-2.0-flash",
@@ -864,11 +1030,17 @@ Success response
 
 `medication_mentions` and `possible_inconsistencies` are always returned, sorted by ascending `id`, even for analyses that have none (an empty list) or that failed before persisting any results (both lists empty, `summary`, `provider`, and `model_name` are `null`).
 
-`error_message` is `null` unless `status` is `"failed"`, in which case it holds the same sanitized message returned by `POST /ai/summarize` at failure time (see that endpoint's `503` response above). It never contains a stack trace, a provider exception, `ValidationError` details, raw AI output, or a raw SQL error; only the sanitized message already stored on the Analysis is exposed.
+`error_message` is `null` unless `status` is `"failed"`, in which case it holds the same sanitized message returned by `POST /patients/{patient_id}/analyses` at failure time (see that endpoint's `503` response above). It never contains a stack trace, a provider exception, `ValidationError` details, raw AI output, or a raw SQL error; only the sanitized message already stored on the Analysis is exposed.
 
 404 responses
 
-Returned if `analysis_id` does not exist or belongs to a different user. The same response is used in both cases so that a caller cannot distinguish a nonexistent analysis from one owned by someone else.
+Returned if `patient_id` does not exist or does not belong to the current user, or if `analysis_id` does not exist or belongs to a *different* patient - including a different patient owned by the same user. The same response is used in every case so that a caller cannot distinguish a nonexistent analysis from one it isn't allowed to see.
+
+```json
+{
+  "detail": "Patient not found"
+}
+```
 
 ```json
 {
@@ -879,40 +1051,30 @@ Returned if `analysis_id` does not exist or belongs to a different user. The sam
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
-- `404 Not Found`: the analysis does not exist or does not belong to the current user.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user, or the analysis does not exist or belongs to a different patient.
 
 ---
 
-### DELETE /ai/analyses/{analysis_id}
+### DELETE /patients/{patient_id}/analyses/{analysis_id}
 
 Purpose
 
-Permanently deletes one of the authenticated user's analyses, along with its persisted `AnalysisMedicationMention`, `AnalysisInconsistency`, and `MedicationDiscrepancy` rows. Does not delete clinical documents, medications, or any other reusable resource; only data scoped to this analysis is removed.
-
-Authentication requirements
-
-Requires a valid Bearer token in the `Authorization` header, as described above.
+Permanently deletes one of the given patient's analyses, along with its persisted `AnalysisMedicationMention`, `AnalysisInconsistency`, and `MedicationDiscrepancy` rows. Does not delete clinical documents, medications, or any other reusable resource; only data scoped to this analysis is removed.
 
 Success response
 
 `204 No Content`
 
-No response body. After a successful delete, `GET /ai/analyses/{analysis_id}` for the same id returns `404`.
+No response body. After a successful delete, `GET /patients/{patient_id}/analyses/{analysis_id}` for the same id returns `404`.
 
 404 responses
 
-Returned if `analysis_id` does not exist or belongs to a different user, using the same response as `GET /ai/analyses/{analysis_id}` so a caller cannot distinguish a nonexistent analysis from one owned by someone else.
-
-```json
-{
-  "detail": "Analysis not found"
-}
-```
+Returned if `patient_id` does not exist or does not belong to the current user, or if `analysis_id` does not exist or belongs to a different patient, using the same responses as `GET /patients/{patient_id}/analyses/{analysis_id}` so a caller cannot distinguish a nonexistent analysis from one it isn't allowed to see.
 
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
-- `404 Not Found`: the analysis does not exist or does not belong to the current user.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user, or the analysis does not exist or belongs to a different patient.
 
 ---
 
@@ -940,7 +1102,7 @@ Returned for failed login attempts and for any request to a protected endpoint t
 
 ### 404 Not Found
 
-Returned when a requested resource does not exist, or exists but does not belong to the authenticated user. Both cases return the same response so that a caller cannot tell the two apart. Used by the `/medications/{medication_id}` and `/ai/analyses/{analysis_id}` endpoints.
+Returned when a requested resource does not exist, or exists but does not belong to the authenticated user (directly, or via a patient it doesn't belong to). Both cases return the same response so that a caller cannot tell the two apart. Used by the patient-nested `medications`, `clinical-documents`, and `analyses` endpoints, among others.
 
 ```json
 {
@@ -982,7 +1144,7 @@ Returned when the request body fails validation (invalid email format, password 
 
 ### 503 Service Unavailable
 
-Returned by `POST /ai/summarize` when the configured AI provider cannot produce a response, including a missing API key, a request failure, a timeout, or an invalid response.
+Returned by `POST /patients/{patient_id}/analyses` when the configured AI provider cannot produce a response, including a missing API key, a request failure, a timeout, or an invalid response.
 
 ```json
 {
@@ -994,4 +1156,4 @@ Returned by `POST /ai/summarize` when the configured AI provider cannot produce 
 
 ## Notes
 
-This API currently supports authentication, application infrastructure, clinical document management, user-owned medication list management, AI-generated document summaries persisted as analyses, and listing, retrieval, and deletion of a user's own analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/medications`, `/ai/summarize`, `/ai/analyses`, `/ai/analyses/{analysis_id}`). Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.
+This API currently supports authentication, application infrastructure, patient management, and patient-scoped clinical document management, medication list management, and AI-generated document summaries persisted as analyses, including listing, retrieval, and deletion of a patient's own analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/patients`, `/patients/{patient_id}/medications`, `/patients/{patient_id}/clinical-documents`, `/patients/{patient_id}/analyses`). As of Sprint 3.5 (Issue #130), all of these are scoped by `patient_id`, not `user_id`, and the earlier flat `/medications`, `/clinical-documents`, `/ai/summarize`, and `/ai/analyses` routes no longer exist. Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.

@@ -10,7 +10,13 @@ import { EmptyMedicationState } from '@/components/medications/EmptyMedicationSt
 import { usePatient } from '@/hooks/usePatient'
 import { usePatientMedications } from '@/hooks/usePatientMedications'
 import { archivePatient } from '@/api/patients'
-import { ROUTES, patientEditPath, patientMedicationsPath } from '@/routes/paths'
+import {
+  ROUTES,
+  patientAnalysesPath,
+  patientEditPath,
+  patientMedicationsPath,
+  patientUploadPath,
+} from '@/routes/paths'
 import type { ApiError } from '@/api/client'
 
 export function PatientOverviewPage() {
@@ -121,9 +127,28 @@ export function PatientOverviewPage() {
             )}
           </section>
 
-          <p className="text-sm text-slate-500">
-            Clinical documents and analysis history will appear here in a future update.
-          </p>
+          <section aria-labelledby="analyses-heading" className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 id="analyses-heading" className="text-lg font-semibold text-slate-900">
+                Clinical documents and analyses
+              </h2>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to={patientUploadPath(patient.id)}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                Upload documents
+              </Link>
+              <Link
+                to={patientAnalysesPath(patient.id)}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                View analysis history
+              </Link>
+            </div>
+          </section>
         </>
       )}
 

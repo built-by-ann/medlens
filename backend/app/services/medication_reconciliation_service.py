@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.models.analysis import Analysis
 from app.models.medication import Medication
 from app.models.medication_mention import MedicationMention
+from app.models.patient import Patient
 from app.schemas.analysis import AnalysisCompletedSummary, AnalysisCreate
 from app.schemas.medication_discrepancy import (
     DiscrepancySeverity,
@@ -327,13 +328,13 @@ def _safe_error_message(error: Exception) -> str:
 
 def run_medication_reconciliation(
     db: Session,
-    user_id: int,
+    patient: Patient,
     clinical_document_ids: list[int],
     provider: str | None = None,
     model_name: str | None = None,
 ) -> Analysis:
     analysis = create_analysis(
-        db, user_id, AnalysisCreate(clinical_document_ids=clinical_document_ids)
+        db, patient, AnalysisCreate(clinical_document_ids=clinical_document_ids)
     )
 
     try:
@@ -342,7 +343,13 @@ def run_medication_reconciliation(
         documents = analysis.clinical_documents
         document_ids = [document.id for document in documents]
 
-        medications = db.query(Medication).filter(Medication.user_id == user_id).all()
+        # Scoped to this patient specifically - not the wider set of every
+        # medication the provider (User) has ever entered across all of
+        # their patients. This is the one place reconciliation reads
+        # Medication directly rather than through medication_service, so
+        # it needed its own explicit patient_id fix (Sprint 3.5, Issue #130)
+        # once Medication moved to patient ownership.
+        medications = db.query(Medication).filter(Medication.patient_id == patient.id).all()
         mentions = (
             db.query(MedicationMention)
             .filter(MedicationMention.clinical_document_id.in_(document_ids))

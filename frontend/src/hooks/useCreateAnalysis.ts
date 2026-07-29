@@ -52,8 +52,11 @@ export function noteItemKey(id: number): string {
  * since a cached id would otherwise silently refer to stale content), never
  * read or persist it. It is also cleared automatically once an analysis is
  * actually created, since a new submission afterwards is a new attempt.
+ *
+ * Scoped to a single patientId - every uploaded document and the resulting
+ * analysis belong to this patient, never a global document/analysis pool.
  */
-export function useCreateAnalysis(): UseCreateAnalysisResult {
+export function useCreateAnalysis(patientId: number): UseCreateAnalysisResult {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [failedItemLabel, setFailedItemLabel] = useState<string | null>(null)
@@ -63,80 +66,84 @@ export function useCreateAnalysis(): UseCreateAnalysisResult {
     uploadedIds.current.delete(key)
   }, [])
 
-  const submit = useCallback(async ({ files, notes }: SubmitInput): Promise<number> => {
-    setIsSubmitting(true)
-    setError(null)
-    setFailedItemLabel(null)
+  const submit = useCallback(
+    async ({ files, notes }: SubmitInput): Promise<number> => {
+      setIsSubmitting(true)
+      setError(null)
+      setFailedItemLabel(null)
 
-    try {
-      const clinicalDocumentIds: number[] = []
+      try {
+        const clinicalDocumentIds: number[] = []
 
-      for (const queuedFile of files) {
-        const key = fileItemKey(queuedFile.id)
-        const cachedId = uploadedIds.current.get(key)
+        for (const queuedFile of files) {
+          const key = fileItemKey(queuedFile.id)
+          const cachedId = uploadedIds.current.get(key)
 
-        if (cachedId !== undefined) {
-          clinicalDocumentIds.push(cachedId)
-          continue
+          if (cachedId !== undefined) {
+            clinicalDocumentIds.push(cachedId)
+            continue
+          }
+
+          let documentId: number
+
+          try {
+            const document = await uploadClinicalDocumentFile(
+              patientId,
+              queuedFile.file,
+              queuedFile.documentType,
+            )
+            documentId = document.id
+          } catch (caughtError) {
+            setFailedItemLabel(queuedFile.file.name)
+            throw caughtError
+          }
+
+          uploadedIds.current.set(key, documentId)
+          clinicalDocumentIds.push(documentId)
         }
 
-        let documentId: number
+        for (const [index, queuedNote] of notes.entries()) {
+          const key = noteItemKey(queuedNote.id)
+          const cachedId = uploadedIds.current.get(key)
 
-        try {
-          const document = await uploadClinicalDocumentFile(
-            queuedFile.file,
-            queuedFile.documentType,
-          )
-          documentId = document.id
-        } catch (caughtError) {
-          setFailedItemLabel(queuedFile.file.name)
-          throw caughtError
+          if (cachedId !== undefined) {
+            clinicalDocumentIds.push(cachedId)
+            continue
+          }
+
+          const title = queuedNote.title.trim() || `Note ${index + 1}`
+          let documentId: number
+
+          try {
+            const document = await createClinicalDocumentFromText(patientId, {
+              title,
+              rawText: queuedNote.rawText,
+              documentType: queuedNote.documentType,
+            })
+            documentId = document.id
+          } catch (caughtError) {
+            setFailedItemLabel(title)
+            throw caughtError
+          }
+
+          uploadedIds.current.set(key, documentId)
+          clinicalDocumentIds.push(documentId)
         }
 
-        uploadedIds.current.set(key, documentId)
-        clinicalDocumentIds.push(documentId)
+        const result = await createAnalysisFromDocuments(patientId, clinicalDocumentIds)
+
+        uploadedIds.current.clear()
+
+        return result.analysis_id
+      } catch (caughtError) {
+        setError((caughtError as ApiError).message)
+        throw caughtError
+      } finally {
+        setIsSubmitting(false)
       }
-
-      for (const [index, queuedNote] of notes.entries()) {
-        const key = noteItemKey(queuedNote.id)
-        const cachedId = uploadedIds.current.get(key)
-
-        if (cachedId !== undefined) {
-          clinicalDocumentIds.push(cachedId)
-          continue
-        }
-
-        const title = queuedNote.title.trim() || `Note ${index + 1}`
-        let documentId: number
-
-        try {
-          const document = await createClinicalDocumentFromText({
-            title,
-            rawText: queuedNote.rawText,
-            documentType: queuedNote.documentType,
-          })
-          documentId = document.id
-        } catch (caughtError) {
-          setFailedItemLabel(title)
-          throw caughtError
-        }
-
-        uploadedIds.current.set(key, documentId)
-        clinicalDocumentIds.push(documentId)
-      }
-
-      const result = await createAnalysisFromDocuments(clinicalDocumentIds)
-
-      uploadedIds.current.clear()
-
-      return result.analysis_id
-    } catch (caughtError) {
-      setError((caughtError as ApiError).message)
-      throw caughtError
-    } finally {
-      setIsSubmitting(false)
-    }
-  }, [])
+    },
+    [patientId],
+  )
 
   return { isSubmitting, error, failedItemLabel, submit, invalidateItem }
 }

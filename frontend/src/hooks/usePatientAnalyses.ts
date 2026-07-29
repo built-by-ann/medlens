@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listRecentAnalyses } from '@/api/analyses'
+import { listAnalyses } from '@/api/analyses'
 import type { ApiError } from '@/api/client'
 import type { AnalysisSummary } from '@/types/api'
 
-interface UseRecentAnalysesResult {
+interface UsePatientAnalysesResult {
   analyses: AnalysisSummary[]
   isLoading: boolean
   error: string | null
@@ -11,11 +11,12 @@ interface UseRecentAnalysesResult {
 }
 
 /**
- * Fetches the current user's recent analyses. Kept separate from
- * DashboardPage so the page itself only has to compose UI states, not
- * manage fetch/cancellation logic directly.
+ * Fetches one patient's analysis history. Re-fetches whenever patientId
+ * changes, so navigating from one patient's analyses to another's doesn't
+ * show stale data. Scoped to a single patientId - there is no cross-patient
+ * or global analysis list anywhere in this hook.
  */
-export function useRecentAnalyses(limit = 10): UseRecentAnalysesResult {
+export function usePatientAnalyses(patientId: number, limit = 10): UsePatientAnalysesResult {
   const [analyses, setAnalyses] = useState<AnalysisSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -24,18 +25,11 @@ export function useRecentAnalyses(limit = 10): UseRecentAnalysesResult {
   useEffect(() => {
     let ignore = false
 
-    // This is the standard fetch-on-mount/fetch-on-dependency-change shape
-    // (matching React's own docs example for data fetching in an effect):
-    // isLoading must flip back to true synchronously, before the request is
-    // even sent, so the loading state can't instead be derived during
-    // render. react-hooks/set-state-in-effect flags this unconditionally;
-    // there is no way to restructure around it here without a data-fetching
-    // library, which this codebase deliberately avoids adding.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true)
     setError(null)
 
-    listRecentAnalyses(limit)
+    listAnalyses(patientId, limit)
       .then((result) => {
         if (ignore) return
         setAnalyses(result)
@@ -48,12 +42,10 @@ export function useRecentAnalyses(limit = 10): UseRecentAnalysesResult {
         if (!ignore) setIsLoading(false)
       })
 
-    // Cancels applying a stale response if the component unmounts or this
-    // effect re-runs (limit changes, or retry()) before the request settles.
     return () => {
       ignore = true
     }
-  }, [limit, retryCount])
+  }, [patientId, limit, retryCount])
 
   const retry = useCallback(() => {
     setRetryCount((count) => count + 1)

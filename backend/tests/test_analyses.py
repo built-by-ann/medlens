@@ -81,9 +81,22 @@ def _auth_headers(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def _create_document(client, token, title="Visit Note", raw_text="Patient takes Lisinopril 10 mg."):
+def _create_patient(client, token, **overrides):
+    payload = {
+        "first_name": "Jane",
+        "last_name": "Doe",
+        "date_of_birth": "1980-05-14",
+    }
+    payload.update(overrides)
+
+    return client.post("/patients", json=payload, headers=_auth_headers(token))
+
+
+def _create_document(
+    client, token, patient_id, title="Visit Note", raw_text="Patient takes Lisinopril 10 mg."
+):
     response = client.post(
-        "/clinical-documents",
+        f"/patients/{patient_id}/clinical-documents",
         json={"document_type": "visit_note", "title": title, "raw_text": raw_text},
         headers=_auth_headers(token),
     )
@@ -113,13 +126,15 @@ def _override_ai_service(fake_provider):
     return _factory
 
 
-def _create_completed_analysis(client, token, document_id, response_text=VALID_RESPONSE):
+def _create_completed_analysis(
+    client, token, patient_id, document_id, response_text=VALID_RESPONSE
+):
     app.dependency_overrides[get_ai_summary_service] = _override_ai_service(
         _FakeProvider(text=response_text)
     )
     try:
         response = client.post(
-            "/ai/summarize",
+            f"/patients/{patient_id}/analyses",
             json={"clinical_document_ids": [document_id]},
             headers=_auth_headers(token),
         )
@@ -131,19 +146,48 @@ def _create_completed_analysis(client, token, document_id, response_text=VALID_R
 
 
 def test_summarize_requires_authentication(client):
-    response = client.post("/ai/summarize", json={"clinical_document_ids": [1]})
+    response = client.post("/patients/1/analyses", json={"clinical_document_ids": [1]})
 
     assert response.status_code == 401
 
 
+def test_old_flat_route_no_longer_exists(client):
+    token = _register_and_login(client, "flatanalysisgone@example.com")
+
+    response = client.post(
+        "/ai/summarize",
+        json={"clinical_document_ids": [1]},
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 404
+
+
+def test_summarize_requires_a_patient_owned_by_the_user(client):
+    token_a = _register_and_login(client, "analysisowner4@example.com")
+    token_b = _register_and_login(client, "analysisintruder4@example.com")
+    patient = _create_patient(client, token_a).json()
+    document = _create_document(client, token_a, patient["id"])
+
+    response = client.post(
+        f"/patients/{patient['id']}/analyses",
+        json={"clinical_document_ids": [document["id"]]},
+        headers=_auth_headers(token_b),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Patient not found"
+
+
 def test_summarize_persists_analysis_and_returns_summary_for_owned_documents(client, db):
     token = _register_and_login(client, "aisummary@example.com")
-    document = _create_document(client, token)
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
 
     app.dependency_overrides[get_ai_summary_service] = _override_ai_service(_FakeProvider())
     try:
         response = client.post(
-            "/ai/summarize",
+            f"/patients/{patient['id']}/analyses",
             json={"clinical_document_ids": [document["id"]]},
             headers=_auth_headers(token),
         )
@@ -169,6 +213,8 @@ def test_summarize_persists_analysis_and_returns_summary_for_owned_documents(cli
 
     analysis = db.get(Analysis, body["analysis_id"])
     assert analysis.status == "completed"
+    assert analysis.patient_id == patient["id"]
+    assert analysis.user_id == patient["user_id"]
     assert analysis.completed_at is not None
     assert analysis.provider == "fake"
     assert analysis.model_name == "fake-model"
@@ -194,8 +240,13 @@ def test_summarize_persists_analysis_and_returns_summary_for_owned_documents(cli
 
 def test_summarize_combines_multiple_documents(client):
     token = _register_and_login(client, "aisummarymulti@example.com")
-    document_a = _create_document(client, token, title="Visit Note", raw_text="Note A text.")
-    document_b = _create_document(client, token, title="Discharge Summary", raw_text="Note B text.")
+    patient = _create_patient(client, token).json()
+    document_a = _create_document(
+        client, token, patient["id"], title="Visit Note", raw_text="Note A text."
+    )
+    document_b = _create_document(
+        client, token, patient["id"], title="Discharge Summary", raw_text="Note B text."
+    )
 
     captured_prompts = []
 
@@ -212,7 +263,7 @@ def test_summarize_combines_multiple_documents(client):
     )
     try:
         response = client.post(
-            "/ai/summarize",
+            f"/patients/{patient['id']}/analyses",
             json={"clinical_document_ids": [document_a["id"], document_b["id"]]},
             headers=_auth_headers(token),
         )
@@ -226,9 +277,10 @@ def test_summarize_combines_multiple_documents(client):
 
 def test_summarize_rejects_nonexistent_document(client, db):
     token = _register_and_login(client, "aisummarymissing@example.com")
+    patient = _create_patient(client, token).json()
 
     response = client.post(
-        "/ai/summarize",
+        f"/patients/{patient['id']}/analyses",
         json={"clinical_document_ids": [999999]},
         headers=_auth_headers(token),
     )
@@ -240,10 +292,12 @@ def test_summarize_rejects_nonexistent_document(client, db):
 def test_summarize_rejects_document_owned_by_another_user(client, db):
     token_a = _register_and_login(client, "aisummaryowner@example.com")
     token_b = _register_and_login(client, "aisummaryintruder@example.com")
-    document = _create_document(client, token_a)
+    patient_a = _create_patient(client, token_a).json()
+    patient_b = _create_patient(client, token_b).json()
+    document = _create_document(client, token_a, patient_a["id"])
 
     response = client.post(
-        "/ai/summarize",
+        f"/patients/{patient_b['id']}/analyses",
         json={"clinical_document_ids": [document["id"]]},
         headers=_auth_headers(token_b),
     )
@@ -252,16 +306,52 @@ def test_summarize_rejects_document_owned_by_another_user(client, db):
     assert db.query(Analysis).count() == 0
 
 
+def test_summarize_rejects_document_belonging_to_a_different_patient_of_the_same_user(
+    client, db
+):
+    token = _register_and_login(client, "aisummarycrosspatient@example.com")
+    patient_a = _create_patient(client, token, first_name="A").json()
+    patient_b = _create_patient(client, token, first_name="B").json()
+    document = _create_document(client, token, patient_a["id"])
+
+    response = client.post(
+        f"/patients/{patient_b['id']}/analyses",
+        json={"clinical_document_ids": [document["id"]]},
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 404
+    assert db.query(Analysis).count() == 0
+
+
+def test_summarize_rejects_mixed_patient_document_sets(client, db):
+    token = _register_and_login(client, "aisummarymixed@example.com")
+    patient_a = _create_patient(client, token, first_name="A").json()
+    patient_b = _create_patient(client, token, first_name="B").json()
+    document_a = _create_document(client, token, patient_a["id"])
+    document_b = _create_document(client, token, patient_b["id"])
+
+    response = client.post(
+        f"/patients/{patient_a['id']}/analyses",
+        json={"clinical_document_ids": [document_a["id"], document_b["id"]]},
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 404
+    assert db.query(Analysis).count() == 0
+
+
 def test_summarize_returns_503_when_provider_fails(client, db):
     token = _register_and_login(client, "aisummaryfailure@example.com")
-    document = _create_document(client, token)
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
 
     app.dependency_overrides[get_ai_summary_service] = _override_ai_service(
         _FakeProvider(error=AIProviderError("Gemini API key is not configured"))
     )
     try:
         response = client.post(
-            "/ai/summarize",
+            f"/patients/{patient['id']}/analyses",
             json={"clinical_document_ids": [document["id"]]},
             headers=_auth_headers(token),
         )
@@ -290,14 +380,15 @@ def test_summarize_returns_503_when_provider_fails(client, db):
 
 def test_summarize_returns_503_when_provider_response_fails_validation(client, db):
     token = _register_and_login(client, "aisummaryinvalidjson@example.com")
-    document = _create_document(client, token)
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
 
     app.dependency_overrides[get_ai_summary_service] = _override_ai_service(
         _FakeProvider(text="this is not json at all")
     )
     try:
         response = client.post(
-            "/ai/summarize",
+            f"/patients/{patient['id']}/analyses",
             json={"clinical_document_ids": [document["id"]]},
             headers=_auth_headers(token),
         )
@@ -313,9 +404,10 @@ def test_summarize_returns_503_when_provider_response_fails_validation(client, d
 
 def test_summarize_rejects_empty_document_id_list(client):
     token = _register_and_login(client, "aisummaryemptylist@example.com")
+    patient = _create_patient(client, token).json()
 
     response = client.post(
-        "/ai/summarize",
+        f"/patients/{patient['id']}/analyses",
         json={"clinical_document_ids": []},
         headers=_auth_headers(token),
     )
@@ -329,10 +421,11 @@ def test_summarize_uses_real_gemini_provider_by_default_when_key_missing(client,
     # environment, this should fail gracefully as a 503, not a 500 or crash,
     # and the failure should still be persisted as a failed Analysis.
     token = _register_and_login(client, "aisummaryrealprovider@example.com")
-    document = _create_document(client, token)
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
 
     response = client.post(
-        "/ai/summarize",
+        f"/patients/{patient['id']}/analyses",
         json={"clinical_document_ids": [document["id"]]},
         headers=_auth_headers(token),
     )
@@ -345,22 +438,26 @@ def test_summarize_uses_real_gemini_provider_by_default_when_key_missing(client,
 
 
 def test_get_analysis_detail_requires_authentication(client):
-    response = client.get("/ai/analyses/1")
+    response = client.get("/patients/1/analyses/1")
 
     assert response.status_code == 401
 
 
 def test_get_analysis_detail_returns_persisted_analysis(client):
     token = _register_and_login(client, "analysisdetail@example.com")
-    document = _create_document(client, token)
-    analysis_id = _create_completed_analysis(client, token, document["id"])
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
 
-    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 200
 
     body = response.json()
     assert body["id"] == analysis_id
+    assert body["patient_id"] == patient["id"]
     assert body["status"] == "completed"
     assert body["provider"] == "fake"
     assert body["model_name"] == "fake-model"
@@ -386,12 +483,15 @@ def test_get_analysis_detail_returns_persisted_analysis(client):
 
 def test_get_analysis_detail_with_no_medications(client):
     token = _register_and_login(client, "detailnomedications@example.com")
-    document = _create_document(client, token)
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
     analysis_id = _create_completed_analysis(
-        client, token, document["id"], response_text=NO_MEDICATIONS_RESPONSE
+        client, token, patient["id"], document["id"], response_text=NO_MEDICATIONS_RESPONSE
     )
 
-    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 200
     assert response.json()["medication_mentions"] == []
@@ -400,12 +500,15 @@ def test_get_analysis_detail_with_no_medications(client):
 
 def test_get_analysis_detail_with_no_inconsistencies(client):
     token = _register_and_login(client, "detailnoinconsistencies@example.com")
-    document = _create_document(client, token)
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
     analysis_id = _create_completed_analysis(
-        client, token, document["id"], response_text=NO_INCONSISTENCIES_RESPONSE
+        client, token, patient["id"], document["id"], response_text=NO_INCONSISTENCIES_RESPONSE
     )
 
-    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 200
     assert response.json()["possible_inconsistencies"] == []
@@ -414,12 +517,15 @@ def test_get_analysis_detail_with_no_inconsistencies(client):
 
 def test_get_analysis_detail_returns_items_in_deterministic_order(client):
     token = _register_and_login(client, "detailordering@example.com")
-    document = _create_document(client, token)
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
     analysis_id = _create_completed_analysis(
-        client, token, document["id"], response_text=MULTIPLE_ITEMS_RESPONSE
+        client, token, patient["id"], document["id"], response_text=MULTIPLE_ITEMS_RESPONSE
     )
 
-    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -447,14 +553,15 @@ def test_get_analysis_detail_returns_items_in_deterministic_order(client):
 
 def test_get_analysis_detail_includes_sanitized_error_message_for_failed_analysis(client, db):
     token = _register_and_login(client, "detailfailedmessage@example.com")
-    document = _create_document(client, token)
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
 
     app.dependency_overrides[get_ai_summary_service] = _override_ai_service(
         _FakeProvider(error=AIProviderError("Gemini API key is not configured"))
     )
     try:
         summarize_response = client.post(
-            "/ai/summarize",
+            f"/patients/{patient['id']}/analyses",
             json={"clinical_document_ids": [document["id"]]},
             headers=_auth_headers(token),
         )
@@ -464,7 +571,9 @@ def test_get_analysis_detail_includes_sanitized_error_message_for_failed_analysi
     assert summarize_response.status_code == 503
     analysis_id = db.query(Analysis).one().id
 
-    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -480,34 +589,57 @@ def test_get_analysis_detail_includes_sanitized_error_message_for_failed_analysi
 def test_get_analysis_detail_rejects_wrong_user(client):
     token_a = _register_and_login(client, "detailowner@example.com")
     token_b = _register_and_login(client, "detailintruder@example.com")
-    document = _create_document(client, token_a)
-    analysis_id = _create_completed_analysis(client, token_a, document["id"])
+    patient = _create_patient(client, token_a).json()
+    document = _create_document(client, token_a, patient["id"])
+    analysis_id = _create_completed_analysis(client, token_a, patient["id"], document["id"])
 
-    response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token_b))
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token_b)
+    )
+
+    assert response.status_code == 404
+
+
+def test_get_analysis_detail_rejects_a_different_patient_of_the_same_user(client):
+    token = _register_and_login(client, "detailcrosspatient@example.com")
+    patient_a = _create_patient(client, token, first_name="A").json()
+    patient_b = _create_patient(client, token, first_name="B").json()
+    document = _create_document(client, token, patient_a["id"])
+    analysis_id = _create_completed_analysis(client, token, patient_a["id"], document["id"])
+
+    response = client.get(
+        f"/patients/{patient_b['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 404
 
 
 def test_get_analysis_detail_rejects_nonexistent_analysis(client):
     token = _register_and_login(client, "detailmissing@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = client.get("/ai/analyses/999999", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/999999", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 404
 
 
 def test_delete_analysis_requires_authentication(client):
-    response = client.delete("/ai/analyses/1")
+    response = client.delete("/patients/1/analyses/1")
 
     assert response.status_code == 401
 
 
 def test_delete_analysis_removes_owned_analysis_and_its_children(client, db):
     token = _register_and_login(client, "deleteanalysis@example.com")
-    document = _create_document(client, token)
-    analysis_id = _create_completed_analysis(client, token, document["id"])
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
 
-    response = client.delete(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+    response = client.delete(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 204
     assert response.content == b""
@@ -527,21 +659,27 @@ def test_delete_analysis_removes_owned_analysis_and_its_children(client, db):
     )
 
     # No longer retrievable through the read endpoint.
-    get_response = client.get(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+    get_response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
     assert get_response.status_code == 404
 
 
 def test_delete_analysis_leaves_clinical_document_intact(client, db):
     token = _register_and_login(client, "deleteanalysiskeepdoc@example.com")
-    document = _create_document(client, token)
-    analysis_id = _create_completed_analysis(client, token, document["id"])
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
 
-    response = client.delete(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token))
+    response = client.delete(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 204
 
     document_response = client.get(
-        f"/clinical-documents/{document['id']}", headers=_auth_headers(token)
+        f"/patients/{patient['id']}/clinical-documents/{document['id']}",
+        headers=_auth_headers(token),
     )
     assert document_response.status_code == 200
 
@@ -549,10 +687,28 @@ def test_delete_analysis_leaves_clinical_document_intact(client, db):
 def test_delete_analysis_rejects_wrong_user(client, db):
     token_a = _register_and_login(client, "deleteanalysisowner@example.com")
     token_b = _register_and_login(client, "deleteanalysisintruder@example.com")
-    document = _create_document(client, token_a)
-    analysis_id = _create_completed_analysis(client, token_a, document["id"])
+    patient = _create_patient(client, token_a).json()
+    document = _create_document(client, token_a, patient["id"])
+    analysis_id = _create_completed_analysis(client, token_a, patient["id"], document["id"])
 
-    response = client.delete(f"/ai/analyses/{analysis_id}", headers=_auth_headers(token_b))
+    response = client.delete(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token_b)
+    )
+
+    assert response.status_code == 404
+    assert db.query(Analysis).filter(Analysis.id == analysis_id).first() is not None
+
+
+def test_delete_analysis_rejects_a_different_patient_of_the_same_user(client, db):
+    token = _register_and_login(client, "deleteanalysiscrosspatient@example.com")
+    patient_a = _create_patient(client, token, first_name="A").json()
+    patient_b = _create_patient(client, token, first_name="B").json()
+    document = _create_document(client, token, patient_a["id"])
+    analysis_id = _create_completed_analysis(client, token, patient_a["id"], document["id"])
+
+    response = client.delete(
+        f"/patients/{patient_b['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 404
     assert db.query(Analysis).filter(Analysis.id == analysis_id).first() is not None
@@ -560,22 +716,26 @@ def test_delete_analysis_rejects_wrong_user(client, db):
 
 def test_delete_analysis_rejects_nonexistent_analysis(client):
     token = _register_and_login(client, "deleteanalysismissing@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = client.delete("/ai/analyses/999999", headers=_auth_headers(token))
+    response = client.delete(
+        f"/patients/{patient['id']}/analyses/999999", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 404
 
 
 def test_list_analyses_requires_authentication(client):
-    response = client.get("/ai/analyses")
+    response = client.get("/patients/1/analyses")
 
     assert response.status_code == 401
 
 
-def test_list_analyses_returns_empty_list_for_new_user(client):
+def test_list_analyses_returns_empty_list_for_new_patient(client):
     token = _register_and_login(client, "listanalysesempty@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = client.get("/ai/analyses", headers=_auth_headers(token))
+    response = client.get(f"/patients/{patient['id']}/analyses", headers=_auth_headers(token))
 
     assert response.status_code == 200
     assert response.json() == []
@@ -583,16 +743,18 @@ def test_list_analyses_returns_empty_list_for_new_user(client):
 
 def test_list_analyses_returns_expected_fields(client):
     token = _register_and_login(client, "listanalysesfields@example.com")
-    document = _create_document(client, token)
-    analysis_id = _create_completed_analysis(client, token, document["id"])
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
 
-    response = client.get("/ai/analyses", headers=_auth_headers(token))
+    response = client.get(f"/patients/{patient['id']}/analyses", headers=_auth_headers(token))
 
     assert response.status_code == 200
     body = response.json()
     assert len(body) == 1
     item = body[0]
     assert item["id"] == analysis_id
+    assert item["patient_id"] == patient["id"]
     assert item["status"] == "completed"
     assert item["document_count"] == 1
     assert item["summary"] == "Lisinopril 10 mg noted."
@@ -610,31 +772,61 @@ def test_list_analyses_returns_expected_fields(client):
     assert "possible_inconsistencies" not in item
 
 
-def test_list_analyses_only_returns_own_analyses(client):
+def test_list_analyses_only_returns_the_given_patients_analyses(client):
     token_a = _register_and_login(client, "listanalysesowner@example.com")
     token_b = _register_and_login(client, "listanalysesintruder@example.com")
-    document_a = _create_document(client, token_a)
-    document_b = _create_document(client, token_b)
+    patient_a = _create_patient(client, token_a).json()
+    patient_b = _create_patient(client, token_b).json()
+    document_a = _create_document(client, token_a, patient_a["id"])
+    document_b = _create_document(client, token_b, patient_b["id"])
 
-    owned_analysis_id = _create_completed_analysis(client, token_a, document_a["id"])
-    _create_completed_analysis(client, token_b, document_b["id"])
+    owned_analysis_id = _create_completed_analysis(
+        client, token_a, patient_a["id"], document_a["id"]
+    )
+    _create_completed_analysis(client, token_b, patient_b["id"], document_b["id"])
 
-    response = client.get("/ai/analyses", headers=_auth_headers(token_a))
+    response = client.get(f"/patients/{patient_a['id']}/analyses", headers=_auth_headers(token_a))
 
     assert response.status_code == 200
     body = response.json()
     assert [item["id"] for item in body] == [owned_analysis_id]
 
 
+def test_list_analyses_excludes_a_different_patient_of_the_same_user(client):
+    token = _register_and_login(client, "listanalysescrosspatient@example.com")
+    patient_a = _create_patient(client, token, first_name="A").json()
+    patient_b = _create_patient(client, token, first_name="B").json()
+    document_a = _create_document(client, token, patient_a["id"])
+
+    analysis_a_id = _create_completed_analysis(client, token, patient_a["id"], document_a["id"])
+
+    response_a = client.get(f"/patients/{patient_a['id']}/analyses", headers=_auth_headers(token))
+    response_b = client.get(f"/patients/{patient_b['id']}/analyses", headers=_auth_headers(token))
+
+    assert [item["id"] for item in response_a.json()] == [analysis_a_id]
+    assert response_b.json() == []
+
+
+def test_list_analyses_rejects_a_patient_owned_by_another_user(client):
+    token_a = _register_and_login(client, "listanalysesownerreject@example.com")
+    token_b = _register_and_login(client, "listanalysesintruderreject@example.com")
+    patient = _create_patient(client, token_a).json()
+
+    response = client.get(f"/patients/{patient['id']}/analyses", headers=_auth_headers(token_b))
+
+    assert response.status_code == 404
+
+
 def test_list_analyses_orders_most_recent_first(client):
     token = _register_and_login(client, "listanalysesorder@example.com")
-    document = _create_document(client, token)
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
 
-    first_id = _create_completed_analysis(client, token, document["id"])
-    second_id = _create_completed_analysis(client, token, document["id"])
-    third_id = _create_completed_analysis(client, token, document["id"])
+    first_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    second_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    third_id = _create_completed_analysis(client, token, patient["id"], document["id"])
 
-    response = client.get("/ai/analyses", headers=_auth_headers(token))
+    response = client.get(f"/patients/{patient['id']}/analyses", headers=_auth_headers(token))
 
     assert response.status_code == 200
     assert [item["id"] for item in response.json()] == [third_id, second_id, first_id]
@@ -642,12 +834,15 @@ def test_list_analyses_orders_most_recent_first(client):
 
 def test_list_analyses_respects_limit_query_param(client):
     token = _register_and_login(client, "listanalyseslimit@example.com")
-    document = _create_document(client, token)
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
 
     for _ in range(3):
-        _create_completed_analysis(client, token, document["id"])
+        _create_completed_analysis(client, token, patient["id"], document["id"])
 
-    response = client.get("/ai/analyses?limit=2", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/analyses?limit=2", headers=_auth_headers(token)
+    )
 
     assert response.status_code == 200
     assert len(response.json()) == 2
@@ -655,9 +850,14 @@ def test_list_analyses_respects_limit_query_param(client):
 
 def test_list_analyses_rejects_limit_out_of_range(client):
     token = _register_and_login(client, "listanalyseslimitinvalid@example.com")
+    patient = _create_patient(client, token).json()
 
-    response = client.get("/ai/analyses?limit=0", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/analyses?limit=0", headers=_auth_headers(token)
+    )
     assert response.status_code == 422
 
-    response = client.get("/ai/analyses?limit=51", headers=_auth_headers(token))
+    response = client.get(
+        f"/patients/{patient['id']}/analyses?limit=51", headers=_auth_headers(token)
+    )
     assert response.status_code == 422

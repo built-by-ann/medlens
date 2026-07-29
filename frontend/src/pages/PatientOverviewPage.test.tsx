@@ -195,6 +195,20 @@ describe('PatientOverviewPage', () => {
     await waitFor(() => expect(mockedDeleteMedication).toHaveBeenCalledWith(1, 5))
   })
 
+  it('links the Upload documents and View analysis history actions to this patient', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    renderOverviewPage()
+
+    expect(await screen.findByRole('link', { name: 'Upload documents' })).toHaveAttribute(
+      'href',
+      '/patients/1/upload',
+    )
+    expect(screen.getByRole('link', { name: 'View analysis history' })).toHaveAttribute(
+      'href',
+      '/patients/1/analyses',
+    )
+  })
+
   it('opens an archive confirmation dialog naming the patient', async () => {
     mockedGetPatient.mockResolvedValue(patient)
     const user = userEvent.setup()

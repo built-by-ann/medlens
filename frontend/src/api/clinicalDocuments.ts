@@ -54,25 +54,30 @@ export interface CreateNoteFromTextPayload {
   documentType: string
 }
 
-export async function createClinicalDocumentFromText({
-  title,
-  rawText,
-  documentType,
-}: CreateNoteFromTextPayload): Promise<ClinicalDocument> {
-  const response = await apiClient.post<ClinicalDocument>('/clinical-documents', {
-    document_type: documentType,
-    title,
-    raw_text: rawText,
-  })
+export async function createClinicalDocumentFromText(
+  patientId: number,
+  { title, rawText, documentType }: CreateNoteFromTextPayload,
+): Promise<ClinicalDocument> {
+  const response = await apiClient.post<ClinicalDocument>(
+    `/patients/${patientId}/clinical-documents`,
+    {
+      document_type: documentType,
+      title,
+      raw_text: rawText,
+    },
+  )
 
   return response.data
 }
 
 export async function uploadClinicalDocumentFile(
+  patientId: number,
   file: File,
   documentType: string,
 ): Promise<ClinicalDocument> {
-  const endpoint = isPdf(file) ? '/clinical-documents/upload-pdf' : '/clinical-documents/upload-txt'
+  const endpoint = isPdf(file)
+    ? `/patients/${patientId}/clinical-documents/upload-pdf`
+    : `/patients/${patientId}/clinical-documents/upload-txt`
 
   const formData = new FormData()
   formData.append('document_type', documentType)
