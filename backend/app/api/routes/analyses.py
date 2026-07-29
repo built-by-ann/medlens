@@ -8,6 +8,7 @@ from app.api.deps import get_owned_patient
 from app.db.session import get_db
 from app.models.patient import Patient
 from app.schemas.analysis import AnalysisCreate, AnalysisDetailResponse, AnalysisSummaryResponse
+from app.schemas.medication_discrepancy import MedicationDiscrepancyDetailResponse
 from app.services.analysis_result_service import persist_analysis_result
 from app.services.analysis_service import (
     InvalidClinicalDocumentIdsError,
@@ -103,7 +104,7 @@ def list_analyses(
             completed_at=analysis.completed_at,
             error_message=analysis.error_message,
             summary=analysis.summary,
-            document_count=len(analysis.clinical_documents),
+            document_count=analysis.document_count,
             total_findings=analysis.total_findings,
             high_severity_findings=analysis.high_severity_findings,
             medium_severity_findings=analysis.medium_severity_findings,
@@ -133,8 +134,9 @@ def get_analysis_detail(
     # identical created_at (Postgres's now() is constant within a
     # transaction), so id is the only reliably deterministic sort key here.
     # sorted() builds new lists rather than mutating analysis.medication_mentions
-    # / analysis.possible_inconsistencies in place, so the ORM-managed
-    # relationship collections on `analysis` are left untouched.
+    # / analysis.possible_inconsistencies / analysis.medication_discrepancies in
+    # place, so the ORM-managed relationship collections on `analysis` are
+    # left untouched.
     return AnalysisDetailResponse(
         id=analysis.id,
         patient_id=analysis.patient_id,
@@ -147,10 +149,17 @@ def get_analysis_detail(
         error_message=analysis.error_message,
         created_at=analysis.created_at,
         updated_at=analysis.updated_at,
+        document_count=analysis.document_count,
         medication_mentions=sorted(analysis.medication_mentions, key=lambda mention: mention.id),
         possible_inconsistencies=sorted(
             analysis.possible_inconsistencies, key=lambda inconsistency: inconsistency.id
         ),
+        medication_discrepancies=[
+            MedicationDiscrepancyDetailResponse.model_validate(discrepancy)
+            for discrepancy in sorted(
+                analysis.medication_discrepancies, key=lambda discrepancy: discrepancy.id
+            )
+        ],
     )
 
 

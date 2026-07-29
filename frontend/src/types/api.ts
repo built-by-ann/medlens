@@ -57,11 +57,79 @@ export interface AnalysisCreateResult {
   possible_inconsistencies: string[]
 }
 
-// Deliberately narrower than the backend's AnalysisDetailResponse: it also
-// returns medication_mentions and possible_inconsistencies (the AI's raw
-// findings), but rendering those is the discrepancy/AI-summary UI that
-// Sprint 3.5 explicitly defers to a future issue. Omitting the fields here
-// makes it structurally impossible to accidentally render them early.
+export interface AnalysisMedicationMention {
+  id: number
+  medication_name: string
+  dosage: string | null
+  route: string | null
+  frequency: string | null
+  status: string | null
+  notes: string | null
+}
+
+export interface AnalysisInconsistency {
+  id: number
+  description: string
+}
+
+export type DiscrepancyType =
+  | 'missing_from_medication_list'
+  | 'discontinued_status_conflict'
+  | 'dose_conflict'
+  | 'route_conflict'
+  | 'frequency_conflict'
+  | 'status_conflict'
+  | 'unsupported_medication_list_entry'
+
+export type DiscrepancySeverity = 'low' | 'medium' | 'high'
+
+export type ResolutionStatus = 'open' | 'reviewed' | 'resolved' | 'dismissed'
+
+export interface ClinicalDocumentSummary {
+  id: number
+  title: string
+  document_type: string
+}
+
+// MedicationMention has no API exposure of its own - this only exists
+// nested inside a MedicationDiscrepancy as supporting evidence.
+export interface MedicationMentionEvidence {
+  id: number
+  medication_name: string
+  dose: string | null
+  route: string | null
+  frequency: string | null
+  status: string | null
+  context_text: string | null
+  clinical_document: ClinicalDocumentSummary
+}
+
+export interface MedicationDiscrepancy {
+  id: number
+  analysis_id: number
+  medication_id: number | null
+  medication_mention_id: number | null
+  discrepancy_type: DiscrepancyType
+  severity: DiscrepancySeverity
+  title: string
+  ai_explanation: string | null
+  recommendation: string | null
+  expected_value: string | null
+  observed_value: string | null
+  resolution_status: ResolutionStatus
+  created_at: string
+  updated_at: string | null
+  medication: Medication | null
+  medication_mention: MedicationMentionEvidence | null
+}
+
+// AnalysisDetail was deliberately narrower than the backend's
+// AnalysisDetailResponse in Sprint 3.5, omitting medication_mentions,
+// possible_inconsistencies, and medication_discrepancies (the AI's raw
+// findings and the reconciliation engine's structured findings) so it was
+// structurally impossible to accidentally render that UI before its time.
+// Issue #45 is that future issue, so this now mirrors the backend response
+// in full.
 export interface AnalysisDetail {
   id: number
   patient_id: number
@@ -74,6 +142,10 @@ export interface AnalysisDetail {
   error_message: string | null
   created_at: string
   updated_at: string | null
+  document_count: number
+  medication_mentions: AnalysisMedicationMention[]
+  possible_inconsistencies: AnalysisInconsistency[]
+  medication_discrepancies: MedicationDiscrepancy[]
 }
 
 export interface Patient {

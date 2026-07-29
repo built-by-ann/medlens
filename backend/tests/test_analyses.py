@@ -6,6 +6,9 @@ from app.main import app
 from app.models.analysis import Analysis
 from app.models.analysis_inconsistency import AnalysisInconsistency
 from app.models.analysis_medication_mention import AnalysisMedicationMention
+from app.models.medication import Medication
+from app.models.medication_discrepancy import MedicationDiscrepancy
+from app.models.medication_mention import MedicationMention
 
 VALID_RESPONSE = json.dumps(
     {
@@ -548,6 +551,169 @@ def test_get_analysis_detail_returns_items_in_deterministic_order(client):
         inconsistency["id"] for inconsistency in body["possible_inconsistencies"]
     ]
     assert inconsistency_ids == sorted(inconsistency_ids)
+
+
+def test_get_analysis_detail_includes_document_count(client):
+    token = _register_and_login(client, "detaildoccount@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["document_count"] == 1
+
+
+def test_get_analysis_detail_with_no_discrepancies(client):
+    token = _register_and_login(client, "detailnodiscrepancies@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["medication_discrepancies"] == []
+
+
+def test_get_analysis_detail_includes_discrepancies_with_supporting_evidence(client, db):
+    # medication_discrepancies is never populated by the AI-summary flow
+    # _create_completed_analysis drives (see medication_reconciliation_service.py's
+    # own module docstring), so this inserts rows directly, the same way
+    # test_medication_reconciliation_service.py exercises the reconciliation
+    # engine's output independent of any route.
+    token = _register_and_login(client, "detaildiscrepancies@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    medication = Medication(
+        patient_id=patient["id"],
+        medication_name="Lisinopril",
+        dose="10 mg",
+        route="oral",
+        frequency="once daily",
+        status="active",
+        source="patient_reported",
+    )
+    mention = MedicationMention(
+        clinical_document_id=document["id"],
+        medication_name="Lisinopril",
+        dose="20 mg",
+        route="oral",
+        frequency="once daily",
+        status="active",
+        context_text="Patient takes Lisinopril 20mg oral daily.",
+    )
+    db.add(medication)
+    db.add(mention)
+    db.commit()
+    db.refresh(medication)
+    db.refresh(mention)
+
+    db.add(
+        MedicationDiscrepancy(
+            analysis_id=analysis_id,
+            medication_id=medication.id,
+            medication_mention_id=mention.id,
+            discrepancy_type="dose_conflict",
+            severity="medium",
+            title="Lisinopril dose does not match",
+            ai_explanation="The medication list records 10 mg but a document records 20 mg.",
+            expected_value="10 mg",
+            observed_value="20 mg",
+            resolution_status="open",
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["medication_discrepancies"]) == 1
+
+    finding = body["medication_discrepancies"][0]
+    assert finding["discrepancy_type"] == "dose_conflict"
+    assert finding["severity"] == "medium"
+    assert finding["resolution_status"] == "open"
+    assert finding["title"] == "Lisinopril dose does not match"
+    assert finding["expected_value"] == "10 mg"
+    assert finding["observed_value"] == "20 mg"
+
+    assert finding["medication"]["medication_name"] == "Lisinopril"
+    assert finding["medication"]["dose"] == "10 mg"
+
+    assert finding["medication_mention"]["medication_name"] == "Lisinopril"
+    assert (
+        finding["medication_mention"]["context_text"]
+        == "Patient takes Lisinopril 20mg oral daily."
+    )
+    assert finding["medication_mention"]["clinical_document"]["id"] == document["id"]
+    assert finding["medication_mention"]["clinical_document"]["title"] == document["title"]
+
+
+def test_get_analysis_detail_discrepancy_without_medication_or_mention(client, db):
+    token = _register_and_login(client, "detaildiscrepancynoevidence@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    db.add(
+        MedicationDiscrepancy(
+            analysis_id=analysis_id,
+            medication_id=None,
+            medication_mention_id=None,
+            discrepancy_type="unsupported_medication_list_entry",
+            severity="low",
+            title="Some finding with no linked evidence",
+            resolution_status="open",
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    finding = response.json()["medication_discrepancies"][0]
+    assert finding["medication"] is None
+    assert finding["medication_mention"] is None
+
+
+def test_get_analysis_detail_orders_discrepancies_deterministically(client, db):
+    token = _register_and_login(client, "detaildiscrepancyorder@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    for name in ["Metformin", "Atorvastatin", "Lisinopril"]:
+        db.add(
+            MedicationDiscrepancy(
+                analysis_id=analysis_id,
+                discrepancy_type="missing_from_medication_list",
+                severity="high",
+                title=f"{name} not found in medication list",
+                resolution_status="open",
+            )
+        )
+    db.commit()
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    ids = [finding["id"] for finding in response.json()["medication_discrepancies"]]
+    assert ids == sorted(ids)
 
 
 def test_get_analysis_detail_includes_sanitized_error_message_for_failed_analysis(client, db):
