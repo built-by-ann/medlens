@@ -3,7 +3,7 @@ import { Card } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { DocumentTypeSelect } from '@/components/upload/DocumentTypeSelect'
-import { DOCUMENT_TYPES } from '@/api/clinicalDocuments'
+import { documentTypeLabel } from '@/api/clinicalDocuments'
 
 export interface DraftNote {
   id: number
@@ -16,10 +16,6 @@ interface NoteCardProps {
   note: DraftNote
   onUpdate: (id: number, note: { title: string; rawText: string; documentType: string }) => void
   onRemove: (id: number) => void
-}
-
-function documentTypeLabel(value: string): string {
-  return DOCUMENT_TYPES.find((type) => type.value === value)?.label ?? value
 }
 
 export function NoteCard({ note, onUpdate, onRemove }: NoteCardProps) {

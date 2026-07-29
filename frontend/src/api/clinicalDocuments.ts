@@ -23,6 +23,10 @@ export const DOCUMENT_TYPES: DocumentTypeOption[] = [
 
 export const DEFAULT_DOCUMENT_TYPE = 'visit_note'
 
+export function documentTypeLabel(value: string): string {
+  return DOCUMENT_TYPES.find((type) => type.value === value)?.label ?? value
+}
+
 // Matches the backend's own validation exactly (app/api/routes/
 // clinical_documents.py): each upload endpoint accepts a file if its
 // extension OR its content type matches, whichever is present.
@@ -87,4 +91,16 @@ export async function uploadClinicalDocumentFile(
   const response = await apiClient.post<ClinicalDocument>(endpoint, formData)
 
   return response.data
+}
+
+export async function listClinicalDocuments(patientId: number): Promise<ClinicalDocument[]> {
+  const response = await apiClient.get<ClinicalDocument[]>(
+    `/patients/${patientId}/clinical-documents`,
+  )
+
+  return response.data
+}
+
+export async function deleteClinicalDocument(patientId: number, documentId: number): Promise<void> {
+  await apiClient.delete(`/patients/${patientId}/clinical-documents/${documentId}`)
 }

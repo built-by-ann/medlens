@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -27,18 +27,8 @@ vi.mock('@/api/patients', async (importOriginal) => {
 
 const mockedUseCreateAnalysis = vi.mocked(useCreateAnalysis)
 const mockedGetPatient = vi.mocked(getPatient)
-const mockNavigate = vi.fn()
 const submit = vi.fn()
 const invalidateItem = vi.fn()
-
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-router-dom')>()
-
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  }
-})
 
 const patient: Patient = {
   id: 7,
@@ -83,7 +73,6 @@ describe('UploadPage', () => {
   beforeEach(() => {
     submit.mockReset()
     invalidateItem.mockReset()
-    mockNavigate.mockReset()
     mockedGetPatient.mockReset()
     mockedGetPatient.mockResolvedValue(patient)
     mockedUseCreateAnalysis.mockReturnValue({
@@ -108,6 +97,19 @@ describe('UploadPage', () => {
     expect(
       await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ }),
     ).toBeInTheDocument()
+  })
+
+  it('shows a breadcrumb trail ending in Upload', async () => {
+    const { container } = renderUploadPage()
+
+    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
+
+    const breadcrumb = within(container).getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByRole('link', { name: 'Jane Doe' })).toHaveAttribute(
+      'href',
+      '/patients/7',
+    )
+    expect(within(breadcrumb).getByText('Upload')).toHaveAttribute('aria-current', 'page')
   })
 
   it('adds a selected file to the list, showing its name, size, and a document type defaulting to Visit note', async () => {
@@ -286,7 +288,7 @@ describe('UploadPage', () => {
     expect(submit).not.toHaveBeenCalled()
   })
 
-  it('submits the added file and note together and navigates to the analysis on success', async () => {
+  it('submits the added file and note together and shows a success panel', async () => {
     submit.mockResolvedValue(42)
     const user = userEvent.setup()
     renderUploadPage()
@@ -307,10 +309,42 @@ describe('UploadPage', () => {
         notes: [{ id: 0, title: '', rawText: 'Pasted note text', documentType: 'visit_note' }],
       }),
     )
-    expect(mockNavigate).toHaveBeenCalledWith('/patients/7/analyses/42')
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Analysis started successfully')
+    expect(screen.getByRole('link', { name: 'View analysis' })).toHaveAttribute(
+      'href',
+      '/patients/7/analyses/42',
+    )
+    expect(screen.getByRole('link', { name: 'View documents' })).toHaveAttribute(
+      'href',
+      '/patients/7#documents-heading',
+    )
+    expect(screen.getByRole('link', { name: 'Back to patient' })).toHaveAttribute(
+      'href',
+      '/patients/7',
+    )
   })
 
-  it('shows the submission error and which item failed, without navigating', async () => {
+  it('lets the user start a fresh upload after a successful submission', async () => {
+    submit.mockResolvedValue(42)
+    const user = userEvent.setup()
+    renderUploadPage()
+
+    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
+
+    await user.type(screen.getByLabelText('Note text'), 'Pasted note text')
+    await user.click(screen.getByRole('button', { name: 'Add note' }))
+    await user.click(screen.getByRole('button', { name: 'Start Analysis' }))
+
+    await screen.findByRole('status')
+    await user.click(screen.getByRole('button', { name: 'Upload another' }))
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start Analysis' })).toBeInTheDocument()
+    expect(screen.queryByText('Pasted note text')).not.toBeInTheDocument()
+  })
+
+  it('shows the submission error and which item failed, without a success panel', async () => {
     submit.mockRejectedValue(new Error('failed'))
     mockedUseCreateAnalysis.mockReturnValue({
       isSubmitting: false,
@@ -331,7 +365,7 @@ describe('UploadPage', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Something went wrong on the server.')
     expect(alert).toHaveTextContent('note.txt')
-    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(screen.queryByRole('link', { name: 'View analysis' })).not.toBeInTheDocument()
   })
 
   it('shows a loading state and disables the submit button while submitting', async () => {

@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
+import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
 import { RecentAnalysesList } from '@/components/analyses/RecentAnalysesList'
 import { AnalysesEmptyState } from '@/components/analyses/AnalysesEmptyState'
 import { usePatient } from '@/hooks/usePatient'
@@ -23,7 +24,8 @@ export function PatientAnalysesPage() {
     isLoading: areAnalysesLoading,
     error: analysesError,
     retry: retryAnalyses,
-  } = usePatientAnalyses(id)
+    removeAnalysis,
+  } = usePatientAnalyses(id, 50)
 
   return (
     <div className="flex flex-col gap-8">
@@ -39,6 +41,8 @@ export function PatientAnalysesPage() {
 
       {!isPatientLoading && !patientError && patient && (
         <>
+          <PatientBreadcrumb patient={patient} trail={[{ label: 'Analyses' }]} />
+
           <PageHeader
             title={`Analyses for ${patient.first_name} ${patient.last_name}`}
             description="Review past medication reconciliation analyses for this patient."
@@ -74,7 +78,7 @@ export function PatientAnalysesPage() {
           )}
 
           {!areAnalysesLoading && !analysesError && analyses.length > 0 && (
-            <RecentAnalysesList analyses={analyses} />
+            <RecentAnalysesList analyses={analyses} onDelete={removeAnalysis} />
           )}
         </>
       )}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listAnalyses } from '@/api/analyses'
+import { deleteAnalysis, listAnalyses } from '@/api/analyses'
 import type { ApiError } from '@/api/client'
 import type { AnalysisSummary } from '@/types/api'
 
@@ -8,6 +8,7 @@ interface UsePatientAnalysesResult {
   isLoading: boolean
   error: string | null
   retry: () => void
+  removeAnalysis: (id: number) => Promise<void>
 }
 
 /**
@@ -51,5 +52,13 @@ export function usePatientAnalyses(patientId: number, limit = 10): UsePatientAna
     setRetryCount((count) => count + 1)
   }, [])
 
-  return { analyses, isLoading, error, retry }
+  const removeAnalysis = useCallback(
+    async (id: number) => {
+      await deleteAnalysis(patientId, id)
+      setAnalyses((current) => current.filter((analysis) => analysis.id !== id))
+    },
+    [patientId],
+  )
+
+  return { analyses, isLoading, error, retry, removeAnalysis }
 }
