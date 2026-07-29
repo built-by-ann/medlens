@@ -62,11 +62,41 @@ export interface AnalysisCreateResult {
   possible_inconsistencies: string[]
 }
 
+export type DiscrepancyType =
+  | 'missing_from_medication_list'
+  | 'discontinued_status_conflict'
+  | 'dose_conflict'
+  | 'route_conflict'
+  | 'frequency_conflict'
+  | 'status_conflict'
+  | 'unsupported_medication_list_entry'
+
+export type DiscrepancySeverity = 'low' | 'medium' | 'high'
+
+export type ResolutionStatus = 'open' | 'reviewed' | 'resolved' | 'dismissed'
+
+export interface MedicationDiscrepancy {
+  id: number
+  analysis_id: number
+  medication_id: number | null
+  medication_mention_id: number | null
+  discrepancy_type: DiscrepancyType
+  severity: DiscrepancySeverity
+  title: string
+  ai_explanation: string | null
+  recommendation: string | null
+  expected_value: string | null
+  observed_value: string | null
+  resolution_status: ResolutionStatus
+  created_at: string
+  updated_at: string | null
+}
+
 // Deliberately narrower than the backend's AnalysisDetailResponse: it also
-// returns medication_mentions and possible_inconsistencies (the AI's raw
-// findings), but rendering those is the discrepancy/AI-summary UI that
-// Sprint 3.5 explicitly defers to a future issue. Omitting the fields here
-// makes it structurally impossible to accidentally render them early.
+// returns medication_mentions and possible_inconsistencies (the AI's raw,
+// unstructured observations), but rendering those remains out of scope.
+// medication_discrepancies (Issue #148) is included, since that engine now
+// actually runs during analysis creation and has real findings to show.
 export interface AnalysisDetail {
   id: number
   patient_id: number
@@ -79,6 +109,7 @@ export interface AnalysisDetail {
   error_message: string | null
   created_at: string
   updated_at: string | null
+  medication_discrepancies: MedicationDiscrepancy[]
 }
 
 export interface Patient {

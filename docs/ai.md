@@ -179,7 +179,7 @@ Success response
 }
 ```
 
-`medications`, `possible_inconsistencies`, and `summary` are the provider's response, parsed and validated against `ClinicalSummary`, then persisted. `analysis_id` identifies the Analysis created for this request. No discrepancy detection or reconciliation happens against the result.
+`medications`, `possible_inconsistencies`, and `summary` are the provider's response, parsed and validated against `ClinicalSummary`, then persisted. `analysis_id` identifies the Analysis created for this request. As of Issue #148, the extracted medications are also reconciled against the patient's medication list as part of this same request - see `docs/architecture.md`'s Analysis Creation Pipeline and Reconciliation Engine sections; this response body itself is unchanged by that.
 
 Error responses
 
@@ -223,5 +223,5 @@ The Gemini provider logs which provider and model were used, request duration, a
 
 ## Limitations
 
-- No discrepancy detection or reconciliation is performed on the AI response. Persisted mentions and inconsistencies are AI observations only, never compared against the user's Medication list.
+- The AI response itself (medication names, dosages, etc.) is never checked for internal consistency by the AI layer - `possible_inconsistencies` is the model's own observation, not a deterministic check. Comparison against the user's Medication list is deterministic backend logic, not part of the AI layer - see `docs/architecture.md`'s Reconciliation Engine section for how it runs (as of Issue #148, automatically, during the same request).
 - Only Gemini is implemented today. OpenAI, MedGemma, and OpenBioLLM are planned future providers, added behind the same `AIProvider` interface.

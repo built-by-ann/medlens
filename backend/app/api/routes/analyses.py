@@ -133,8 +133,9 @@ def get_analysis_detail(
     # identical created_at (Postgres's now() is constant within a
     # transaction), so id is the only reliably deterministic sort key here.
     # sorted() builds new lists rather than mutating analysis.medication_mentions
-    # / analysis.possible_inconsistencies in place, so the ORM-managed
-    # relationship collections on `analysis` are left untouched.
+    # / analysis.possible_inconsistencies / analysis.medication_discrepancies in
+    # place, so the ORM-managed relationship collections on `analysis` are
+    # left untouched.
     return AnalysisDetailResponse(
         id=analysis.id,
         patient_id=analysis.patient_id,
@@ -150,6 +151,9 @@ def get_analysis_detail(
         medication_mentions=sorted(analysis.medication_mentions, key=lambda mention: mention.id),
         possible_inconsistencies=sorted(
             analysis.possible_inconsistencies, key=lambda inconsistency: inconsistency.id
+        ),
+        medication_discrepancies=sorted(
+            analysis.medication_discrepancies, key=lambda discrepancy: discrepancy.id
         ),
     )
 

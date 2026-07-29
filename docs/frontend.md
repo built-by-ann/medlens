@@ -205,7 +205,9 @@ Sprint 3.5, Issue #130: analysis history moved from a global Dashboard feed to a
 - **A document list.** `AnalysisDetailResponse` has no field recording which `ClinicalDocument`s a given analysis covered - only `AnalysisSummaryResponse` (the list endpoint) has a computed `document_count`. There is nothing to display here without inventing data.
 - **Finding/severity counts.** Also only on `AnalysisSummaryResponse`, not the detail response.
 
-`medication_mentions` and `possible_inconsistencies` (the AI's raw findings) are also never rendered here - the frontend's `AnalysisDetail` type (`types/api.ts`) deliberately omits both fields entirely, even though the backend response includes them, so it's structurally impossible to accidentally render the discrepancy/AI-summary UI that Sprint 3.5 explicitly defers to a future issue. A final `Card` keeps the same "content will be added in a future issue" placeholder text this page always had, now clearly separated from the real metadata above it.
+`medication_mentions` and `possible_inconsistencies` (the AI's raw, unstructured observations) are still never rendered here - the frontend's `AnalysisDetail` type (`types/api.ts`) omits both fields entirely, even though the backend response includes them, so it's structurally impossible to accidentally render that particular UI, which remains out of scope.
+
+**Issue #148** wired the existing medication reconciliation engine into analysis creation (see `docs/architecture.md`'s Analysis Creation Pipeline), so completed analyses can now have real `MedicationDiscrepancy` findings - `AnalysisDetail` gained a `medication_discrepancies` field, and the final `Card` that used to say "content will be added in a future issue" now renders them: a "Medication Reconciliation Findings" heading, one item per discrepancy (title, a plain severity/type label pair, and `ai_explanation` if present), or "No medication discrepancies were found for this analysis." when the list is empty. This is intentionally a minimal, plain-text rendering - reusing the page's existing `Card` and no new component files - since Issue #148 is a backend integration task, not a redesign of this page; anything richer (severity badges, supporting-evidence citations, per-finding resolution actions) is left for a future issue to build deliberately.
 
 ---
 
@@ -393,7 +395,8 @@ The frontend does not yet have a Docker Compose service; it currently runs direc
 
 The following are explicitly out of scope and left for future issues:
 
-- The analysis results UI: rendering `medication_mentions` and `possible_inconsistencies` on `AnalysisDetailPage` (Sprint 3.5, Issue #131 added real metadata - status, timestamps, provider/model, summary text - but deliberately left the AI's raw findings and any discrepancy display unbuilt; see Analyses above).
+- Rendering `medication_mentions` and `possible_inconsistencies` (the AI's raw, unstructured observations) on `AnalysisDetailPage` - `medication_discrepancies` (the structured reconciliation findings) is rendered as of Issue #148; see Analyses above.
+- A richer findings UI on `AnalysisDetailPage` - severity badges, supporting-evidence citations (source document, mention snippet), per-finding resolution actions. Issue #148 added only a minimal, plain-text rendering of `medication_discrepancies`, deliberately, since it is a backend integration task rather than a redesign of this page; see Analyses above.
 - A Docker Compose service for the frontend.
 - A cross-patient "Recent Activity" feed on `DashboardPage` (Sprint 3.5, Issue #132 - no aggregate endpoint exists to back one, and this issue explicitly does not add one; see Dashboard above). Access-timestamp tracking for a truer "recently accessed" patient ordering is the same kind of gap - Dashboard's "recent patients" uses `updated_at`/`created_at` instead, since neither access tracking nor an aggregate activity API exist today.
 - Provider-level analytics, settings, or notifications (none requested, none built).

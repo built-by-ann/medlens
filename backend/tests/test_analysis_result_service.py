@@ -8,6 +8,9 @@ from app.models.analysis import Analysis
 from app.models.analysis_inconsistency import AnalysisInconsistency
 from app.models.analysis_medication_mention import AnalysisMedicationMention
 from app.models.clinical_document import ClinicalDocument
+from app.models.medication import Medication
+from app.models.medication_discrepancy import MedicationDiscrepancy
+from app.models.medication_mention import MedicationMention
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.analysis import AnalysisCreate
@@ -60,11 +63,38 @@ def _create_clinical_document(db, patient):
 
 
 def _create_pending_analysis(db, email):
+    _, analysis = _create_pending_analysis_with_patient(db, email)
+
+    return analysis
+
+
+def _create_pending_analysis_with_patient(db, email):
     user = _create_user(db, email=email)
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
 
-    return create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
+
+    return patient, analysis
+
+
+def _create_medication(db, patient, **overrides):
+    defaults = {
+        "medication_name": "Lisinopril",
+        "dose": "10 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": "active",
+        "source": "patient_reported",
+    }
+    defaults.update(overrides)
+
+    medication = Medication(patient_id=patient.id, **defaults)
+    db.add(medication)
+    db.commit()
+    db.refresh(medication)
+
+    return medication
 
 
 def _clinical_summary(**overrides):
@@ -88,6 +118,10 @@ def _clinical_summary(**overrides):
 
 
 def test_persist_analysis_result_succeeds(db):
+    # This patient has no Medication rows at all (see _create_pending_analysis),
+    # so the AI-extracted Lisinopril mention is necessarily "missing from the
+    # medication list" - Issue #148's reconciliation integration means this
+    # is no longer a hardcoded zero.
     analysis = _create_pending_analysis(db, "persistsuccess@example.com")
 
     updated = persist_analysis_result(
@@ -99,8 +133,8 @@ def test_persist_analysis_result_succeeds(db):
     assert updated.provider == "gemini"
     assert updated.model_name == "gemini-2.0-flash"
     assert updated.summary == "Patient is on Lisinopril 10 mg once daily."
-    assert updated.total_findings == 0
-    assert updated.high_severity_findings == 0
+    assert updated.total_findings == 1
+    assert updated.high_severity_findings == 1
     assert updated.medium_severity_findings == 0
     assert updated.low_severity_findings == 0
 
@@ -242,6 +276,113 @@ def test_persist_analysis_result_rolls_back_when_completion_fails(db, monkeypatc
         .count()
         == 0
     )
+    # Issue #148: reconciliation's own writes (the bridged MedicationMention
+    # and any MedicationDiscrepancy it produced) ride in the same
+    # transaction, so they roll back too - no partially persisted
+    # discrepancies are left behind.
+    assert db.query(MedicationMention).count() == 0
+    assert (
+        db.query(MedicationDiscrepancy)
+        .filter(MedicationDiscrepancy.analysis_id == analysis_id)
+        .count()
+        == 0
+    )
 
     reloaded = db.get(Analysis, analysis_id)
     assert reloaded.status == "pending"
+
+
+def test_persist_analysis_result_creates_no_discrepancy_when_ai_medication_matches_list(db):
+    patient, analysis = _create_pending_analysis_with_patient(db, "matchinglist@example.com")
+    _create_medication(db, patient, medication_name="Lisinopril", dose="10 mg")
+
+    updated = persist_analysis_result(
+        db, analysis, _clinical_summary(), provider="gemini", model="gemini-2.0-flash"
+    )
+
+    assert updated.total_findings == 0
+
+    mention = db.query(MedicationMention).filter(MedicationMention.medication_name == "Lisinopril").one()
+    assert mention.clinical_document_id in {document.id for document in analysis.clinical_documents}
+    assert mention.dose == "10 mg"
+    assert mention.route == "oral"
+    assert mention.frequency == "once daily"
+    assert mention.status == "active"
+
+    assert (
+        db.query(MedicationDiscrepancy)
+        .filter(MedicationDiscrepancy.analysis_id == analysis.id)
+        .count()
+        == 0
+    )
+
+
+def test_persist_analysis_result_creates_discrepancy_with_evidence_when_dose_conflicts(db):
+    patient, analysis = _create_pending_analysis_with_patient(db, "doseconflict@example.com")
+    medication = _create_medication(db, patient, medication_name="Lisinopril", dose="10 mg")
+
+    summary = _clinical_summary(
+        medications=[
+            {
+                "name": "Lisinopril",
+                "dosage": "20 mg",
+                "route": "oral",
+                "frequency": "once daily",
+                "status": "active",
+                "notes": None,
+            }
+        ]
+    )
+
+    updated = persist_analysis_result(
+        db, analysis, summary, provider="gemini", model="gemini-2.0-flash"
+    )
+
+    assert updated.total_findings == 1
+    assert updated.medium_severity_findings == 1
+
+    discrepancy = (
+        db.query(MedicationDiscrepancy)
+        .filter(MedicationDiscrepancy.analysis_id == analysis.id)
+        .one()
+    )
+    assert discrepancy.discrepancy_type == "dose_conflict"
+    assert discrepancy.medication_id == medication.id
+    assert discrepancy.expected_value == "10 mg"
+    assert discrepancy.observed_value == "20 mg"
+
+    # Supporting evidence: the discrepancy's medication_mention_id resolves
+    # to a real, persisted MedicationMention tied to one of this analysis's
+    # own clinical documents.
+    mention = db.get(MedicationMention, discrepancy.medication_mention_id)
+    assert mention is not None
+    assert mention.medication_name == "Lisinopril"
+    assert mention.dose == "20 mg"
+    assert mention.clinical_document_id in {document.id for document in analysis.clinical_documents}
+
+
+def test_persist_analysis_result_does_not_duplicate_discrepancies_for_repeated_mentions(db):
+    # Two AI-extracted entries for the same medication (as could happen when
+    # it is mentioned with different details across the combined notes) -
+    # reconciliation still produces exactly one finding, not one per mention.
+    analysis = _create_pending_analysis(db, "repeatedmentions@example.com")
+
+    summary = _clinical_summary(
+        medications=[
+            {"name": "Lisinopril", "dosage": "10 mg"},
+            {"name": "Lisinopril", "dosage": "20 mg"},
+        ]
+    )
+
+    updated = persist_analysis_result(
+        db, analysis, summary, provider="gemini", model="gemini-2.0-flash"
+    )
+
+    assert updated.total_findings == 1
+    assert db.query(MedicationMention).count() == 2
+    assert (
+        db.query(MedicationDiscrepancy)
+        .filter(MedicationDiscrepancy.analysis_id == analysis.id)
+        .count()
+        == 1
+    )

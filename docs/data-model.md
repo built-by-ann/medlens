@@ -350,10 +350,10 @@ Represents one analysis run across a set of clinical documents.
 
 An analysis tracks who initiated it, which documents it covers, its progress through a status lifecycle, summary counts of what it found, and its results. This model only records the run and its outcome; it does not itself compare medication mentions or produce them.
 
-An analysis can be completed by either of two separate processes, and its stored results differ depending on which one produced it:
+An analysis can be completed by either of two separate entry points into the same underlying reconciliation engine, and its stored results differ depending on which one produced it:
 
-- The medication reconciliation service compares Medication against MedicationMention using deterministic rules and produces MedicationDiscrepancy rows, with total_findings and the severity counts reflecting what it found.
-- The AI summary service reads clinical documents directly and produces AnalysisMedicationMention and AnalysisInconsistency rows, an AI observation of what the documents say, with no comparison against the user's medication list. total_findings and the severity counts are always zero for this path, since no MedicationDiscrepancy rows are created by it.
+- `run_medication_reconciliation` compares Medication against already-persisted MedicationMention rows using deterministic rules and produces MedicationDiscrepancy rows, with total_findings and the severity counts reflecting what it found. Nothing in the API calls this entry point directly today (see Design Decisions).
+- The AI summary service (`POST /patients/{patient_id}/analyses`) reads clinical documents directly and produces AnalysisMedicationMention and AnalysisInconsistency rows, an AI observation of what the documents say. As of Issue #148, it also persists each extracted medication as a real MedicationMention and runs the *same* reconciliation engine against it, producing MedicationDiscrepancy rows here too - total_findings and the severity counts reflect real reconciliation output for this path as well, not a hardcoded zero. See Design Decisions and `docs/architecture.md`'s Analysis Creation Pipeline.
 
 Analysis is owned by `Patient`: every API route and service function scopes and authorizes by `patient_id`, the sole ownership column - there is no `user_id` on this table. See Design Decisions.
 
@@ -791,6 +791,14 @@ The final Sprint 3.5 migration issue. Issues #129/#130 had already moved every r
 - **Frontend**: required no changes at all. `types/api.ts`'s `ClinicalDocument`, `Medication`, and `AnalysisSummary` types already used only `patient_id` (Issues #129/#130); the only `user_id` field left anywhere in the frontend is `Patient.user_id`, which is correct and untouched.
 
 Verified end to end on a real database: applied `3ef685b18302` against the dev database (row counts unchanged before/after), downgraded and confirmed `user_id` was correctly re-derived to match every row's `patient.user_id`, re-upgraded, and separately ran the entire migration chain from an empty database to confirm the frozen `599e0487bb6d` logic still works when replayed from scratch.
+
+---
+
+### Issue #148: medication reconciliation wired into analysis creation
+
+Every model, service function, and persistence path used here already existed - `MedicationDiscrepancy`, `MedicationMention`, `build_discrepancy_findings`, `create_medication_discrepancies`, and `run_medication_reconciliation` all predate this issue. What was missing was any caller: `run_medication_reconciliation` has never been invoked by an API route, and `POST /patients/{patient_id}/analyses` (the AI summary flow, the only analysis-creation path a provider can actually reach) never populated `MedicationMention` or called the reconciliation engine, so `total_findings` and the severity counts on that path were always hardcoded zero.
+
+This issue closes that gap without changing any of the above: `medication_reconciliation_service.py`'s shared "build findings, persist them, count severities" logic was extracted from `run_medication_reconciliation`'s body into a new `reconcile_medications` helper (identical behavior, now callable from two places instead of duplicated). A new `reconcile_ai_extracted_medications` function bridges the AI flow's extracted medications into real `MedicationMention` rows - attached to the selected document with the lowest id, since the AI's response has no per-document attribution to preserve (see `docs/architecture.md`) - then calls the same `reconcile_medications` helper. `analysis_result_service.py`'s `persist_analysis_result` calls this bridge and uses its real counts instead of the zeros it hardcoded before. No schema, model, or migration changed; `AnalysisDetailResponse` gained a `medication_discrepancies` field (reusing the existing `MedicationDiscrepancyResponse` schema) so `GET /patients/{patient_id}/analyses/{analysis_id}` can return what reconciliation actually found.
 
 ---
 

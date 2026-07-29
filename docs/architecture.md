@@ -147,7 +147,9 @@ Implemented as a deterministic backend service, not an AI component. Given a pat
 - Applies a fixed set of comparison rules to produce MedicationDiscrepancy records, each with a deterministic title, explanation, expected value, and observed value.
 - Assigns severity from a single, centralized mapping from discrepancy type to severity.
 
-AI is responsible only for producing the MedicationMention records that the reconciliation engine reads. The comparison logic itself never calls an AI provider, so its output is reproducible and directly testable.
+AI is responsible only for producing the medication data the reconciliation engine reads. The comparison logic itself never calls an AI provider, so its output is reproducible and directly testable.
+
+As of Issue #148, this engine is invoked automatically as part of analysis creation - see the pipeline below and "Analysis Creation Pipeline" under Expected Data Flow. `run_medication_reconciliation` (`app/services/medication_reconciliation_service.py`) remains a second, independent entry point into the same engine: given a patient and a set of clinical document ids, it creates its own Analysis, queries `MedicationMention` rows already persisted against those documents (rather than bridging AI-extracted ones), and completes or fails that Analysis on its own. Nothing in this issue changed that function's behavior or its own callers (there are none in the API today) - the shared logic it always used (`build_discrepancy_findings`, `create_medication_discrepancies`, severity counting) was extracted into a `reconcile_medications` helper so the AI-summary flow described below could reuse the exact same engine rather than duplicating it.
 
 ---
 
@@ -156,21 +158,44 @@ AI is responsible only for producing the MedicationMention records that the reco
 The expected application workflow is:
 
 1. User logs in.
-2. User uploads one or more synthetic clinical documents.
-3. Backend validates the uploaded documents.
-4. Documents are stored in PostgreSQL.
+2. User uploads one or more synthetic clinical documents, or selects existing ones (Issue #145).
+3. Backend validates the selected documents.
+4. Documents are stored in PostgreSQL (if newly uploaded).
 5. Backend sends document text to the AI service.
 6. AI returns structured medication information as JSON.
 7. Backend validates the AI response using Pydantic models.
-8. Medication names and statuses are normalized.
-9. The reconciliation engine compares medication information across selected documents.
-10. Potential documentation inconsistencies are identified.
-11. Analysis results are stored in PostgreSQL.
-12. The frontend displays discrepancy reports with supporting evidence.
+8. Medication reconciliation runs automatically against the patient's medication list.
+9. Medication discrepancies and their supporting evidence are persisted.
+10. Analysis is marked completed.
+11. The frontend displays the AI summary and reconciliation findings on the Analysis Results page.
 
-As of this writing, steps 9 through 11 are implemented for the reconciliation path described above: the reconciliation engine and analysis persistence exist as deterministic backend logic. AI-based extraction into MedicationMention, steps 5 through 8 as described here, is not yet implemented, so MedicationMention records must currently be created directly rather than produced by an AI service.
+### Analysis Creation Pipeline (Issue #148)
 
-A separate AI summary flow is implemented end to end, outside the numbered steps above: `POST /patients/{patient_id}/analyses` sends the text of selected documents to Gemini, validates the JSON response with Pydantic, and persists the result as a completed Analysis, with the extracted medications and possible inconsistencies stored as AnalysisMedicationMention and AnalysisInconsistency rows. This flow does not populate MedicationMention and does not feed the reconciliation engine; it is a distinct, AI-authored observation of the selected documents, not reconciliation input. A persisted Analysis, including its AnalysisMedicationMention and AnalysisInconsistency rows, can be retrieved later by id through `GET /patients/{patient_id}/analyses/{analysis_id}`, a read-only endpoint that performs no AI calls and no reconciliation. See `docs/ai.md`.
+`POST /patients/{patient_id}/analyses` (`summarize_clinical_documents`, `app/api/routes/analyses.py`) is the single entry point covering the whole pipeline end to end:
+
+```text
+Clinical Documents
+        ↓
+Medication Extraction       AISummaryService.summarize() → ClinicalSummary.medications
+        ↓
+Medication Reconciliation   reconcile_ai_extracted_medications() → reconcile_medications()
+        ↓
+Persist Findings            MedicationMention + MedicationDiscrepancy rows
+        ↓
+Analysis Completed          mark_analysis_completed() with real severity counts
+        ↓
+Analysis Results            GET .../analyses/{analysis_id} → AnalysisDetailPage
+```
+
+`persist_analysis_result` (`app/services/analysis_result_service.py`) owns the middle three steps. After staging `AnalysisMedicationMention`/`AnalysisInconsistency` rows exactly as before, it now calls `reconcile_ai_extracted_medications` (`app/services/medication_reconciliation_service.py`), which:
+
+- Persists each AI-extracted medication as a real `MedicationMention`, attached to the selected document with the lowest id. The AI's prompt numbers each note it is given ("Note 1", "Note 2", ...; see `app/ai/prompts.py`), but its response schema never reports which note a given medication came from - there is no per-document attribution to preserve, and changing that response contract was treated as a separate, larger change than this integration. For a single-document analysis (the common case) this attribution is exact; for a multi-document analysis it is a documented simplification, not a claim that the medication was found in every selected document.
+- Queries the patient's `Medication` list (scoped by `patient_id`, same as `run_medication_reconciliation`) and calls the shared `reconcile_medications` helper, which runs the unchanged `build_discrepancy_findings` and persists results via the unchanged `create_medication_discrepancies` - both reused exactly as `run_medication_reconciliation` always used them, just shared through one function instead of two copies.
+- Returns real severity counts, which `persist_analysis_result` now passes into `AnalysisCompletedSummary` instead of the hardcoded zeros used before this issue.
+
+Everything reconciliation stages (the bridged `MedicationMention` rows, the `MedicationDiscrepancy` rows) is added to the session but not committed until `mark_analysis_completed`'s own `db.commit()` - the same staging pattern `persist_analysis_result` already used for `AnalysisMedicationMention`/`AnalysisInconsistency`. If reconciliation raises for any reason, the route's existing outer `try`/`except` (unchanged) rolls back the whole transaction and marks the analysis `failed` with the same sanitized error handling every other failure in this endpoint already uses - so a reconciliation failure can never leave a completed analysis with partially persisted discrepancies, and never requires new error-handling code.
+
+`GET /patients/{patient_id}/analyses/{analysis_id}` now also returns `medication_discrepancies` (see `docs/api.md`), which `AnalysisDetailPage` renders directly - real findings, not a placeholder, once reconciliation has actually run for that analysis.
 
 ---
 
