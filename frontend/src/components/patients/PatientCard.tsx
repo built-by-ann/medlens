@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/common/Card'
 import { patientDetailPath, patientEditPath } from '@/routes/paths'
+import { patientStatusLabel } from '@/utils/patientStatus'
 import type { Patient } from '@/types/api'
 
 function formatDate(value: string): string {
@@ -10,9 +11,22 @@ function formatDate(value: string): string {
 interface PatientCardProps {
   patient: Patient
   onArchiveRequest: (patient: Patient) => void
+  // Both default to false so PatientsPage's existing card - already
+  // implicitly "active" for every row it shows, since the backend excludes
+  // archived patients from the default list - keeps its exact current
+  // appearance. DashboardPage's Recent Patients cards opt into both, since
+  // that view is meant to surface at a glance which patients were touched
+  // most recently and how.
+  showStatus?: boolean
+  showUpdatedAt?: boolean
 }
 
-export function PatientCard({ patient, onArchiveRequest }: PatientCardProps) {
+export function PatientCard({
+  patient,
+  onArchiveRequest,
+  showStatus = false,
+  showUpdatedAt = false,
+}: PatientCardProps) {
   const fullName = `${patient.first_name} ${patient.last_name}`
 
   return (
@@ -27,6 +41,10 @@ export function PatientCard({ patient, onArchiveRequest }: PatientCardProps) {
         <p className="flex flex-wrap gap-x-3 text-xs text-slate-500">
           <span>DOB: {formatDate(patient.date_of_birth)}</span>
           {patient.external_mrn && <span>MRN: {patient.external_mrn}</span>}
+          {showStatus && <span>Status: {patientStatusLabel(patient.status)}</span>}
+          {showUpdatedAt && patient.updated_at && (
+            <span>Updated: {formatDate(patient.updated_at)}</span>
+          )}
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
