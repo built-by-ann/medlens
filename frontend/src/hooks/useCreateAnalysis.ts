@@ -16,7 +16,7 @@ export interface QueuedNote {
   documentType: string
 }
 
-interface SubmitInput {
+export interface SubmitInput {
   files: QueuedFile[]
   notes: QueuedNote[]
 }
