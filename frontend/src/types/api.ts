@@ -57,6 +57,25 @@ export interface AnalysisCreateResult {
   possible_inconsistencies: string[]
 }
 
+// Deliberately narrower than the backend's AnalysisDetailResponse: it also
+// returns medication_mentions and possible_inconsistencies (the AI's raw
+// findings), but rendering those is the discrepancy/AI-summary UI that
+// Sprint 3.5 explicitly defers to a future issue. Omitting the fields here
+// makes it structurally impossible to accidentally render them early.
+export interface AnalysisDetail {
+  id: number
+  patient_id: number
+  status: AnalysisStatus
+  provider: string | null
+  model_name: string | null
+  summary: string | null
+  started_at: string | null
+  completed_at: string | null
+  error_message: string | null
+  created_at: string
+  updated_at: string | null
+}
+
 export interface Patient {
   id: number
   user_id: number

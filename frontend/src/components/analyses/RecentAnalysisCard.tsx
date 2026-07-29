@@ -1,25 +1,12 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/common/Card'
 import { SummaryStat } from '@/components/common/SummaryStat'
+import { AnalysisStatusBadge } from '@/components/analyses/AnalysisStatusBadge'
+import { analysisStatusLabel } from '@/utils/analysisStatus'
 import { analysisDetailPath } from '@/routes/paths'
-import { cn } from '@/utils/cn'
+import type { ApiError } from '@/api/client'
 import type { AnalysisSummary } from '@/types/api'
-
-const STATUS_LABELS: Record<AnalysisSummary['status'], string> = {
-  pending: 'Pending',
-  processing: 'Processing',
-  completed: 'Completed',
-  failed: 'Failed',
-}
-
-// Status is always communicated via this visible text label, never by
-// badge color alone.
-const STATUS_BADGE_STYLES: Record<AnalysisSummary['status'], string> = {
-  pending: 'bg-slate-100 text-slate-700',
-  processing: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700',
-  failed: 'bg-red-100 text-red-700',
-}
 
 function formatDateTime(value: string | null): string | null {
   if (!value) {
@@ -34,29 +21,39 @@ function formatDateTime(value: string | null): string | null {
 
 interface RecentAnalysisCardProps {
   analysis: AnalysisSummary
+  onDelete?: (id: number) => Promise<void>
 }
 
-export function RecentAnalysisCard({ analysis }: RecentAnalysisCardProps) {
+export function RecentAnalysisCard({ analysis, onDelete }: RecentAnalysisCardProps) {
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const createdAt = formatDateTime(analysis.created_at)
   const completedAt = formatDateTime(analysis.completed_at)
-  const statusLabel = STATUS_LABELS[analysis.status]
+  const statusLabel = analysisStatusLabel(analysis.status)
+
+  async function handleDelete() {
+    if (isDeleting || !onDelete) return
+
+    setIsDeleting(true)
+    setDeleteError(null)
+    try {
+      await onDelete(analysis.id)
+    } catch (error) {
+      setDeleteError((error as ApiError).message)
+      setIsDeleting(false)
+    }
+  }
 
   return (
     <Card className="p-0">
       <Link
         to={analysisDetailPath(analysis.patient_id, analysis.id)}
         aria-label={`View analysis from ${createdAt ?? 'an unknown date'}, status: ${statusLabel}`}
-        className="flex flex-col gap-3 rounded-lg p-6 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        className="flex flex-col gap-3 rounded-t-lg p-6 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span
-            className={cn(
-              'rounded-full px-2 py-0.5 text-xs font-medium',
-              STATUS_BADGE_STYLES[analysis.status],
-            )}
-          >
-            {statusLabel}
-          </span>
+          <AnalysisStatusBadge status={analysis.status} />
           {createdAt && <span className="text-xs text-slate-500">{createdAt}</span>}
         </div>
 
@@ -82,6 +79,27 @@ export function RecentAnalysisCard({ analysis }: RecentAnalysisCardProps) {
           </p>
         )}
       </Link>
+
+      {onDelete && (
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-3">
+          {deleteError ? (
+            <p role="alert" className="text-sm text-red-600">
+              {deleteError}
+            </p>
+          ) : (
+            <span />
+          )}
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            aria-label={`Delete analysis from ${createdAt ?? 'an unknown date'}`}
+            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isDeleting ? 'Removing...' : 'Delete'}
+          </button>
+        </div>
+      )}
     </Card>
   )
 }

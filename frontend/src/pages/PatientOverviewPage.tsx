@@ -4,11 +4,18 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
 import { PatientDetails } from '@/components/patients/PatientDetails'
+import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
 import { ArchivePatientDialog } from '@/components/patients/ArchivePatientDialog'
 import { MedicationList } from '@/components/medications/MedicationList'
 import { EmptyMedicationState } from '@/components/medications/EmptyMedicationState'
+import { ClinicalDocumentList } from '@/components/documents/ClinicalDocumentList'
+import { EmptyDocumentsState } from '@/components/documents/EmptyDocumentsState'
+import { RecentAnalysesList } from '@/components/analyses/RecentAnalysesList'
+import { AnalysesEmptyState } from '@/components/analyses/AnalysesEmptyState'
 import { usePatient } from '@/hooks/usePatient'
 import { usePatientMedications } from '@/hooks/usePatientMedications'
+import { usePatientClinicalDocuments } from '@/hooks/usePatientClinicalDocuments'
+import { usePatientAnalyses } from '@/hooks/usePatientAnalyses'
 import { archivePatient } from '@/api/patients'
 import {
   ROUTES,
@@ -18,6 +25,12 @@ import {
   patientUploadPath,
 } from '@/routes/paths'
 import type { ApiError } from '@/api/client'
+
+// Recent Analyses on the Overview page is a glance-and-go preview, not the
+// full browsable history (that's PatientAnalysesPage) - a small limit keeps
+// this page from growing unbounded as a patient accumulates analyses over
+// time.
+const RECENT_ANALYSES_PREVIEW_LIMIT = 3
 
 export function PatientOverviewPage() {
   const { patientId } = useParams<{ patientId: string }>()
@@ -32,6 +45,19 @@ export function PatientOverviewPage() {
     editMedication,
     removeMedication,
   } = usePatientMedications(id)
+  const {
+    documents,
+    isLoading: areDocumentsLoading,
+    error: documentsError,
+    retry: retryDocuments,
+    removeDocument,
+  } = usePatientClinicalDocuments(id)
+  const {
+    analyses,
+    isLoading: areAnalysesLoading,
+    error: analysesError,
+    retry: retryAnalyses,
+  } = usePatientAnalyses(id, RECENT_ANALYSES_PREVIEW_LIMIT)
 
   const [isConfirmingArchive, setIsConfirmingArchive] = useState(false)
   const [isArchiving, setIsArchiving] = useState(false)
@@ -67,6 +93,8 @@ export function PatientOverviewPage() {
 
       {!isLoading && !error && patient && (
         <>
+          <PatientBreadcrumb patient={patient} />
+
           <PageHeader
             title={`${patient.first_name} ${patient.last_name}`}
             description="Patient overview"
@@ -90,6 +118,77 @@ export function PatientOverviewPage() {
           />
 
           <PatientDetails patient={patient} />
+
+          <nav aria-label="Quick actions" className="flex flex-wrap gap-2">
+            <Link
+              to={patientUploadPath(patient.id)}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              Upload document
+            </Link>
+            <Link
+              to={patientMedicationsPath(patient.id)}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              Manage medications
+            </Link>
+          </nav>
+
+          <section aria-labelledby="documents-heading" className="flex flex-col gap-4">
+            <h2 id="documents-heading" className="text-lg font-semibold text-slate-900">
+              Clinical documents
+            </h2>
+
+            {areDocumentsLoading && <LoadingSpinner label="Loading documents" />}
+
+            {!areDocumentsLoading && documentsError && (
+              <ErrorState
+                title="Couldn't load documents"
+                message={documentsError}
+                onRetry={retryDocuments}
+              />
+            )}
+
+            {!areDocumentsLoading && !documentsError && documents.length === 0 && (
+              <EmptyDocumentsState patientId={patient.id} />
+            )}
+
+            {!areDocumentsLoading && !documentsError && documents.length > 0 && (
+              <ClinicalDocumentList documents={documents} onDelete={removeDocument} />
+            )}
+          </section>
+
+          <section aria-labelledby="recent-analyses-heading" className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 id="recent-analyses-heading" className="text-lg font-semibold text-slate-900">
+                Recent analyses
+              </h2>
+              <Link
+                to={patientAnalysesPath(patient.id)}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                View all analyses
+              </Link>
+            </div>
+
+            {areAnalysesLoading && <LoadingSpinner label="Loading analyses" />}
+
+            {!areAnalysesLoading && analysesError && (
+              <ErrorState
+                title="Couldn't load analyses"
+                message={analysesError}
+                onRetry={retryAnalyses}
+              />
+            )}
+
+            {!areAnalysesLoading && !analysesError && analyses.length === 0 && (
+              <AnalysesEmptyState patientId={patient.id} />
+            )}
+
+            {!areAnalysesLoading && !analysesError && analyses.length > 0 && (
+              <RecentAnalysesList analyses={analyses} />
+            )}
+          </section>
 
           <section aria-labelledby="medications-heading" className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-2">
@@ -125,29 +224,6 @@ export function PatientOverviewPage() {
                 onDelete={removeMedication}
               />
             )}
-          </section>
-
-          <section aria-labelledby="analyses-heading" className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-2">
-              <h2 id="analyses-heading" className="text-lg font-semibold text-slate-900">
-                Clinical documents and analyses
-              </h2>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Link
-                to={patientUploadPath(patient.id)}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-              >
-                Upload documents
-              </Link>
-              <Link
-                to={patientAnalysesPath(patient.id)}
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-              >
-                View analysis history
-              </Link>
-            </div>
           </section>
         </>
       )}

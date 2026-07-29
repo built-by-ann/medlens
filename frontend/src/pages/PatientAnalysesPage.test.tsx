@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PatientAnalysesPage } from '@/pages/PatientAnalysesPage'
 import { getPatient } from '@/api/patients'
-import { listAnalyses } from '@/api/analyses'
+import { deleteAnalysis, listAnalyses } from '@/api/analyses'
 import type { AnalysisSummary, Patient } from '@/types/api'
 
 vi.mock('@/api/patients', async (importOriginal) => {
@@ -21,11 +22,13 @@ vi.mock('@/api/analyses', async (importOriginal) => {
   return {
     ...actual,
     listAnalyses: vi.fn(),
+    deleteAnalysis: vi.fn(),
   }
 })
 
 const mockedGetPatient = vi.mocked(getPatient)
 const mockedListAnalyses = vi.mocked(listAnalyses)
+const mockedDeleteAnalysis = vi.mocked(deleteAnalysis)
 
 const patient: Patient = {
   id: 7,
@@ -71,6 +74,7 @@ describe('PatientAnalysesPage', () => {
   beforeEach(() => {
     mockedGetPatient.mockReset()
     mockedListAnalyses.mockReset()
+    mockedDeleteAnalysis.mockReset()
     mockedGetPatient.mockResolvedValue(patient)
     mockedListAnalyses.mockResolvedValue([])
   })
@@ -87,7 +91,18 @@ describe('PatientAnalysesPage', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: /Analyses for Jane Doe/ })
-    expect(mockedListAnalyses).toHaveBeenCalledWith(7, 10)
+    expect(mockedListAnalyses).toHaveBeenCalledWith(7, 50)
+  })
+
+  it('shows a breadcrumb trail ending in Analyses', async () => {
+    renderPage()
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByRole('link', { name: 'Jane Doe' })).toHaveAttribute(
+      'href',
+      '/patients/7',
+    )
+    expect(within(breadcrumb).getByText('Analyses')).toHaveAttribute('aria-current', 'page')
   })
 
   it('shows a back link to the patient overview and a link to start an analysis', async () => {
@@ -122,6 +137,19 @@ describe('PatientAnalysesPage', () => {
     const cardLink = await screen.findByRole('link', { name: /status: Completed/ })
     expect(cardLink).toHaveAttribute('href', '/patients/7/analyses/42')
     expect(screen.getByText('Reconciliation completed with 1 finding.')).toBeInTheDocument()
+  })
+
+  it('deletes an analysis from the list', async () => {
+    mockedListAnalyses.mockResolvedValue([sampleAnalysis])
+    mockedDeleteAnalysis.mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('Reconciliation completed with 1 finding.')
+    await user.click(screen.getByRole('button', { name: /Delete analysis from/ }))
+
+    await waitFor(() => expect(mockedDeleteAnalysis).toHaveBeenCalledWith(7, 42))
+    expect(screen.queryByText('Reconciliation completed with 1 finding.')).not.toBeInTheDocument()
   })
 
   it('shows an error state for the analysis list independent of the patient details', async () => {

@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/common/Button'
+import { Card } from '@/components/common/Card'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
+import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
 import { FileDropzone } from '@/components/upload/FileDropzone'
 import { UploadedFileList } from '@/components/upload/UploadedFileList'
 import { ManualNoteEditor } from '@/components/upload/ManualNoteEditor'
@@ -32,11 +34,11 @@ function isDuplicateFile(existing: QueuedFile[], candidate: File): boolean {
 export function UploadPage() {
   const { patientId } = useParams<{ patientId: string }>()
   const id = Number(patientId)
-  const navigate = useNavigate()
   const { patient, isLoading: isPatientLoading, error: patientError, retry } = usePatient(id)
   const { isSubmitting, error, failedItemLabel, submit, invalidateItem } = useCreateAnalysis(id)
   const nextFileId = useRef(0)
   const nextNoteId = useRef(0)
+  const [completedAnalysisId, setCompletedAnalysisId] = useState<number | null>(null)
 
   const [files, setFiles] = useState<QueuedFile[]>([])
   const [notes, setNotes] = useState<DraftNote[]>([])
@@ -112,10 +114,18 @@ export function UploadPage() {
 
     try {
       const analysisId = await submit({ files, notes })
-      navigate(analysisDetailPath(id, analysisId))
+      setCompletedAnalysisId(analysisId)
     } catch {
       // error / failedItemLabel are already reflected below via hook state.
     }
+  }
+
+  function handleUploadAnother() {
+    setFiles([])
+    setNotes([])
+    setFileError(null)
+    setValidationMessage(null)
+    setCompletedAnalysisId(null)
   }
 
   if (isPatientLoading) {
@@ -132,8 +142,61 @@ export function UploadPage() {
     )
   }
 
+  if (completedAnalysisId !== null) {
+    return (
+      <div className="flex flex-col gap-8">
+        <PatientBreadcrumb patient={patient} trail={[{ label: 'Upload' }]} />
+
+        <PageHeader
+          title={`Upload documents for ${patient.first_name} ${patient.last_name}`}
+          description="Add one or more clinical notes. MedLens extracts medications from what you provide and flags any discrepancies against this patient's medication list."
+        />
+
+        <Card
+          role="status"
+          aria-live="polite"
+          className="flex flex-col items-start gap-4 border-green-200 bg-green-50"
+        >
+          <h2 className="text-lg font-semibold text-slate-900">Analysis started successfully</h2>
+          <p className="text-sm text-slate-700">
+            The documents you added have been uploaded and an analysis is now underway.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to={analysisDetailPath(patient.id, completedAnalysisId)}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              View analysis
+            </Link>
+            <button
+              type="button"
+              onClick={handleUploadAnother}
+              className="cursor-pointer rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              Upload another
+            </button>
+            <Link
+              to={`${patientDetailPath(patient.id)}#documents-heading`}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              View documents
+            </Link>
+            <Link
+              to={patientDetailPath(patient.id)}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              Back to patient
+            </Link>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-8">
+      <PatientBreadcrumb patient={patient} trail={[{ label: 'Upload' }]} />
+
       <PageHeader
         title={`Upload documents for ${patient.first_name} ${patient.last_name}`}
         description="Add one or more clinical notes. MedLens extracts medications from what you provide and flags any discrepancies against this patient's medication list."

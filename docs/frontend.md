@@ -75,6 +75,10 @@ Protected routes are wrapped in `ProtectedRoute` (`src/components/common/Protect
 
 `TopNav` links to Dashboard and Patients, and shows either a "Log in" link or a "Log out" button depending on `useAuth()`'s `user` state. There is deliberately no standalone "Medications" or "Upload" link - as of Sprint 3.5 (Issues #129 and #130), medication management, document upload, and analysis history all only exist within a patient's context (see Patients below), never as a global destination.
 
+### Patient breadcrumb navigation
+
+Sprint 3.5, Issue #131: every page nested under a patient (`PatientOverviewPage`, `UploadPage`, `PatientAnalysesPage`, `AnalysisDetailPage`) renders `PatientBreadcrumb` (`src/components/patients/PatientBreadcrumb.tsx`) above its `PageHeader`, so a provider can never lose track of which patient they're viewing or how to get back. It builds a `Patients / {patient name} / ...trail` `<nav aria-label="Breadcrumb">` with an `<ol>` of crumbs; every crumb is a link except the last, which is the current page and is rendered as plain text with `aria-current="page"` rather than a link to itself. Callers pass only the crumbs *after* the patient name (`trail`, e.g. `[{ label: 'Analyses', to: patientAnalysesPath(id) }, { label: 'Analysis #42' }]` for `AnalysisDetailPage`); `PatientOverviewPage` passes no trail at all, since the patient's own name is already the current page there. `PatientMedicationsPage` and `EditPatientPage` were not touched in this issue - they already had an adequate "← Back to {name}" link and weren't part of this issue's explicit page list.
+
 ---
 
 ## API Layer
@@ -118,7 +122,11 @@ As of Sprint 3.5 (Issue #130), analyses are scoped to a patient (see Patients be
 
 ## Upload
 
-`UploadPage` (`src/pages/UploadPage.tsx`) is nested under a patient: `/patients/:patientId/upload`. It fetches the patient via `usePatient` (the same hook `PatientOverviewPage` and `PatientMedicationsPage` use) to show the patient's name in the heading and a back link, then lets the user supply one or more clinical notes for that patient, either as files or pasted text, and creates an analysis from all of them. This is the same workflow introduced in Issue #41, adapted (not rebuilt) for Sprint 3.5 (Issue #130): `POST /patients/{patientId}/clinical-documents` (pasted text), `/patients/{patientId}/clinical-documents/upload-txt`, `/patients/{patientId}/clinical-documents/upload-pdf` (files), and `POST /patients/{patientId}/analyses` (create the analysis) replaced the old flat routes. `useCreateAnalysis(patientId)` (`src/hooks/useCreateAnalysis.ts`) now takes the patient id and threads it through that same multi-request sequence (upload every file, create every pasted note as a document, then summarize all of them, all against this one patient); `UploadPage` navigates to `analysisDetailPath(patientId, analysisId)` on success. Every document created through this flow belongs to the selected patient only - there is no global document pool to select from or accidentally mix into another patient's analysis.
+`UploadPage` (`src/pages/UploadPage.tsx`) is nested under a patient: `/patients/:patientId/upload`. It fetches the patient via `usePatient` (the same hook `PatientOverviewPage` and `PatientMedicationsPage` use) to show the patient's name in the heading, a breadcrumb, and a back link, then lets the user supply one or more clinical notes for that patient, either as files or pasted text, and creates an analysis from all of them. This is the same workflow introduced in Issue #41, adapted (not rebuilt) first for Sprint 3.5 (Issue #130 - patient-scoping) and again for Issue #131 (the post-submit workflow below): `POST /patients/{patientId}/clinical-documents` (pasted text), `/patients/{patientId}/clinical-documents/upload-txt`, `/patients/{patientId}/clinical-documents/upload-pdf` (files), and `POST /patients/{patientId}/analyses` (create the analysis). `useCreateAnalysis(patientId)` (`src/hooks/useCreateAnalysis.ts`) takes the patient id and threads it through that same multi-request sequence (upload every file, create every pasted note as a document, then summarize all of them, all against this one patient). Every document created through this flow belongs to the selected patient only - there is no global document pool to select from or accidentally mix into another patient's analysis.
+
+### Post-upload success state
+
+Sprint 3.5, Issue #131: on a successful submit, `UploadPage` no longer navigates straight to the new analysis. It instead sets local `completedAnalysisId` state and renders a `role="status" aria-live="polite"` success panel in place of the upload form, offering four ways forward - "View analysis" (`analysisDetailPath`), "Upload another" (`handleUploadAnother`, which clears `files`/`notes`/`completedAnalysisId` and re-shows the empty form without a route change), "View documents" (a link to `patientDetailPath(patientId)#documents-heading`, jumping straight to the new Clinical Documents section on Overview), and "Back to patient" (`patientDetailPath(patientId)`). This replaced an immediate `navigate()` call specifically so a provider always has an explicit next step rather than being dropped straight into `AnalysisDetailPage`'s still-mostly-placeholder content.
 
 `src/components/upload/`:
 
@@ -139,15 +147,21 @@ Selected files are validated against the backend's actual supported types (`.txt
 
 ## Analyses
 
-Sprint 3.5, Issue #130: analysis history moved from a global Dashboard feed to a per-patient page, `PatientAnalysesPage` (`src/pages/PatientAnalysesPage.tsx`, `/patients/:patientId/analyses`). It fetches the patient via `usePatient` (for the heading and back link) and the patient's analyses via `usePatientAnalyses(patientId)` (`src/hooks/usePatientAnalyses.ts`), which calls `listAnalyses(patientId, limit)` (`src/api/analyses.ts`, `GET /patients/{patientId}/analyses`) and exposes the same `{ analyses, isLoading, error, retry }` shape `usePatientMedications` and the other patient-scoped hooks use.
+Sprint 3.5, Issue #130: analysis history moved from a global Dashboard feed to a per-patient page, `PatientAnalysesPage` (`src/pages/PatientAnalysesPage.tsx`, `/patients/:patientId/analyses`). It fetches the patient via `usePatient` (for the heading, breadcrumb, and back link) and the patient's analyses via `usePatientAnalyses(patientId, 50)` (`src/hooks/usePatientAnalyses.ts`) - Issue #131 raised this page's own limit from the hook's default of 10 to the backend's maximum of 50, since this page is the full browsable history, not a preview. The hook calls `listAnalyses(patientId, limit)` (`src/api/analyses.ts`, `GET /patients/{patientId}/analyses`) and exposes `{ analyses, isLoading, error, retry, removeAnalysis }`, the same shape `usePatientMedications` and the other patient-scoped hooks use; `removeAnalysis` (added in Issue #131) calls `deleteAnalysis(patientId, id)` (`DELETE /patients/{patientId}/analyses/{analysisId}`) and removes the row from local state on success.
 
 `src/components/analyses/` (moved here from `components/dashboard/` when the Dashboard's global feed was retired):
 
-- `RecentAnalysisCard`: one analysis, with a status badge (label text, never color alone), created/completed timestamps, the AI summary text, document count, and finding counts via `SummaryStat` (`components/common/SummaryStat`), provider/model if present. The whole card is a single `Link` to `analysisDetailPath(analysis.patient_id, analysis.id)` (using the `patient_id` now present on `AnalysisSummary` itself, rather than a prop threaded down from the page), with an explicit `aria-label` describing the date and status, since a screen reader would otherwise read every nested stat as part of the link's name.
-- `RecentAnalysesList`: a semantic `<ul>` of cards.
+- `RecentAnalysisCard`: one analysis, with a status badge (`AnalysisStatusBadge`, extracted in Issue #131 so `AnalysisDetailPage` could reuse the exact same label/color mapping instead of a second copy), created/completed timestamps, the AI summary text, document count, and finding counts via `SummaryStat` (`components/common/SummaryStat`), provider/model if present. The whole card is a single `Link` to `analysisDetailPath(analysis.patient_id, analysis.id)` (using the `patient_id` now present on `AnalysisSummary` itself, rather than a prop threaded down from the page), with an explicit `aria-label` describing the date and status. An optional `onDelete` prop (Issue #131) renders a "Delete" button in a separate footer row *outside* the `Link` (a button nested inside an anchor would be invalid, keyboard-unreachable markup) - `PatientAnalysesPage` passes `removeAnalysis`; `PatientOverviewPage`'s Recent Analyses preview does not, since delete belongs to the full history page, not the glance-and-go preview.
+- `RecentAnalysesList`: a semantic `<ul>` of cards, threading the optional `onDelete` through to each.
 - `AnalysesEmptyState`: explains what MedLens does and links to this patient's Upload page, shown when the patient has no analyses yet.
+- `AnalysisStatusBadge` (Issue #131): the status-to-label/color mapping, extracted out of `RecentAnalysisCard` so `AnalysisDetailPage` renders an identical badge rather than a near-duplicate. The label lookup itself (`analysisStatusLabel`) lives in `src/utils/analysisStatus.ts`, not this component file - keeping a plain function out of a component file avoids tripping the `react-refresh/only-export-components` lint rule.
 
-`AnalysisDetailPage` (`src/pages/AnalysisDetailPage.tsx`, `/patients/:patientId/analyses/:analysisId`) remains a placeholder, per Issue #130's explicit scope (no analysis results, inconsistency display, or AI summary UI) - it now reads both `patientId` and `analysisId` from the route and links back to `patientAnalysesPath(patientId)`, but otherwise renders the same "content will be added in a future issue" placeholder it did before.
+`AnalysisDetailPage` (`src/pages/AnalysisDetailPage.tsx`, `/patients/:patientId/analyses/:analysisId`) fetches real data as of Issue #131, via a new `useAnalysisDetail(patientId, analysisId)` hook (`src/hooks/useAnalysisDetail.ts`) calling `getAnalysisDetail` (`api/analyses.ts`, `GET /patients/{patientId}/analyses/{analysisId}`, added in this issue - the route existed since #130 but nothing on the frontend called it yet). It shows a breadcrumb (Patients / patient name / Analyses / Analysis #N), the same `AnalysisStatusBadge`, the sanitized `error_message` for a failed run, the `summary` text, and whatever of `created_at`/`started_at`/`completed_at`/`provider`/`model_name` the backend actually populated (an item is omitted rather than shown as empty when its value is `null`). Two things are deliberately still out of scope and were **not** added, both because the backend doesn't expose them and adding them would mean changing the API, which this issue explicitly forbids:
+
+- **A document list.** `AnalysisDetailResponse` has no field recording which `ClinicalDocument`s a given analysis covered - only `AnalysisSummaryResponse` (the list endpoint) has a computed `document_count`. There is nothing to display here without inventing data.
+- **Finding/severity counts.** Also only on `AnalysisSummaryResponse`, not the detail response.
+
+`medication_mentions` and `possible_inconsistencies` (the AI's raw findings) are also never rendered here - the frontend's `AnalysisDetail` type (`types/api.ts`) deliberately omits both fields entirely, even though the backend response includes them, so it's structurally impossible to accidentally render the discrepancy/AI-summary UI that Sprint 3.5 explicitly defers to a future issue. A final `Card` keeps the same "content will be added in a future issue" placeholder text this page always had, now clearly separated from the real metadata above it.
 
 ---
 
@@ -157,9 +171,9 @@ Sprint 3.5, Issue #127: the first patient management UI, built directly against 
 
 Five routes, five pages:
 
-- `PatientsPage` (`/patients`): search, a "+ New patient" action, and the active patient list. `usePatients` (`src/hooks/usePatients.ts`) fetches the list on mount (`{ patients, isLoading, error, retry }`, the same shape as `useRecentAnalyses`) and exposes `archivePatient`, which updates local state directly on success rather than refetching.
+- `PatientsPage` (`/patients`): search, a "+ New patient" action, and the active patient list. `usePatients` (`src/hooks/usePatients.ts`) fetches the list on mount (`{ patients, isLoading, error, retry }`, the same shape `usePatientMedications`/`usePatientAnalyses`/`usePatientClinicalDocuments` all use) and exposes `archivePatient`, which updates local state directly on success rather than refetching.
 - `NewPatientPage` (`/patients/new`): renders `PatientForm`, calls `createPatient` (`api/patients.ts`) directly on submit, and navigates to the new patient's overview on success.
-- `PatientOverviewPage` (`/patients/:patientId`): identity/demographic display (`PatientDetails`), a Medications section (see below), a Clinical documents and analyses section (Upload documents / View analysis history links, added in Sprint 3.5 Issue #130 - real links, not placeholders, since both destination pages exist), and Edit/Archive actions. `usePatient(patientId)` (`src/hooks/usePatient.ts`) fetches the single record; a 404 for a nonexistent or not-owned patient surfaces through the normal `error` state; there's no separate "not found" UI, since the backend's `"Patient not found"` detail already reads correctly as an error message.
+- `PatientOverviewPage` (`/patients/:patientId`): the patient's central workspace. Top to bottom: a breadcrumb, identity/demographic display (`PatientDetails`) with Edit/Archive actions, a Quick Actions bar ("Upload document", "Manage medications"), a Clinical Documents section, a Recent Analyses preview, and the Medications section (see Medications below). The Clinical Documents and Recent Analyses sections were added/restructured in Sprint 3.5 Issue #131 - see Clinical Documents below and Analyses above. `usePatient(patientId)` (`src/hooks/usePatient.ts`) fetches the single record; a 404 for a nonexistent or not-owned patient surfaces through the normal `error` state; there's no separate "not found" UI, since the backend's `"Patient not found"` detail already reads correctly as an error message.
 - `EditPatientPage` (`/patients/:patientId/edit`): the same `usePatient` fetch, `PatientForm` prepopulated via a `toPayload(patient)` conversion, calls `updatePatient` on submit, and navigates back to the overview on success. `status` is never read from or written to the form - the backend already ignores it on `PATCH`, so this is enforced by `PatientPayload` simply not including the field, not by any extra client-side guard.
 - `PatientMedicationsPage` (`/patients/:patientId/medications`): the full medication list and add-form for one patient - see Medications below.
 
@@ -172,9 +186,24 @@ Five routes, five pages:
 - `patientFormValidation.ts`: mirrors `schemas/patient.py` exactly - first name, last name, and date of birth are required; MRN and notes are optional.
 - `PatientCard` / `PatientList`: one row per patient (name, DOB, MRN if present) with View/Edit/Archive actions; unlike `MedicationCard`, there's no inline edit mode, since Edit is a full route here.
 - `PatientSearch` / `filterPatients.ts`: the backend's `GET /patients` has no search parameter, so filtering is client-side, case-insensitive, over first name, last name, full name, and MRN. `filterPatients` is a pure function (returns a new array, never mutates `patients`), kept separate from the page so it's unit-testable on its own.
-- `EmptyPatientState`: distinguishes "no patients yet" (a create CTA, like `DashboardEmptyState`) from "a search matched nothing" (a plain sentence, no CTA) via a boolean prop rather than being two separate components.
+- `EmptyPatientState`: distinguishes "no patients yet" (a create CTA) from "a search matched nothing" (a plain sentence, no CTA) via a boolean prop rather than being two separate components.
 - `PatientDetails`: the Overview page's identity/demographic card, reusing `SummaryStat` for each label/value pair exactly as `RecentAnalysisCard` does.
 - `ArchivePatientDialog`: the app's first dialog. Built on the native `<dialog>` element (`showModal()`/`close()`) rather than a hand-rolled overlay - see Accessibility below.
+- `PatientBreadcrumb`: see Patient breadcrumb navigation, above.
+
+### Clinical Documents
+
+Sprint 3.5, Issue #131's main addition: a real document management section on `PatientOverviewPage`, replacing the placeholder line that used to sit there. `usePatientClinicalDocuments(patientId)` (`src/hooks/usePatientClinicalDocuments.ts`) fetches the patient's documents via `listClinicalDocuments` (`api/clinicalDocuments.ts`, `GET /patients/{patientId}/clinical-documents` - this call existed on the backend since Issue #130 but nothing on the frontend used it until now) and exposes `{ documents, isLoading, error, retry, removeDocument }`, the same shape as the other patient-scoped hooks; `removeDocument` calls the also-new `deleteClinicalDocument` (`DELETE /patients/{patientId}/clinical-documents/{documentId}`).
+
+`src/components/documents/`:
+
+- `ClinicalDocumentCard`: title, document type label (`documentTypeLabel`, moved from a private helper inside `NoteCard` into `api/clinicalDocuments.ts` so both consumers share one lookup instead of two copies), creation date, and a file-type label ("Pasted note" / "Uploaded .txt file" / "Uploaded .pdf file", read off `file_type`) in the subtitle. "View" toggles an inline expand/collapse (`aria-expanded`, `aria-controls`) showing the document's `raw_text` - not a modal, and not a PDF preview: the backend only ever stores the extracted text (`raw_text`), never the original uploaded file bytes, so there is no file to preview or download. Building a fake "Download original PDF" action would be exactly the invented functionality the issue warns against; showing the real extracted text is the honest equivalent. "Delete" mirrors `MedicationCard`'s pattern (own loading/error state, calls `onDelete`, parent hook updates local state on success).
+- `ClinicalDocumentList`: a semantic `<ul>` of cards.
+- `EmptyDocumentsState`: "No documents uploaded" plus a link to this patient's Upload page, shown when the list is empty - mirrors `AnalysesEmptyState`'s shape rather than `EmptyMedicationState`'s plain-text form, since (unlike Medications) there is no inline add-form directly below it to point at instead.
+
+### Quick Actions and the "Create Analysis" question
+
+`PatientOverviewPage`'s Quick Actions bar (a `<nav aria-label="Quick actions">`) has two entries: "Upload document" (`patientUploadPath`) and "Manage medications" (`patientMedicationsPath`). The issue's own recommended layout listed a third, separate "Create Analysis" action - deliberately not added, because it would have had nowhere distinct to go: creating an analysis only happens by selecting documents on `UploadPage` (see Upload above), the same destination "Upload document" already links to. A second button with a different label pointing at the identical route is exactly the "duplicate button" the issue warns against, not two real actions. "Create Analysis" as a concept is still fully reachable - once on `UploadPage`, adding at least one file or note and clicking "Start Analysis" *is* creating an analysis - and `PatientAnalysesPage` separately offers its own "+ Start analysis" link into the same flow for anyone arriving from the analysis history instead. Building a second, independent "create an analysis from documents already on file" flow (which would need its own document-selection UI) was treated as new functionality beyond this issue's "connect what exists" scope, not a gap this issue asked to close.
 
 ### Archiving
 
@@ -184,9 +213,9 @@ No toast/notification component exists anywhere in this codebase yet, so "succes
 
 ### Not Implemented Yet (Patients)
 
-- A document list view on `PatientOverviewPage` (Upload and analysis history links are there as of Issue #130; browsing/viewing a patient's individual clinical documents is a future issue).
 - Searching or viewing archived patients (once archived, a patient is only reachable by its direct URL, not through any list).
 - Un-archiving.
+- Selecting from a patient's already-uploaded documents to start a new analysis without re-uploading anything (see "Quick Actions and the 'Create Analysis' question" above) - today, an analysis can only be created from documents added in the same Upload session.
 
 ---
 
@@ -304,8 +333,8 @@ The frontend does not yet have a Docker Compose service; it currently runs direc
 
 ## Not Implemented Yet
 
-The following are explicitly out of scope for this issue and left for future issues:
+The following are explicitly out of scope and left for future issues:
 
-- Real analysis detail display (`AnalysisDetailPage` is still a placeholder; `UploadPage` already navigates to it by id after creating an analysis)
-- A Docker Compose service for the frontend
-- A document list/selection UI on `PatientOverviewPage` or `PatientAnalysesPage` (Sprint 3.5, Issue #130 patient-scoped Upload and Analyses; a "View documents" list, the analysis results UI, and the inconsistency display UI remain future issues)
+- The analysis results UI: rendering `medication_mentions` and `possible_inconsistencies` on `AnalysisDetailPage` (Sprint 3.5, Issue #131 added real metadata - status, timestamps, provider/model, summary text - but deliberately left the AI's raw findings and any discrepancy display unbuilt; see Analyses above).
+- A Docker Compose service for the frontend.
+- Selecting from a patient's already-uploaded documents to start a new analysis without re-uploading them (see "Quick Actions and the 'Create Analysis' question" under Patients above).

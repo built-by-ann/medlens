@@ -1,12 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePatientAnalyses } from '@/hooks/usePatientAnalyses'
-import { listAnalyses } from '@/api/analyses'
+import { deleteAnalysis, listAnalyses } from '@/api/analyses'
 import type { AnalysisSummary } from '@/types/api'
 
 vi.mock('@/api/analyses')
 
 const mockedListAnalyses = vi.mocked(listAnalyses)
+const mockedDeleteAnalysis = vi.mocked(deleteAnalysis)
 
 const sampleAnalysis: AnalysisSummary = {
   id: 1,
@@ -28,6 +29,7 @@ const sampleAnalysis: AnalysisSummary = {
 describe('usePatientAnalyses', () => {
   beforeEach(() => {
     mockedListAnalyses.mockReset()
+    mockedDeleteAnalysis.mockReset()
   })
 
   it('starts in a loading state with no analyses and no error', () => {
@@ -103,5 +105,35 @@ describe('usePatientAnalyses', () => {
     rerender({ patientId: 8 })
 
     await waitFor(() => expect(mockedListAnalyses).toHaveBeenCalledWith(8, 10))
+  })
+
+  it('removeAnalysis removes the matching analysis from local state', async () => {
+    mockedListAnalyses.mockResolvedValue([sampleAnalysis])
+    mockedDeleteAnalysis.mockResolvedValue(undefined)
+
+    const { result } = renderHook(() => usePatientAnalyses(7))
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    await act(async () => {
+      await result.current.removeAnalysis(1)
+    })
+
+    expect(result.current.analyses).toEqual([])
+    expect(mockedDeleteAnalysis).toHaveBeenCalledWith(7, 1)
+  })
+
+  it('removeAnalysis propagates the error without changing local state', async () => {
+    mockedListAnalyses.mockResolvedValue([sampleAnalysis])
+    mockedDeleteAnalysis.mockRejectedValue({ status: 500, message: 'Delete failed.' })
+
+    const { result } = renderHook(() => usePatientAnalyses(7))
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    await expect(
+      act(async () => {
+        await result.current.removeAnalysis(1)
+      }),
+    ).rejects.toMatchObject({ message: 'Delete failed.' })
+    expect(result.current.analyses).toEqual([sampleAnalysis])
   })
 })
