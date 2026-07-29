@@ -146,6 +146,8 @@ Represents any uploaded or entered documentation source that may contain medicat
 
 ClinicalDocument is owned by `Patient`: every API route and service function scopes and authorizes by `patient_id`, the sole ownership column - there is no `user_id` on this table. See Design Decisions.
 
+An `analysis_count` property (`len(self.analyses)`) is computed on the model rather than stored as a column, added in Issue #146 so the frontend can show how many analyses a document has been included in - the same pattern as `Analysis.document_count`.
+
 Examples:
 
 - medication list

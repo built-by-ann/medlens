@@ -16,6 +16,7 @@ import { NewPatientPage } from '@/pages/NewPatientPage'
 import { PatientOverviewPage } from '@/pages/PatientOverviewPage'
 import { EditPatientPage } from '@/pages/EditPatientPage'
 import { PatientMedicationsPage } from '@/pages/PatientMedicationsPage'
+import { PatientDocumentsPage } from '@/pages/PatientDocumentsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { ROUTES } from '@/routes/paths'
 
@@ -48,6 +49,7 @@ export function AppRoutes() {
         <Route path={ROUTES.newPatient} element={<NewPatientPage />} />
         <Route path={ROUTES.patientEdit} element={<EditPatientPage />} />
         <Route path={ROUTES.patientMedications} element={<PatientMedicationsPage />} />
+        <Route path={ROUTES.patientDocuments} element={<PatientDocumentsPage />} />
         <Route path={ROUTES.patientUpload} element={<UploadPage />} />
         <Route path={ROUTES.patientAnalyses} element={<PatientAnalysesPage />} />
         <Route path={ROUTES.patientSelectDocuments} element={<SelectDocumentsPage />} />

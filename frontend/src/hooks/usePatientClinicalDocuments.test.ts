@@ -28,6 +28,7 @@ function makeDocument(overrides: Partial<ClinicalDocument> = {}): ClinicalDocume
     file_type: 'manual_entry',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: null,
+    analysis_count: 0,
     ...overrides,
   }
 }

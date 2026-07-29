@@ -8,7 +8,7 @@ import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
 import { ArchivePatientDialog } from '@/components/patients/ArchivePatientDialog'
 import { MedicationList } from '@/components/medications/MedicationList'
 import { EmptyMedicationState } from '@/components/medications/EmptyMedicationState'
-import { ClinicalDocumentList } from '@/components/documents/ClinicalDocumentList'
+import { RecentDocumentsList } from '@/components/documents/RecentDocumentsList'
 import { EmptyDocumentsState } from '@/components/documents/EmptyDocumentsState'
 import { RecentAnalysesList } from '@/components/analyses/RecentAnalysesList'
 import { AnalysesEmptyState } from '@/components/analyses/AnalysesEmptyState'
@@ -20,10 +20,10 @@ import { archivePatient } from '@/api/patients'
 import {
   ROUTES,
   patientAnalysesPath,
+  patientDocumentsPath,
   patientEditPath,
   patientMedicationsPath,
   patientUploadPath,
-  selectDocumentsPath,
 } from '@/routes/paths'
 import type { ApiError } from '@/api/client'
 
@@ -32,6 +32,13 @@ import type { ApiError } from '@/api/client'
 // this page from growing unbounded as a patient accumulates analyses over
 // time.
 const RECENT_ANALYSES_PREVIEW_LIMIT = 3
+
+// Recent Clinical Documents is the same kind of glance-and-go preview,
+// pointing at the full history on PatientDocumentsPage (Issue #146). The
+// backend's clinical-documents list endpoint has no limit query param (see
+// docs/api.md), so this is applied client-side against the same full list
+// usePatientClinicalDocuments already fetches, rather than a backend change.
+const RECENT_DOCUMENTS_PREVIEW_LIMIT = 5
 
 export function PatientOverviewPage() {
   const { patientId } = useParams<{ patientId: string }>()
@@ -51,7 +58,6 @@ export function PatientOverviewPage() {
     isLoading: areDocumentsLoading,
     error: documentsError,
     retry: retryDocuments,
-    removeDocument,
   } = usePatientClinicalDocuments(id)
   const {
     analyses,
@@ -138,14 +144,16 @@ export function PatientOverviewPage() {
           <section aria-labelledby="documents-heading" className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-2">
               <h2 id="documents-heading" className="text-lg font-semibold text-slate-900">
-                Clinical documents
+                Recent clinical documents
               </h2>
-              <Link
-                to={selectDocumentsPath(patient.id)}
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-              >
-                Create analysis from documents
-              </Link>
+              {documents.length > 0 && (
+                <Link
+                  to={patientDocumentsPath(patient.id)}
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                >
+                  View All
+                </Link>
+              )}
             </div>
 
             {areDocumentsLoading && <LoadingSpinner label="Loading documents" />}
@@ -163,7 +171,7 @@ export function PatientOverviewPage() {
             )}
 
             {!areDocumentsLoading && !documentsError && documents.length > 0 && (
-              <ClinicalDocumentList documents={documents} onDelete={removeDocument} />
+              <RecentDocumentsList documents={documents.slice(0, RECENT_DOCUMENTS_PREVIEW_LIMIT)} />
             )}
           </section>
 

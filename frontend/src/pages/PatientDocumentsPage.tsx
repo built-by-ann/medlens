@@ -1,0 +1,93 @@
+import { Link, useParams } from 'react-router-dom'
+import { PageHeader } from '@/components/common/PageHeader'
+import { LoadingSpinner } from '@/components/common/LoadingSpinner'
+import { ErrorState } from '@/components/common/ErrorState'
+import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
+import { ClinicalDocumentList } from '@/components/documents/ClinicalDocumentList'
+import { EmptyDocumentsState } from '@/components/documents/EmptyDocumentsState'
+import { usePatient } from '@/hooks/usePatient'
+import { usePatientClinicalDocuments } from '@/hooks/usePatientClinicalDocuments'
+import { patientDetailPath, patientUploadPath, selectDocumentsPath } from '@/routes/paths'
+
+export function PatientDocumentsPage() {
+  const { patientId } = useParams<{ patientId: string }>()
+  const id = Number(patientId)
+
+  const {
+    patient,
+    isLoading: isPatientLoading,
+    error: patientError,
+    retry: retryPatient,
+  } = usePatient(id)
+  const {
+    documents,
+    isLoading: areDocumentsLoading,
+    error: documentsError,
+    retry: retryDocuments,
+    removeDocument,
+  } = usePatientClinicalDocuments(id)
+
+  if (isPatientLoading) {
+    return <LoadingSpinner label="Loading patient" />
+  }
+
+  if (patientError || !patient) {
+    return (
+      <ErrorState
+        title="Couldn't load this patient"
+        message={patientError ?? 'Patient not found.'}
+        onRetry={retryPatient}
+      />
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <PatientBreadcrumb patient={patient} trail={[{ label: 'Clinical Documents' }]} />
+
+      <PageHeader
+        title="Clinical Documents"
+        description={`Complete document history for ${patient.first_name} ${patient.last_name}`}
+      />
+
+      <nav aria-label="Document actions" className="flex flex-wrap gap-2">
+        <Link
+          to={patientUploadPath(patient.id)}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        >
+          Upload Documents
+        </Link>
+        <Link
+          to={selectDocumentsPath(patient.id)}
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        >
+          Create Analysis
+        </Link>
+        <Link
+          to={patientDetailPath(patient.id)}
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        >
+          View Patient
+        </Link>
+      </nav>
+
+      {areDocumentsLoading && <LoadingSpinner label="Loading documents" />}
+
+      {!areDocumentsLoading && documentsError && (
+        <ErrorState
+          title="Couldn't load documents"
+          message={documentsError}
+          onRetry={retryDocuments}
+        />
+      )}
+
+      {!areDocumentsLoading && !documentsError && documents.length === 0 && (
+        <EmptyDocumentsState patientId={patient.id} />
+      )}
+
+      {!areDocumentsLoading && !documentsError && documents.length > 0 && (
+        <ClinicalDocumentList documents={documents} onDelete={removeDocument} />
+      )}
+    </div>
+  )
+}

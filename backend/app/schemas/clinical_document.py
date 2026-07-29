@@ -21,3 +21,10 @@ class ClinicalDocumentResponse(BaseModel):
     file_type: str | None
     created_at: datetime
     updated_at: datetime | None
+    # Issue #146: how many analyses this document has been included in
+    # (len(document.analyses), a property on the model, not a column - see
+    # Analysis.document_count for the identical pattern). There is no field
+    # for file size: the backend never stores the original uploaded file's
+    # bytes, only its extracted raw_text, so no real byte size exists
+    # anywhere to expose.
+    analysis_count: int = Field(ge=0)

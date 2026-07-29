@@ -1,3 +1,7 @@
+from app.models.analysis import Analysis
+from app.models.clinical_document import ClinicalDocument
+
+
 def _register_and_login(client, email, password="correcthorse123"):
     client.post(
         "/auth/register",
@@ -180,6 +184,45 @@ def test_get_document_by_id_succeeds(client):
 
     assert response.status_code == 200
     assert response.json()["id"] == created["id"]
+
+
+def test_document_response_includes_zero_analysis_count_when_unused(client):
+    # Issue #146: analysis_count is derived from the analyses relationship
+    # (len(document.analyses)), not a stored column - a document that has
+    # never been included in an analysis reports 0, not a missing field.
+    token = _register_and_login(client, "analysiscountzero@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"]).json()
+
+    assert document["analysis_count"] == 0
+
+    list_response = client.get(
+        f"/patients/{patient['id']}/clinical-documents", headers=_auth_headers(token)
+    )
+    assert list_response.json()[0]["analysis_count"] == 0
+
+
+def test_document_response_reflects_analysis_count_after_use_in_analyses(client, db):
+    token = _register_and_login(client, "analysiscount@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"]).json()
+
+    # Inserted directly rather than through POST /patients/{id}/analyses,
+    # since that route also calls a real AI provider - analysis_count only
+    # cares that the many-to-many link exists, not how the Analysis was
+    # created.
+    db_document = db.get(ClinicalDocument, document["id"])
+    db.add(Analysis(patient_id=patient["id"], status="completed", clinical_documents=[db_document]))
+    db.add(Analysis(patient_id=patient["id"], status="completed", clinical_documents=[db_document]))
+    db.commit()
+
+    response = client.get(
+        f"/patients/{patient['id']}/clinical-documents/{document['id']}",
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["analysis_count"] == 2
 
 
 def test_get_document_returns_404_for_unknown_id(client):

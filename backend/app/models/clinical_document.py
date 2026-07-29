@@ -31,3 +31,7 @@ class ClinicalDocument(Base):
         secondary="analysis_clinical_documents",
         back_populates="clinical_documents",
     )
+
+    @property
+    def analysis_count(self) -> int:
+        return len(self.analyses)

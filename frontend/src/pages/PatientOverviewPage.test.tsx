@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PatientOverviewPage } from '@/pages/PatientOverviewPage'
 import { archivePatient, getPatient } from '@/api/patients'
 import { deleteMedication, listMedications, updateMedication } from '@/api/medications'
-import { deleteClinicalDocument, listClinicalDocuments } from '@/api/clinicalDocuments'
+import { listClinicalDocuments } from '@/api/clinicalDocuments'
 import { deleteAnalysis, listAnalyses } from '@/api/analyses'
 import type { AnalysisSummary, ClinicalDocument, Medication, Patient } from '@/types/api'
 
@@ -36,7 +36,6 @@ vi.mock('@/api/clinicalDocuments', async (importOriginal) => {
   return {
     ...actual,
     listClinicalDocuments: vi.fn(),
-    deleteClinicalDocument: vi.fn(),
   }
 })
 
@@ -56,7 +55,6 @@ const mockedListMedications = vi.mocked(listMedications)
 const mockedUpdateMedication = vi.mocked(updateMedication)
 const mockedDeleteMedication = vi.mocked(deleteMedication)
 const mockedListClinicalDocuments = vi.mocked(listClinicalDocuments)
-const mockedDeleteClinicalDocument = vi.mocked(deleteClinicalDocument)
 const mockedListAnalyses = vi.mocked(listAnalyses)
 const mockedDeleteAnalysis = vi.mocked(deleteAnalysis)
 const mockNavigate = vi.fn()
@@ -97,17 +95,23 @@ const sampleMedication: Medication = {
   updated_at: null,
 }
 
-const sampleDocument: ClinicalDocument = {
-  id: 9,
-  patient_id: 1,
-  document_type: 'visit_note',
-  title: 'Initial Visit',
-  raw_text: 'Patient presents with hypertension.',
-  file_name: null,
-  file_type: 'manual_entry',
-  created_at: '2026-01-01T00:00:00Z',
-  updated_at: null,
+function makeDocument(overrides: Partial<ClinicalDocument> = {}): ClinicalDocument {
+  return {
+    id: 9,
+    patient_id: 1,
+    document_type: 'visit_note',
+    title: 'Initial Visit',
+    raw_text: 'Patient presents with hypertension.',
+    file_name: null,
+    file_type: 'manual_entry',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: null,
+    analysis_count: 0,
+    ...overrides,
+  }
 }
+
+const sampleDocument: ClinicalDocument = makeDocument()
 
 const sampleAnalysis: AnalysisSummary = {
   id: 42,
@@ -144,7 +148,6 @@ describe('PatientOverviewPage', () => {
     mockedUpdateMedication.mockReset()
     mockedDeleteMedication.mockReset()
     mockedListClinicalDocuments.mockReset()
-    mockedDeleteClinicalDocument.mockReset()
     mockedListAnalyses.mockReset()
     mockedDeleteAnalysis.mockReset()
     mockNavigate.mockReset()
@@ -270,13 +273,23 @@ describe('PatientOverviewPage', () => {
     )
   })
 
-  it('links Clinical documents to the existing-document analysis flow', async () => {
+  it('shows a "View All" link to the full Clinical Documents page when documents exist', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    mockedListClinicalDocuments.mockResolvedValue([sampleDocument])
+    renderOverviewPage()
+
+    expect(await screen.findByRole('link', { name: 'View All' })).toHaveAttribute(
+      'href',
+      '/patients/1/documents',
+    )
+  })
+
+  it('does not show a "View All" link when there are no documents to view', async () => {
     mockedGetPatient.mockResolvedValue(patient)
     renderOverviewPage()
 
-    expect(
-      await screen.findByRole('link', { name: 'Create analysis from documents' }),
-    ).toHaveAttribute('href', '/patients/1/analyses/select-documents')
+    await screen.findByText('No documents uploaded')
+    expect(screen.queryByRole('link', { name: 'View All' })).not.toBeInTheDocument()
   })
 
   it('shows a breadcrumb naming Patients and the current patient', async () => {
@@ -303,33 +316,55 @@ describe('PatientOverviewPage', () => {
     expect(mockedListClinicalDocuments).toHaveBeenCalledWith(1)
   })
 
-  it('shows the patient document list and lets the user delete a document', async () => {
+  it('shows a compact preview of recent documents with no delete action', async () => {
     mockedGetPatient.mockResolvedValue(patient)
     mockedListClinicalDocuments.mockResolvedValue([sampleDocument])
-    mockedDeleteClinicalDocument.mockResolvedValue(undefined)
-    const user = userEvent.setup()
     renderOverviewPage()
 
     expect(await screen.findByText('Initial Visit')).toBeInTheDocument()
+    expect(screen.getByText(/Visit note/)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Delete Initial Visit' }))
-
-    await waitFor(() => expect(mockedDeleteClinicalDocument).toHaveBeenCalledWith(1, 9))
-    expect(screen.queryByText('Initial Visit')).not.toBeInTheDocument()
+    // Full document management (delete) lives on the dedicated Clinical
+    // Documents page instead - only viewing is available from the preview.
+    expect(screen.queryByRole('button', { name: 'Delete Initial Visit' })).not.toBeInTheDocument()
   })
 
-  it('expands a document to view its extracted text', async () => {
+  it('lets a recent document card be clicked to view its extracted text', async () => {
     mockedGetPatient.mockResolvedValue(patient)
     mockedListClinicalDocuments.mockResolvedValue([sampleDocument])
     const user = userEvent.setup()
     renderOverviewPage()
 
     await screen.findByText('Initial Visit')
+    const toggle = screen.getByRole('button', { name: 'View Initial Visit' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('Patient presents with hypertension.')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'View' }))
+    await user.click(toggle)
 
+    expect(screen.getByRole('button', { name: 'Hide Initial Visit' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
     expect(screen.getByText('Patient presents with hypertension.')).toBeInTheDocument()
+  })
+
+  it('shows only the most recent documents in the preview, newest first', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    const documents = Array.from({ length: 7 }, (_, index) =>
+      makeDocument({
+        id: index + 1,
+        title: `Document ${index + 1}`,
+        created_at: `2026-01-0${index + 1}T00:00:00Z`,
+      }),
+    )
+    mockedListClinicalDocuments.mockResolvedValue(documents)
+    renderOverviewPage()
+
+    await screen.findByText('Document 1')
+    const titles = screen.getAllByRole('heading', { level: 4 }).map((el) => el.textContent)
+    expect(titles).toEqual(['Document 1', 'Document 2', 'Document 3', 'Document 4', 'Document 5'])
+    expect(screen.queryByText('Document 6')).not.toBeInTheDocument()
   })
 
   it('shows an error state for the document list independent of the patient details', async () => {
