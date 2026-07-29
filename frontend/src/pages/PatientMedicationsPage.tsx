@@ -5,6 +5,7 @@ import { ErrorState } from '@/components/common/ErrorState'
 import { MedicationForm } from '@/components/medications/MedicationForm'
 import { MedicationList } from '@/components/medications/MedicationList'
 import { EmptyMedicationState } from '@/components/medications/EmptyMedicationState'
+import { MedicationCsvUpload } from '@/components/medications/MedicationCsvUpload'
 import { usePatient } from '@/hooks/usePatient'
 import { usePatientMedications } from '@/hooks/usePatientMedications'
 import { patientDetailPath } from '@/routes/paths'
@@ -27,6 +28,7 @@ export function PatientMedicationsPage() {
     addMedication,
     editMedication,
     removeMedication,
+    importMedicationsCsv,
   } = usePatientMedications(id)
 
   return (
@@ -82,6 +84,8 @@ export function PatientMedicationsPage() {
               />
             )}
           </section>
+
+          <MedicationCsvUpload onImport={importMedicationsCsv} />
 
           <MedicationForm onAdd={addMedication} />
         </>

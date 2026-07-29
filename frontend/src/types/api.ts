@@ -82,3 +82,19 @@ export interface Medication {
   created_at: string
   updated_at: string | null
 }
+
+export interface MedicationImportSummary {
+  rows_processed: number
+  medications_created: number
+  blank_rows_ignored: number
+}
+
+export interface MedicationCsvFieldError {
+  field: string
+  message: string
+}
+
+export interface MedicationCsvRowError {
+  row: number
+  errors: MedicationCsvFieldError[]
+}

@@ -4,6 +4,7 @@ import { usePatientMedications } from '@/hooks/usePatientMedications'
 import {
   createMedication,
   deleteMedication,
+  importMedicationsCsv,
   listMedications,
   updateMedication,
 } from '@/api/medications'
@@ -18,6 +19,7 @@ vi.mock('@/api/medications', async (importOriginal) => {
     createMedication: vi.fn(),
     updateMedication: vi.fn(),
     deleteMedication: vi.fn(),
+    importMedicationsCsv: vi.fn(),
   }
 })
 
@@ -25,6 +27,7 @@ const mockedListMedications = vi.mocked(listMedications)
 const mockedCreateMedication = vi.mocked(createMedication)
 const mockedUpdateMedication = vi.mocked(updateMedication)
 const mockedDeleteMedication = vi.mocked(deleteMedication)
+const mockedImportMedicationsCsv = vi.mocked(importMedicationsCsv)
 
 const samplePayload = {
   medicationName: 'Lisinopril',
@@ -60,6 +63,7 @@ describe('usePatientMedications', () => {
     mockedCreateMedication.mockReset()
     mockedUpdateMedication.mockReset()
     mockedDeleteMedication.mockReset()
+    mockedImportMedicationsCsv.mockReset()
   })
 
   it('starts in a loading state with no medications and no error', () => {
@@ -204,5 +208,48 @@ describe('usePatientMedications', () => {
       }),
     ).rejects.toMatchObject({ message: 'Delete failed.' })
     expect(result.current.medications).toEqual([sampleMedication])
+  })
+
+  it('importMedicationsCsv calls the API scoped to patientId and refetches the list on success', async () => {
+    mockedListMedications.mockResolvedValueOnce([])
+    mockedListMedications.mockResolvedValueOnce([sampleMedication])
+    const summary = { rows_processed: 1, medications_created: 1, blank_rows_ignored: 0 }
+    mockedImportMedicationsCsv.mockResolvedValue(summary)
+    const file = new File(['medication_name,dose\nLisinopril,10 mg\n'], 'meds.csv', {
+      type: 'text/csv',
+    })
+
+    const { result } = renderHook(() => usePatientMedications(42))
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    let returned
+    await act(async () => {
+      returned = await result.current.importMedicationsCsv(file)
+    })
+
+    expect(returned).toEqual(summary)
+    expect(mockedImportMedicationsCsv).toHaveBeenCalledWith(42, file)
+
+    // The response has no created-medication objects to merge locally, so
+    // success re-triggers the same fetch the hook already uses for retry().
+    await waitFor(() => expect(result.current.medications).toEqual([sampleMedication]))
+    expect(mockedListMedications).toHaveBeenCalledTimes(2)
+  })
+
+  it('importMedicationsCsv propagates the error without refetching', async () => {
+    mockedListMedications.mockResolvedValue([])
+    mockedImportMedicationsCsv.mockRejectedValue({ status: 422, message: 'Import failed.' })
+    const file = new File(['bad'], 'meds.csv', { type: 'text/csv' })
+
+    const { result } = renderHook(() => usePatientMedications(42))
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    await expect(
+      act(async () => {
+        await result.current.importMedicationsCsv(file)
+      }),
+    ).rejects.toMatchObject({ message: 'Import failed.' })
+
+    expect(mockedListMedications).toHaveBeenCalledTimes(1)
   })
 })

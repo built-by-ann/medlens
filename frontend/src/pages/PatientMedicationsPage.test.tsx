@@ -7,6 +7,7 @@ import { getPatient } from '@/api/patients'
 import {
   createMedication,
   deleteMedication,
+  importMedicationsCsv,
   listMedications,
   updateMedication,
 } from '@/api/medications'
@@ -30,6 +31,7 @@ vi.mock('@/api/medications', async (importOriginal) => {
     createMedication: vi.fn(),
     updateMedication: vi.fn(),
     deleteMedication: vi.fn(),
+    importMedicationsCsv: vi.fn(),
   }
 })
 
@@ -38,6 +40,7 @@ const mockedListMedications = vi.mocked(listMedications)
 const mockedCreateMedication = vi.mocked(createMedication)
 const mockedUpdateMedication = vi.mocked(updateMedication)
 const mockedDeleteMedication = vi.mocked(deleteMedication)
+const mockedImportMedicationsCsv = vi.mocked(importMedicationsCsv)
 
 const patient: Patient = {
   id: 42,
@@ -83,6 +86,7 @@ describe('PatientMedicationsPage', () => {
     mockedCreateMedication.mockReset()
     mockedUpdateMedication.mockReset()
     mockedDeleteMedication.mockReset()
+    mockedImportMedicationsCsv.mockReset()
     mockedGetPatient.mockResolvedValue(patient)
     mockedListMedications.mockResolvedValue([])
   })
@@ -213,5 +217,36 @@ describe('PatientMedicationsPage', () => {
 
     await waitFor(() => expect(mockedDeleteMedication).toHaveBeenCalledWith(42, 1))
     expect(screen.queryByRole('heading', { name: 'Lisinopril' })).not.toBeInTheDocument()
+  })
+
+  it('shows the CSV import section within the patient-scoped medications page', async () => {
+    mockedListMedications.mockResolvedValue([])
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Import medications from CSV' }),
+    ).toBeInTheDocument()
+  })
+
+  it('imports a CSV file scoped to the current patient and refreshes the list', async () => {
+    mockedListMedications.mockResolvedValueOnce([])
+    mockedListMedications.mockResolvedValueOnce([sampleMedication])
+    mockedImportMedicationsCsv.mockResolvedValue({
+      rows_processed: 1,
+      medications_created: 1,
+      blank_rows_ignored: 0,
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Import medications from CSV' })
+    const file = new File(['medication_name,dose\nLisinopril,10 mg\n'], 'meds.csv', {
+      type: 'text/csv',
+    })
+    await user.upload(screen.getByTestId('csv-file-input'), file)
+    await user.click(screen.getByRole('button', { name: 'Import CSV' }))
+
+    await waitFor(() => expect(mockedImportMedicationsCsv).toHaveBeenCalledWith(42, file))
+    expect(await screen.findByRole('heading', { name: 'Lisinopril' })).toBeInTheDocument()
   })
 })

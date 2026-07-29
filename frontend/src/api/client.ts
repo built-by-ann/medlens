@@ -4,6 +4,12 @@ import { env } from '@/lib/env'
 export interface ApiError {
   status: number | null
   message: string
+  // The raw `detail` value from the backend response, preserved as-is
+  // alongside `message` for the rare caller that needs more structure than
+  // a single string - e.g. the medication CSV importer's row-level
+  // validation errors (`{ message, row_errors }`), which no other endpoint
+  // in this app returns. Most callers only ever read `.message`.
+  detail?: unknown
 }
 
 /**
@@ -16,7 +22,7 @@ function toApiError(error: AxiosError): ApiError {
   const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail
 
   if (typeof detail === 'string') {
-    return { status, message: detail }
+    return { status, message: detail, detail }
   }
 
   if (Array.isArray(detail)) {
@@ -25,8 +31,17 @@ function toApiError(error: AxiosError): ApiError {
       .filter((message): message is string => message !== null)
 
     if (messages.length > 0) {
-      return { status, message: messages.join(', ') }
+      return { status, message: messages.join(', '), detail }
     }
+  }
+
+  if (
+    detail &&
+    typeof detail === 'object' &&
+    'message' in detail &&
+    typeof detail.message === 'string'
+  ) {
+    return { status, message: detail.message, detail }
   }
 
   return { status, message: error.message || 'An unexpected error occurred.' }

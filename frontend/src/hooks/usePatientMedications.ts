@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   createMedication,
   deleteMedication,
+  importMedicationsCsv as importMedicationsCsvRequest,
   listMedications,
   updateMedication,
   type MedicationPayload,
 } from '@/api/medications'
 import type { ApiError } from '@/api/client'
-import type { Medication } from '@/types/api'
+import type { Medication, MedicationImportSummary } from '@/types/api'
 
 interface UsePatientMedicationsResult {
   medications: Medication[]
@@ -17,6 +18,7 @@ interface UsePatientMedicationsResult {
   addMedication: (payload: MedicationPayload) => Promise<Medication>
   editMedication: (id: number, payload: MedicationPayload) => Promise<Medication>
   removeMedication: (id: number) => Promise<void>
+  importMedicationsCsv: (file: File) => Promise<MedicationImportSummary>
 }
 
 /**
@@ -94,5 +96,28 @@ export function usePatientMedications(patientId: number): UsePatientMedicationsR
     [patientId],
   )
 
-  return { medications, isLoading, error, retry, addMedication, editMedication, removeMedication }
+  // A CSV import can create many medications at once, and the response is
+  // only counts (no created medication objects to merge into local state
+  // the way addMedication does) - so success re-triggers the same
+  // fetch-on-mount effect used for retry(), rather than trying to
+  // reconstruct the new rows locally.
+  const importMedicationsCsv = useCallback(
+    async (file: File) => {
+      const summary = await importMedicationsCsvRequest(patientId, file)
+      setRetryCount((count) => count + 1)
+      return summary
+    },
+    [patientId],
+  )
+
+  return {
+    medications,
+    isLoading,
+    error,
+    retry,
+    addMedication,
+    editMedication,
+    removeMedication,
+    importMedicationsCsv,
+  }
 }

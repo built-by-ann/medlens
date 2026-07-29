@@ -1,5 +1,5 @@
-import { apiClient } from '@/api/client'
-import type { Medication } from '@/types/api'
+import { apiClient, type ApiError } from '@/api/client'
+import type { Medication, MedicationCsvRowError, MedicationImportSummary } from '@/types/api'
 
 export interface MedicationPayload {
   medicationName: string
@@ -60,4 +60,55 @@ export async function updateMedication(
 
 export async function deleteMedication(patientId: number, medicationId: number): Promise<void> {
   await apiClient.delete(`/patients/${patientId}/medications/${medicationId}`)
+}
+
+// The one shape of error `POST /patients/{id}/medications/import` returns
+// that no other endpoint does: a 422 whose `detail` is an object carrying
+// both a summary message and per-row validation errors, rather than a
+// plain string or a list of field errors. `ApiError.message` still reads
+// correctly on its own (see api/client.ts), but callers that want to show
+// row-level detail need this narrowed shape.
+export interface MedicationCsvImportError extends ApiError {
+  rowErrors?: MedicationCsvRowError[]
+}
+
+function getCsvRowErrors(detail: unknown): MedicationCsvRowError[] | undefined {
+  if (
+    typeof detail === 'object' &&
+    detail !== null &&
+    'row_errors' in detail &&
+    Array.isArray((detail as { row_errors: unknown }).row_errors)
+  ) {
+    return (detail as { row_errors: MedicationCsvRowError[] }).row_errors
+  }
+
+  return undefined
+}
+
+export async function importMedicationsCsv(
+  patientId: number,
+  file: File,
+): Promise<MedicationImportSummary> {
+  const formData = new FormData()
+  // The browser generates the correct multipart boundary for FormData
+  // bodies on its own; setting a Content-Type header manually here would
+  // overwrite that boundary and break the upload.
+  formData.append('file', file)
+
+  try {
+    const response = await apiClient.post<MedicationImportSummary>(
+      `/patients/${patientId}/medications/import`,
+      formData,
+    )
+    return response.data
+  } catch (error) {
+    const apiError = error as MedicationCsvImportError
+    const rowErrors = getCsvRowErrors(apiError.detail)
+
+    if (rowErrors) {
+      throw { ...apiError, rowErrors } satisfies MedicationCsvImportError
+    }
+
+    throw error
+  }
 }
