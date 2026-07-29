@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card } from '@/components/common/Card'
@@ -100,9 +100,20 @@ export function AnalysisProcessingPage() {
     }
   }, [submission, submit])
 
+  // Guards the automatic mount-time submission below against firing more
+  // than once per mount - most notably React Strict Mode's dev-only
+  // double-invoke of mount effects, which (unlike a merely wasted re-fetch)
+  // would otherwise re-run the real upload-and-create-analysis sequence a
+  // second time, producing a duplicate ClinicalDocument and a duplicate
+  // Analysis. Deliberately not reset on retry: the "Try again" button calls
+  // runSubmission() directly, bypassing this effect entirely.
+  const hasStartedSubmissionRef = useRef(false)
+
   useEffect(() => {
+    if (hasStartedSubmissionRef.current) return
+    hasStartedSubmissionRef.current = true
+
     // Intentionally run once on mount only - retries are user-triggered.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void runSubmission()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

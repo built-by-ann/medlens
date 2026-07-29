@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AnalysisDetailPage } from '@/pages/AnalysisDetailPage'
 import { getPatient } from '@/api/patients'
 import { getAnalysisDetail } from '@/api/analyses'
-import type { AnalysisDetail, Patient } from '@/types/api'
+import type { AnalysisDetail, MedicationDiscrepancy, Patient } from '@/types/api'
 
 vi.mock('@/api/patients', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/patients')>()
@@ -52,6 +52,25 @@ const completedAnalysis: AnalysisDetail = {
   error_message: null,
   created_at: '2026-01-01T11:59:00Z',
   updated_at: '2026-01-01T12:05:00Z',
+  medication_discrepancies: [],
+}
+
+const sampleDiscrepancy: MedicationDiscrepancy = {
+  id: 1,
+  analysis_id: 42,
+  medication_id: null,
+  medication_mention_id: 9,
+  discrepancy_type: 'missing_from_medication_list',
+  severity: 'high',
+  title: 'Lisinopril not found in medication list',
+  ai_explanation:
+    'Lisinopril is mentioned in the selected clinical documents but does not appear in the current medication list.',
+  recommendation: null,
+  expected_value: null,
+  observed_value: 'Lisinopril',
+  resolution_status: 'open',
+  created_at: '2026-01-01T12:01:00Z',
+  updated_at: null,
 }
 
 function renderPage() {
@@ -143,12 +162,47 @@ describe('AnalysisDetailPage', () => {
     expect(screen.getByText('Failed')).toBeInTheDocument()
   })
 
-  it('shows a placeholder for the not-yet-built findings UI', async () => {
+  it('shows an empty state when reconciliation found no discrepancies', async () => {
     renderPage()
 
     expect(
-      await screen.findByText(/Detailed medication findings and inconsistency detection/),
+      await screen.findByText('No medication discrepancies were found for this analysis.'),
     ).toBeInTheDocument()
+  })
+
+  it('displays persisted medication discrepancies once reconciliation data exists', async () => {
+    mockedGetAnalysisDetail.mockResolvedValue({
+      ...completedAnalysis,
+      medication_discrepancies: [sampleDiscrepancy],
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Medication Reconciliation Findings' })
+    expect(screen.getByText('Lisinopril not found in medication list')).toBeInTheDocument()
+    expect(screen.getByText(/High severity/)).toBeInTheDocument()
+    expect(screen.getByText(/Missing from medication list/)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Lisinopril is mentioned in the selected clinical documents but does not appear in the current medication list.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('No medication discrepancies were found for this analysis.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('displays every discrepancy when reconciliation finds more than one', async () => {
+    mockedGetAnalysisDetail.mockResolvedValue({
+      ...completedAnalysis,
+      medication_discrepancies: [
+        sampleDiscrepancy,
+        { ...sampleDiscrepancy, id: 2, title: 'Metformin dose does not match', severity: 'medium' },
+      ],
+    })
+    renderPage()
+
+    await screen.findByText('Lisinopril not found in medication list')
+    expect(screen.getByText('Metformin dose does not match')).toBeInTheDocument()
   })
 
   it('shows a not-found error when the analysis does not exist or is not owned by the patient', async () => {

@@ -3,6 +3,8 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.medication_discrepancy import MedicationDiscrepancyResponse
+
 
 class AnalysisStatus(str, Enum):
     PENDING = "pending"
@@ -65,6 +67,11 @@ class AnalysisDetailResponse(BaseModel):
 
     medication_mentions: list[AnalysisMedicationMentionResponse]
     possible_inconsistencies: list[AnalysisInconsistencyResponse]
+    # Issue #148: real, structured reconciliation findings, alongside the
+    # AI's own unstructured medication_mentions/possible_inconsistencies
+    # observations above. Always an empty list rather than omitted when
+    # reconciliation found nothing to flag.
+    medication_discrepancies: list[MedicationDiscrepancyResponse]
 
 
 class AnalysisSummaryResponse(BaseModel):

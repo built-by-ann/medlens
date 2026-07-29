@@ -932,9 +932,11 @@ Success response
 }
 ```
 
-`medications`, `possible_inconsistencies`, and `summary` are the provider's response, parsed as JSON and validated against a Pydantic schema. `analysis_id` identifies the Analysis this request created, whose fields, medication mentions, and inconsistencies are persisted before the response is returned. No discrepancy detection or reconciliation is performed on it. See `docs/ai.md` for the full response schema.
+`medications`, `possible_inconsistencies`, and `summary` are the provider's response, parsed as JSON and validated against a Pydantic schema. `analysis_id` identifies the Analysis this request created, whose fields, medication mentions, and inconsistencies are persisted before the response is returned. See `docs/ai.md` for the full response schema.
 
-If a requested document does not exist or does not belong to this patient, no Analysis is created at all. If the AI provider or persistence fails after the Analysis is created, it is marked `failed` with a sanitized error message rather than left in an incomplete state. See Error Responses below.
+As of Issue #148, medication reconciliation now runs automatically as part of this same request: each medication the AI extracted is persisted as supporting evidence and compared against the patient's medication list using the same deterministic reconciliation engine `docs/architecture.md`'s Reconciliation Engine section describes, producing real `MedicationDiscrepancy` rows rather than the empty findings this endpoint always returned before. This response body is unchanged by that - reconciliation results are not summarized here, only in the persisted Analysis, retrievable via `GET /patients/{patient_id}/analyses/{analysis_id}` below. See `docs/architecture.md`'s "Analysis Creation Pipeline" for the full sequence.
+
+If a requested document does not exist or does not belong to this patient, no Analysis is created at all. If the AI provider, persistence, or reconciliation fails after the Analysis is created, it is marked `failed` with a sanitized error message rather than left in an incomplete state, and no discrepancies from that attempt are left partially persisted. See Error Responses below.
 
 Possible error responses
 
@@ -994,7 +996,7 @@ Possible error responses
 
 Purpose
 
-Returns the metadata and persisted results of one of the given patient's analyses. Read-only: it does not create, rerun, or modify an analysis. See `docs/data-model.md` for the underlying `Analysis`, `AnalysisMedicationMention`, and `AnalysisInconsistency` models.
+Returns the metadata and persisted results of one of the given patient's analyses. Read-only: it does not create, rerun, or modify an analysis. See `docs/data-model.md` for the underlying `Analysis`, `AnalysisMedicationMention`, `AnalysisInconsistency`, and `MedicationDiscrepancy` models.
 
 Success response
 
@@ -1029,11 +1031,31 @@ Success response
       "id": 2,
       "description": "Lisinopril dose differs between the admission note and the discharge summary."
     }
+  ],
+  "medication_discrepancies": [
+    {
+      "id": 5,
+      "analysis_id": 7,
+      "medication_id": null,
+      "medication_mention_id": 3,
+      "discrepancy_type": "missing_from_medication_list",
+      "severity": "high",
+      "title": "Lisinopril not found in medication list",
+      "ai_explanation": "Lisinopril is mentioned in the selected clinical documents but does not appear in the current medication list.",
+      "recommendation": null,
+      "expected_value": null,
+      "observed_value": "Lisinopril",
+      "resolution_status": "open",
+      "created_at": "2026-07-12T19:59:16.000000Z",
+      "updated_at": null
+    }
   ]
 }
 ```
 
-`medication_mentions` and `possible_inconsistencies` are always returned, sorted by ascending `id`, even for analyses that have none (an empty list) or that failed before persisting any results (both lists empty, `summary`, `provider`, and `model_name` are `null`).
+`medication_mentions`, `possible_inconsistencies`, and `medication_discrepancies` are always returned, sorted by ascending `id`, even for analyses that have none (an empty list) or that failed before persisting any results (all three lists empty, `summary`, `provider`, and `model_name` are `null`).
+
+`medication_discrepancies` (added in Issue #148) are the deterministic reconciliation engine's findings - see `docs/architecture.md`'s Reconciliation Engine and Analysis Creation Pipeline sections for how they are produced during `POST /patients/{patient_id}/analyses`. `medication_mention_id` references a `MedicationMention` row created as supporting evidence for that finding (attached to one of the analysis's own clinical documents); `medication_id`, when set instead, references a row in the patient's own medication list. This response intentionally does not nest the mention or medication objects themselves - only their ids - keeping this endpoint's shape unchanged for that field; a caller needing the evidence's own details does not have a way to fetch it separately today.
 
 `error_message` is `null` unless `status` is `"failed"`, in which case it holds the same sanitized message returned by `POST /patients/{patient_id}/analyses` at failure time (see that endpoint's `503` response above). It never contains a stack trace, a provider exception, `ValidationError` details, raw AI output, or a raw SQL error; only the sanitized message already stored on the Analysis is exposed.
 

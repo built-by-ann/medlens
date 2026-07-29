@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.ai.schemas import Medication as AIExtractedMedication
 from app.models.analysis import Analysis
 from app.models.medication import Medication
 from app.models.medication_mention import MedicationMention
@@ -305,7 +306,7 @@ def build_discrepancy_findings(
     return findings
 
 
-def _count_by_severity(findings: list[MedicationDiscrepancyCreate]) -> dict[str, int]:
+def count_findings_by_severity(findings: list[MedicationDiscrepancyCreate]) -> dict[str, int]:
     counts = {"total": len(findings), "high": 0, "medium": 0, "low": 0}
 
     for finding in findings:
@@ -324,6 +325,100 @@ def _build_summary_text(counts: dict[str, int], document_count: int) -> str:
 
 def _safe_error_message(error: Exception) -> str:
     return f"Reconciliation failed due to an internal error ({type(error).__name__})."
+
+
+def reconcile_medications(
+    db: Session,
+    analysis: Analysis,
+    medications: list[Medication],
+    mentions: list[MedicationMention],
+    check_unsupported_entries: bool,
+) -> dict[str, int]:
+    """Builds discrepancy findings and persists them against the given
+    analysis, returning severity counts.
+
+    Does not create, commit, or complete the analysis itself - callers own
+    that lifecycle (see run_medication_reconciliation below, and Issue
+    #148's reconcile_ai_extracted_medications, which both call this).
+    create_medication_discrepancies does not commit, so this function's
+    writes only take effect once the caller's own commit runs (Analysis
+    completion, or a rollback on failure) - see docs/architecture.md.
+    """
+    findings = build_discrepancy_findings(medications, mentions, check_unsupported_entries)
+
+    create_medication_discrepancies(db, analysis.id, findings)
+
+    return count_findings_by_severity(findings)
+
+
+def reconcile_ai_extracted_medications(
+    db: Session,
+    analysis: Analysis,
+    ai_medications: list[AIExtractedMedication],
+) -> dict[str, int]:
+    """Bridges the AI clinical-summary flow (Issue #41/#130) into
+    reconciliation (Issue #148).
+
+    That flow extracts medications directly from clinical note text via an
+    AI provider, without ever persisting a MedicationMention row - it only
+    ever produced AnalysisMedicationMention rows, an AI-authored observation
+    with no link back to a specific document (see
+    app/services/analysis_result_service.py) - so there was nothing here
+    for reconciliation to compare against. This function closes that gap by
+    persisting each AI-extracted medication as a real MedicationMention, so
+    the exact same reconciliation engine used by run_medication_reconciliation
+    (below) can run against it.
+
+    The AI's prompt numbers each selected document ("Note 1", "Note 2", ...
+    see app/ai/prompts.py) but its response schema never reports which note
+    a given medication came from - extraction happens across all selected
+    documents at once, with no per-medication source attribution in the
+    response. Rather than changing that response contract (a larger,
+    separate change), every extracted medication is attached to the same
+    document - the selected document with the lowest id, picked
+    deterministically - as its supporting evidence. For the common case of
+    a single selected document this is exact, not an approximation; for a
+    multi-document analysis it is a documented simplification, not a claim
+    that the medication was found in every selected document.
+
+    Medications and MedicationMentions are queried/created the same way
+    run_medication_reconciliation does, so the exact same discrepancy rules
+    apply either way.
+    """
+    if not ai_medications:
+        return {"total": 0, "high": 0, "medium": 0, "low": 0}
+
+    documents = analysis.clinical_documents
+    primary_document = min(documents, key=lambda document: document.id)
+
+    mentions: list[MedicationMention] = []
+
+    for ai_medication in ai_medications:
+        mention = MedicationMention(
+            clinical_document_id=primary_document.id,
+            medication_name=ai_medication.name,
+            dose=ai_medication.dosage,
+            route=ai_medication.route,
+            frequency=ai_medication.frequency,
+            status=ai_medication.status,
+            context_text=ai_medication.notes,
+        )
+        db.add(mention)
+        mentions.append(mention)
+
+    # Assigns ids to the mentions above without committing, so
+    # MedicationDiscrepancyCreate.medication_mention_id can reference them -
+    # the transaction as a whole is still only committed by the caller.
+    db.flush()
+
+    medications = db.query(Medication).filter(Medication.patient_id == analysis.patient_id).all()
+
+    check_unsupported_entries = any(
+        document.document_type in UNSUPPORTED_ENTRY_ELIGIBLE_DOCUMENT_TYPES
+        for document in documents
+    )
+
+    return reconcile_medications(db, analysis, medications, mentions, check_unsupported_entries)
 
 
 def run_medication_reconciliation(
@@ -361,11 +456,9 @@ def run_medication_reconciliation(
             for document in documents
         )
 
-        findings = build_discrepancy_findings(medications, mentions, check_unsupported_entries)
-
-        create_medication_discrepancies(db, analysis.id, findings)
-
-        counts = _count_by_severity(findings)
+        counts = reconcile_medications(
+            db, analysis, medications, mentions, check_unsupported_entries
+        )
 
         summary_in = AnalysisCompletedSummary(
             summary=_build_summary_text(counts, len(documents)),

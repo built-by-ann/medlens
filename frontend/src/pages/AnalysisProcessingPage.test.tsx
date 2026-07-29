@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -68,12 +69,13 @@ function makeAnalysis(overrides: Partial<AnalysisDetail> = {}): AnalysisDetail {
     error_message: null,
     created_at: '2026-01-01T12:00:00Z',
     updated_at: null,
+    medication_discrepancies: [],
     ...overrides,
   }
 }
 
-function renderProcessingPage(state: SubmitInput | null = submission) {
-  return render(
+function renderProcessingPage(state: SubmitInput | null = submission, { strict = false } = {}) {
+  const tree = (
     <MemoryRouter initialEntries={[{ pathname: '/patients/7/analyses/processing', state }]}>
       <Routes>
         <Route
@@ -88,8 +90,10 @@ function renderProcessingPage(state: SubmitInput | null = submission) {
         <Route path="/patients/:patientId" element={<div>Patient overview</div>} />
         <Route path="/patients/:patientId/analyses" element={<div>Analysis history</div>} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   )
+
+  return render(strict ? <StrictMode>{tree}</StrictMode> : tree)
 }
 
 describe('AnalysisProcessingPage', () => {
@@ -132,6 +136,18 @@ describe('AnalysisProcessingPage', () => {
     renderProcessingPage()
 
     await waitFor(() => expect(submit).toHaveBeenCalledWith(submission))
+  })
+
+  it("submits only once even under React Strict Mode's dev-only double-invoked mount effects", async () => {
+    // Regression test: Strict Mode double-invoking the unguarded mount
+    // effect used to run the real upload-and-create-analysis sequence
+    // twice, producing a duplicate ClinicalDocument and a duplicate
+    // Analysis. The hasStartedSubmissionRef guard must prevent that.
+    submit.mockReturnValue(new Promise(() => {}))
+    renderProcessingPage(submission, { strict: true })
+
+    await waitFor(() => expect(submit).toHaveBeenCalled())
+    expect(submit).toHaveBeenCalledTimes(1)
   })
 
   it('shows the processing experience with rotating progress messaging while submitting', async () => {

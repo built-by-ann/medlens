@@ -7,6 +7,9 @@ from app.models.analysis import Analysis
 from app.models.analysis_inconsistency import AnalysisInconsistency
 from app.models.analysis_medication_mention import AnalysisMedicationMention
 from app.models.clinical_document import ClinicalDocument
+from app.models.medication import Medication
+from app.models.medication_discrepancy import MedicationDiscrepancy
+from app.models.medication_mention import MedicationMention
 
 VALID_RESPONSE = json.dumps(
     {
@@ -125,6 +128,22 @@ def _override_ai_service(fake_provider):
         return AISummaryService(fake_provider)
 
     return _factory
+
+
+def _create_medication(client, token, patient_id, **overrides):
+    payload = {
+        "medication_name": "Lisinopril",
+        "dose": "10 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": "active",
+        "source": "patient_reported",
+    }
+    payload.update(overrides)
+
+    return client.post(
+        f"/patients/{patient_id}/medications", json=payload, headers=_auth_headers(token)
+    )
 
 
 def _create_completed_analysis(
@@ -597,6 +616,123 @@ def test_get_analysis_detail_returns_items_in_deterministic_order(client):
         inconsistency["id"] for inconsistency in body["possible_inconsistencies"]
     ]
     assert inconsistency_ids == sorted(inconsistency_ids)
+
+
+def test_get_analysis_detail_includes_reconciliation_discrepancies(client):
+    # Issue #148: reconciliation now runs automatically during analysis
+    # creation. This patient has no medications on file, so the
+    # AI-extracted Lisinopril mention is necessarily missing from the list.
+    token = _register_and_login(client, "detaildiscrepancies@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert len(body["medication_discrepancies"]) == 1
+    discrepancy = body["medication_discrepancies"][0]
+    assert discrepancy["analysis_id"] == analysis_id
+    assert discrepancy["discrepancy_type"] == "missing_from_medication_list"
+    assert discrepancy["severity"] == "high"
+    assert discrepancy["resolution_status"] == "open"
+    assert discrepancy["medication_mention_id"] is not None
+
+
+def test_get_analysis_detail_has_no_discrepancies_when_medications_match(client):
+    token = _register_and_login(client, "detailmatching@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    medication_response = _create_medication(client, token, patient["id"])
+    assert medication_response.status_code == 201
+
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["medication_discrepancies"] == []
+
+
+def test_get_analysis_detail_does_not_duplicate_discrepancies_for_repeated_medications(client):
+    # MULTIPLE_ITEMS_RESPONSE extracts three distinct medication names, none
+    # of which are on this patient's (empty) medication list - three
+    # findings, not more, even though building them involves grouping logic
+    # that could in principle double-count.
+    token = _register_and_login(client, "detaildedupe@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(
+        client, token, patient["id"], document["id"], response_text=MULTIPLE_ITEMS_RESPONSE
+    )
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    discrepancies = response.json()["medication_discrepancies"]
+    assert len(discrepancies) == 3
+    assert {d["discrepancy_type"] for d in discrepancies} == {"missing_from_medication_list"}
+
+
+def test_summarize_leaves_no_discrepancies_or_mentions_when_reconciliation_fails(
+    client, db, monkeypatch
+):
+    # Simulates the AI call succeeding but reconciliation itself failing
+    # afterward - the whole analysis must still fail cleanly (existing
+    # failure behavior), with nothing reconciliation staged left behind.
+    token = _register_and_login(client, "reconciliationfailure@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("simulated reconciliation failure")
+
+    monkeypatch.setattr(
+        "app.services.analysis_result_service.reconcile_ai_extracted_medications", _boom
+    )
+
+    app.dependency_overrides[get_ai_summary_service] = _override_ai_service(_FakeProvider())
+    try:
+        response = client.post(
+            f"/patients/{patient['id']}/analyses",
+            json={"clinical_document_ids": [document["id"]]},
+            headers=_auth_headers(token),
+        )
+    finally:
+        app.dependency_overrides.pop(get_ai_summary_service, None)
+
+    assert response.status_code == 503
+    assert "internal error" in response.json()["detail"]
+
+    analysis = db.query(Analysis).one()
+    assert analysis.status == "failed"
+    assert (
+        db.query(AnalysisMedicationMention)
+        .filter(AnalysisMedicationMention.analysis_id == analysis.id)
+        .count()
+        == 0
+    )
+    assert (
+        db.query(AnalysisInconsistency)
+        .filter(AnalysisInconsistency.analysis_id == analysis.id)
+        .count()
+        == 0
+    )
+    assert db.query(MedicationMention).count() == 0
+    assert (
+        db.query(MedicationDiscrepancy)
+        .filter(MedicationDiscrepancy.analysis_id == analysis.id)
+        .count()
+        == 0
+    )
 
 
 def test_get_analysis_detail_includes_sanitized_error_message_for_failed_analysis(client, db):
