@@ -74,7 +74,6 @@ def test_create_medication_succeeds(client):
     assert body["notes"] == "Taken with breakfast"
     assert "id" in body
     assert body["patient_id"] == patient["id"]
-    assert "user_id" not in body
 
 
 def test_create_medication_requires_a_patient_owned_by_the_user(client):

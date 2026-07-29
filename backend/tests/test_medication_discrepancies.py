@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
@@ -8,6 +10,7 @@ from app.models.clinical_document import ClinicalDocument
 from app.models.medication import Medication
 from app.models.medication_discrepancy import MedicationDiscrepancy
 from app.models.medication_mention import MedicationMention
+from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.medication_discrepancy import (
     DiscrepancySeverity,
@@ -32,8 +35,28 @@ def _create_user(db, email="finding.user@example.com"):
     return user
 
 
+def _create_patient(db, user):
+    patient = Patient(
+        user_id=user.id,
+        first_name="Jane",
+        last_name="Doe",
+        date_of_birth=date(1980, 5, 14),
+        status="active",
+    )
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+
+    return patient
+
+
 def _create_analysis(db, user):
-    analysis = Analysis(user_id=user.id, status="processing")
+    # MedicationDiscrepancy's own tests don't exercise patient scoping at
+    # all (that's covered in test_analysis.py/test_medications.py) - a
+    # fresh patient per fixture call is only here to satisfy patient_id's
+    # NOT NULL constraint, not to model any particular ownership scenario.
+    patient = _create_patient(db, user)
+    analysis = Analysis(patient_id=patient.id, status="processing")
     db.add(analysis)
     db.commit()
     db.refresh(analysis)
@@ -42,8 +65,9 @@ def _create_analysis(db, user):
 
 
 def _create_clinical_document(db, user):
+    patient = _create_patient(db, user)
     document = ClinicalDocument(
-        user_id=user.id,
+        patient_id=patient.id,
         document_type="visit_note",
         title="Visit Note",
         raw_text="Patient takes Lisinopril 10 mg oral once daily.",
@@ -56,8 +80,9 @@ def _create_clinical_document(db, user):
 
 
 def _create_medication(db, user):
+    patient = _create_patient(db, user)
     medication = Medication(
-        user_id=user.id,
+        patient_id=patient.id,
         medication_name="Lisinopril",
         dose="10 mg",
         route="oral",

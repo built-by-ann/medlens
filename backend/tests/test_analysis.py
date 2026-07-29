@@ -15,8 +15,8 @@ from app.models.user import User
 from app.schemas.analysis import (
     AnalysisCompletedSummary,
     AnalysisCreate,
+    AnalysisDetailResponse,
     AnalysisFailure,
-    AnalysisResponse,
     AnalysisStatus,
 )
 from app.services.analysis_service import (
@@ -64,7 +64,6 @@ def _create_patient(db, user, **overrides):
 def _create_clinical_document(db, patient, title="Visit Note"):
     document = ClinicalDocument(
         patient_id=patient.id,
-        user_id=patient.user_id,
         document_type="visit_note",
         title=title,
         raw_text="Patient takes Lisinopril 10 mg oral once daily.",
@@ -79,7 +78,6 @@ def _create_clinical_document(db, patient, title="Visit Note"):
 def _create_medication(db, patient, medication_name="Lisinopril"):
     medication = Medication(
         patient_id=patient.id,
-        user_id=patient.user_id,
         medication_name=medication_name,
         dose="10 mg",
         route="oral",
@@ -120,7 +118,6 @@ def test_create_analysis_succeeds(db):
 
     assert analysis.id is not None
     assert analysis.patient_id == patient.id
-    assert analysis.user_id == user.id
     assert analysis.status == "pending"
     assert analysis.total_findings == 0
     assert analysis.high_severity_findings == 0
@@ -225,25 +222,27 @@ def test_analysis_create_rejects_empty_document_id_list():
 @pytest.mark.parametrize("status", list(AnalysisStatus))
 def test_analysis_response_allows_each_status_value(db, status):
     user = _create_user(db, email=f"status.{status.value}@example.com")
-    analysis = Analysis(user_id=user.id, status=status.value)
+    patient = _create_patient(db, user)
+    analysis = Analysis(patient_id=patient.id, status=status.value)
     db.add(analysis)
     db.commit()
     db.refresh(analysis)
 
-    response = AnalysisResponse.model_validate(analysis)
+    response = AnalysisDetailResponse.model_validate(analysis)
 
     assert response.status == status
 
 
 def test_analysis_response_rejects_invalid_status(db):
     user = _create_user(db, email="invalidstatus@example.com")
-    analysis = Analysis(user_id=user.id, status="not_a_real_status")
+    patient = _create_patient(db, user)
+    analysis = Analysis(patient_id=patient.id, status="not_a_real_status")
     db.add(analysis)
     db.commit()
     db.refresh(analysis)
 
     with pytest.raises(ValidationError):
-        AnalysisResponse.model_validate(analysis)
+        AnalysisDetailResponse.model_validate(analysis)
 
 
 def test_analysis_completed_summary_rejects_negative_counts():
@@ -254,19 +253,6 @@ def test_analysis_completed_summary_rejects_negative_counts():
 def test_analysis_failure_schema_requires_error_message():
     with pytest.raises(ValidationError):
         AnalysisFailure(error_message="")
-
-
-def test_analysis_relationship_to_user(db):
-    user = _create_user(db, email="reluser@example.com")
-    patient = _create_patient(db, user)
-    document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
-
-    db.refresh(user)
-    assert analysis.user.id == user.id
-    assert analysis in user.analyses
 
 
 def test_analysis_relationship_to_patient(db):
@@ -408,18 +394,14 @@ def test_analysis_serializes_through_response_schema(db):
         db, patient, AnalysisCreate(clinical_document_ids=[document.id])
     )
 
-    response = AnalysisResponse.model_validate(analysis)
+    response = AnalysisDetailResponse.model_validate(analysis)
 
     assert response.id == analysis.id
-    assert response.user_id == user.id
+    assert response.patient_id == patient.id
     assert response.status == AnalysisStatus.PENDING
     assert response.started_at is None
     assert response.completed_at is None
     assert response.error_message is None
-    assert response.total_findings == 0
-    assert response.high_severity_findings == 0
-    assert response.medium_severity_findings == 0
-    assert response.low_severity_findings == 0
     assert response.provider is None
     assert response.model_name is None
 

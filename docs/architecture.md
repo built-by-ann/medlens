@@ -139,10 +139,10 @@ Responsible for:
 
 ### Reconciliation Engine
 
-Implemented as a deterministic backend service, not an AI component. Given a user and a set of clinical documents, it:
+Implemented as a deterministic backend service, not an AI component. Given a patient and a set of clinical documents, it:
 
-- Validates that every selected document exists and belongs to the requesting user, reusing the same validation as analysis creation.
-- Loads the user's current Medication records and the MedicationMention records extracted from the selected documents.
+- Validates that every selected document exists and belongs to that patient, reusing the same validation as analysis creation.
+- Loads the patient's current Medication records and the MedicationMention records extracted from the selected documents.
 - Normalizes medication names and comparable fields (dose, route, frequency, status) using fixed rules: trimming, lowercasing, whitespace collapsing, and a small set of explicit aliases such as PO to oral and QD to daily. No fuzzy matching, brand-to-generic inference, or semantic matching is performed.
 - Applies a fixed set of comparison rules to produce MedicationDiscrepancy records, each with a deterministic title, explanation, expected value, and observed value.
 - Assigns severity from a single, centralized mapping from discrepancy type to severity.
@@ -170,39 +170,43 @@ The expected application workflow is:
 
 As of this writing, steps 9 through 11 are implemented for the reconciliation path described above: the reconciliation engine and analysis persistence exist as deterministic backend logic. AI-based extraction into MedicationMention, steps 5 through 8 as described here, is not yet implemented, so MedicationMention records must currently be created directly rather than produced by an AI service.
 
-A separate AI summary flow is implemented end to end, outside the numbered steps above: `POST /ai/summarize` sends the text of selected documents to Gemini, validates the JSON response with Pydantic, and persists the result as a completed Analysis, with the extracted medications and possible inconsistencies stored as AnalysisMedicationMention and AnalysisInconsistency rows. This flow does not populate MedicationMention and does not feed the reconciliation engine; it is a distinct, AI-authored observation of the selected documents, not reconciliation input. A persisted Analysis, including its AnalysisMedicationMention and AnalysisInconsistency rows, can be retrieved later by id through `GET /ai/analyses/{analysis_id}`, a read-only endpoint that performs no AI calls and no reconciliation. See `docs/ai.md`.
+A separate AI summary flow is implemented end to end, outside the numbered steps above: `POST /patients/{patient_id}/analyses` sends the text of selected documents to Gemini, validates the JSON response with Pydantic, and persists the result as a completed Analysis, with the extracted medications and possible inconsistencies stored as AnalysisMedicationMention and AnalysisInconsistency rows. This flow does not populate MedicationMention and does not feed the reconciliation engine; it is a distinct, AI-authored observation of the selected documents, not reconciliation input. A persisted Analysis, including its AnalysisMedicationMention and AnalysisInconsistency rows, can be retrieved later by id through `GET /patients/{patient_id}/analyses/{analysis_id}`, a read-only endpoint that performs no AI calls and no reconciliation. See `docs/ai.md`.
 
 ---
 
 ## Data Model
 
+Every clinical resource is owned through `Patient`, not directly by `User` - see `docs/data-model.md` for the full entity reference and the Sprint 3.5 migration that got the schema here.
+
 ```text
 User
  │
- ├── ClinicalDocument
- │      └── MedicationMention
- │
- ├── Medication
- │
- └── Analysis
-        ├── MedicationDiscrepancy
-        ├── AnalysisMedicationMention
-        └── AnalysisInconsistency
+ └── Patient
+        ├── ClinicalDocument
+        │      └── MedicationMention
+        ├── Medication
+        └── Analysis
+               ├── MedicationDiscrepancy
+               ├── AnalysisMedicationMention
+               └── AnalysisInconsistency
 ```
 
 ### Relationships
 
 ```text
 User
+ 1 ─── many Patient
+
+Patient
  1 ─── many ClinicalDocument
 
 ClinicalDocument
  1 ─── many MedicationMention
 
-User
+Patient
  1 ─── many Medication
 
-User
+Patient
  1 ─── many Analysis
 
 Analysis

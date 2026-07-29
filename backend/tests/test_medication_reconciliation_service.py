@@ -10,7 +10,7 @@ from app.models.medication_discrepancy import MedicationDiscrepancy
 from app.models.medication_mention import MedicationMention
 from app.models.patient import Patient
 from app.models.user import User
-from app.schemas.analysis import AnalysisResponse, AnalysisStatus
+from app.schemas.analysis import AnalysisDetailResponse, AnalysisStatus
 from app.schemas.medication_discrepancy import (
     DiscrepancySeverity,
     DiscrepancyType,
@@ -57,7 +57,6 @@ def _create_patient(db, user, **overrides):
 def _create_clinical_document(db, patient, document_type="visit_note", title="Visit Note"):
     document = ClinicalDocument(
         patient_id=patient.id,
-        user_id=patient.user_id,
         document_type=document_type,
         title=title,
         raw_text="Patient takes Lisinopril 10 mg oral once daily.",
@@ -80,7 +79,7 @@ def _create_medication(db, patient, **overrides):
     }
     payload.update(overrides)
 
-    medication = Medication(patient_id=patient.id, user_id=patient.user_id, **payload)
+    medication = Medication(patient_id=patient.id, **payload)
     db.add(medication)
     db.commit()
     db.refresh(medication)
@@ -755,9 +754,9 @@ def test_completed_analysis_and_discrepancy_serialize_through_response_schemas(d
 
     analysis = run_medication_reconciliation(db, patient, [document.id])
 
-    analysis_response = AnalysisResponse.model_validate(analysis)
+    analysis_response = AnalysisDetailResponse.model_validate(analysis)
     assert analysis_response.status == AnalysisStatus.COMPLETED
-    assert analysis_response.total_findings == 1
+    assert analysis.total_findings == 1
 
     discrepancy = analysis.medication_discrepancies[0]
     discrepancy_response = MedicationDiscrepancyResponse.model_validate(discrepancy)
