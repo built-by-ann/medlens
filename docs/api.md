@@ -1015,6 +1015,7 @@ Success response
   "error_message": null,
   "created_at": "2026-07-12T19:59:14.500000Z",
   "updated_at": "2026-07-12T19:59:16.112249Z",
+  "document_count": 1,
   "medication_mentions": [
     {
       "id": 3,
@@ -1069,6 +1070,8 @@ Success response
 ```
 
 `medication_mentions`, `possible_inconsistencies`, and `medication_discrepancies` are always returned, sorted by ascending `id`, even for analyses that have none (an empty list) or that failed before persisting any results (all three lists empty, `summary`, `provider`, and `model_name` are `null`).
+
+`document_count` (added in Issue #47) is `len(analysis.clinical_documents)` - how many clinical documents this analysis covers (a computed property on the model, not a stored column, the same pattern as `ClinicalDocument.analysis_count`; also present on `AnalysisSummaryResponse` below). The Analysis Results page's AI Summary metadata shows it alongside `provider`/`model_name`/`completed_at` without a second request.
 
 `medication_discrepancies` (added in Issue #148) are the deterministic reconciliation engine's findings - see `docs/architecture.md`'s Reconciliation Engine and Analysis Creation Pipeline sections for how they are produced during `POST /patients/{patient_id}/analyses`. `medication_mention_id`/`medication_id` are the raw foreign keys; as of Issue #46, each discrepancy also nests the evidence those ids point to, so the Analysis Results page can render supporting evidence without a second request:
 

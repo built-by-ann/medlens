@@ -103,7 +103,7 @@ def list_analyses(
             completed_at=analysis.completed_at,
             error_message=analysis.error_message,
             summary=analysis.summary,
-            document_count=len(analysis.clinical_documents),
+            document_count=analysis.document_count,
             total_findings=analysis.total_findings,
             high_severity_findings=analysis.high_severity_findings,
             medium_severity_findings=analysis.medium_severity_findings,
@@ -148,6 +148,7 @@ def get_analysis_detail(
         error_message=analysis.error_message,
         created_at=analysis.created_at,
         updated_at=analysis.updated_at,
+        document_count=analysis.document_count,
         medication_mentions=sorted(analysis.medication_mentions, key=lambda mention: mention.id),
         possible_inconsistencies=sorted(
             analysis.possible_inconsistencies, key=lambda inconsistency: inconsistency.id
