@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
 import { PatientDetails } from '@/components/patients/PatientDetails'
-import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
+import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { ArchivePatientDialog } from '@/components/patients/ArchivePatientDialog'
 import { MedicationList } from '@/components/medications/MedicationList'
 import { EmptyMedicationState } from '@/components/medications/EmptyMedicationState'
@@ -100,7 +100,7 @@ export function PatientOverviewPage() {
 
       {!isLoading && !error && patient && (
         <>
-          <PatientBreadcrumb patient={patient} />
+          <PatientPageNav patient={patient} backTo={ROUTES.patients} backLabel="Patients" />
 
           <PageHeader
             title={`${patient.first_name} ${patient.last_name}`}

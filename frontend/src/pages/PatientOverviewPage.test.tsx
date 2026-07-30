@@ -190,6 +190,18 @@ describe('PatientOverviewPage', () => {
     )
   })
 
+  it('shows a breadcrumb ending in the patient’s name and a Back action to the Patients list', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    const user = userEvent.setup()
+    renderOverviewPage()
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByText('Jane Doe')).toHaveAttribute('aria-current', 'page')
+
+    await user.click(screen.getByRole('button', { name: 'Back to Patients' }))
+    expect(mockNavigate).toHaveBeenCalledWith('/patients')
+  })
+
   it('shows the empty medications state and a "View All" link to the full Medications page', async () => {
     mockedGetPatient.mockResolvedValue(patient)
     renderOverviewPage()

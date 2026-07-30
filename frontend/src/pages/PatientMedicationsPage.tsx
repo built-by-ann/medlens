@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
@@ -6,6 +6,7 @@ import { MedicationForm } from '@/components/medications/MedicationForm'
 import { MedicationList } from '@/components/medications/MedicationList'
 import { EmptyMedicationState } from '@/components/medications/EmptyMedicationState'
 import { MedicationCsvUpload } from '@/components/medications/MedicationCsvUpload'
+import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { usePatient } from '@/hooks/usePatient'
 import { usePatientMedications } from '@/hooks/usePatientMedications'
 import { patientDetailPath } from '@/routes/paths'
@@ -45,17 +46,17 @@ export function PatientMedicationsPage() {
 
       {!isPatientLoading && !patientError && patient && (
         <>
+          <PatientPageNav
+            patient={patient}
+            trail={[{ label: 'Medications' }]}
+            backTo={patientDetailPath(patient.id)}
+            backLabel={`${patient.first_name} ${patient.last_name}`}
+          />
+
           <PageHeader
             title={`Medications for ${patient.first_name} ${patient.last_name}`}
             description="Keep this patient's medication list up to date. MedLens compares it against their clinical documents to find discrepancies."
           />
-
-          <Link
-            to={patientDetailPath(patient.id)}
-            className="self-start text-sm text-slate-600 hover:underline"
-          >
-            ← Back to {patient.first_name} {patient.last_name}
-          </Link>
 
           <section aria-labelledby="medication-list-heading" className="flex flex-col gap-4">
             <h2 id="medication-list-heading" className="text-lg font-semibold text-slate-900">

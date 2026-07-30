@@ -37,6 +37,7 @@ const mockedGetPatient = vi.mocked(getPatient)
 
 const submit = vi.fn()
 const invalidateItem = vi.fn()
+const saveDocuments = vi.fn()
 
 const patient: Patient = {
   id: 7,
@@ -103,6 +104,7 @@ describe('AnalysisProcessingPage', () => {
   beforeEach(() => {
     submit.mockReset()
     invalidateItem.mockReset()
+    saveDocuments.mockReset()
     mockedGetPatient.mockReset()
     mockedGetPatient.mockResolvedValue(patient)
     mockedUseCreateAnalysis.mockReturnValue({
@@ -110,6 +112,7 @@ describe('AnalysisProcessingPage', () => {
       error: null,
       failedItemLabel: null,
       submit,
+      saveDocuments,
       invalidateItem,
     })
     mockedUseAnalysisPolling.mockReturnValue({ analysis: null, error: null })
@@ -160,6 +163,7 @@ describe('AnalysisProcessingPage', () => {
       error: null,
       failedItemLabel: null,
       submit,
+      saveDocuments,
       invalidateItem,
     })
     renderProcessingPage()
@@ -201,6 +205,7 @@ describe('AnalysisProcessingPage', () => {
       error: 'Something went wrong on the server.',
       failedItemLabel: 'note',
       submit,
+      saveDocuments,
       invalidateItem,
     })
     const user = userEvent.setup()

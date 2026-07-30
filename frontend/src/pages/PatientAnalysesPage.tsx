@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
-import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
+import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { RecentAnalysesList } from '@/components/analyses/RecentAnalysesList'
 import { AnalysesEmptyState } from '@/components/analyses/AnalysesEmptyState'
 import { usePatient } from '@/hooks/usePatient'
@@ -91,7 +91,12 @@ export function PatientAnalysesPage() {
 
       {!isPatientLoading && !patientError && patient && (
         <>
-          <PatientBreadcrumb patient={patient} trail={[{ label: 'Analyses' }]} />
+          <PatientPageNav
+            patient={patient}
+            trail={[{ label: 'Analyses' }]}
+            backTo={patientDetailPath(patient.id)}
+            backLabel={`${patient.first_name} ${patient.last_name}`}
+          />
 
           <PageHeader
             title={`Analyses for ${patient.first_name} ${patient.last_name}`}
@@ -105,13 +110,6 @@ export function PatientAnalysesPage() {
               </Link>
             }
           />
-
-          <Link
-            to={patientDetailPath(patient.id)}
-            className="self-start text-sm text-slate-600 hover:underline"
-          >
-            ← Back to {patient.first_name} {patient.last_name}
-          </Link>
 
           {areAnalysesLoading && <LoadingSpinner label="Loading analyses" />}
 

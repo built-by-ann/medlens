@@ -65,6 +65,7 @@ function renderPage(state: { flashMessage?: string } | null = null) {
     <MemoryRouter initialEntries={[{ pathname: '/patients/7/analyses', state }]}>
       <Routes>
         <Route path="/patients/:patientId/analyses" element={<PatientAnalysesPage />} />
+        <Route path="/patients/:patientId" element={<div>Patient Overview stub</div>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -105,18 +106,19 @@ describe('PatientAnalysesPage', () => {
     expect(within(breadcrumb).getByText('Analyses')).toHaveAttribute('aria-current', 'page')
   })
 
-  it('shows a back link to the patient overview and a link to start an analysis', async () => {
+  it('shows a back action to the patient overview and a link to start an analysis', async () => {
     mockedListAnalyses.mockResolvedValue([])
+    const user = userEvent.setup()
     renderPage()
 
-    expect(await screen.findByRole('link', { name: /Back to Jane Doe/ })).toHaveAttribute(
-      'href',
-      '/patients/7',
-    )
+    await screen.findByRole('heading', { name: /Analyses for Jane Doe/ })
     expect(screen.getByRole('link', { name: '+ Start analysis' })).toHaveAttribute(
       'href',
       '/patients/7/upload',
     )
+
+    await user.click(screen.getByRole('button', { name: 'Back to Jane Doe' }))
+    expect(await screen.findByText('Patient Overview stub')).toBeInTheDocument()
   })
 
   it('shows the empty state with a link to start the first analysis', async () => {

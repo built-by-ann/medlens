@@ -233,12 +233,11 @@ describe('AnalysisDetailPage', () => {
   })
 
   it('links back to this patient’s analysis history', async () => {
+    const user = userEvent.setup()
     renderPage()
 
-    expect(await screen.findByRole('link', { name: /Back to analyses/ })).toHaveAttribute(
-      'href',
-      '/patients/7/analyses',
-    )
+    await user.click(await screen.findByRole('button', { name: 'Back to analyses' }))
+    expect(mockNavigate).toHaveBeenCalledWith('/patients/7/analyses')
   })
 
   it('shows the status badge, summary, provider, model, and timestamps', async () => {

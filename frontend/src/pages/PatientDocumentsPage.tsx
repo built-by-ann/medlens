@@ -2,7 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
-import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
+import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { ClinicalDocumentList } from '@/components/documents/ClinicalDocumentList'
 import { EmptyDocumentsState } from '@/components/documents/EmptyDocumentsState'
 import { usePatient } from '@/hooks/usePatient'
@@ -43,7 +43,12 @@ export function PatientDocumentsPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PatientBreadcrumb patient={patient} trail={[{ label: 'Clinical Documents' }]} />
+      <PatientPageNav
+        patient={patient}
+        trail={[{ label: 'Clinical Documents' }]}
+        backTo={patientDetailPath(patient.id)}
+        backLabel={`${patient.first_name} ${patient.last_name}`}
+      />
 
       <PageHeader
         title="Clinical Documents"

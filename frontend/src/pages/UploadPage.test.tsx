@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UploadPage } from '@/pages/UploadPage'
 import { getPatient } from '@/api/patients'
-import type { Patient } from '@/types/api'
+import { createClinicalDocumentFromText, uploadClinicalDocumentFile } from '@/api/clinicalDocuments'
+import type { ClinicalDocument, Patient } from '@/types/api'
 
 vi.mock('@/api/patients', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/patients')>()
@@ -15,7 +16,34 @@ vi.mock('@/api/patients', async (importOriginal) => {
   }
 })
 
+vi.mock('@/api/clinicalDocuments', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/clinicalDocuments')>()
+
+  return {
+    ...actual,
+    uploadClinicalDocumentFile: vi.fn(),
+    createClinicalDocumentFromText: vi.fn(),
+  }
+})
+
 const mockedGetPatient = vi.mocked(getPatient)
+const mockedUploadFile = vi.mocked(uploadClinicalDocumentFile)
+const mockedCreateFromText = vi.mocked(createClinicalDocumentFromText)
+
+function fakeDocument(id: number): ClinicalDocument {
+  return {
+    id,
+    patient_id: 7,
+    document_type: 'visit_note',
+    title: `Document ${id}`,
+    raw_text: 'text',
+    file_name: null,
+    file_type: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: null,
+    analysis_count: 0,
+  }
+}
 
 const patient: Patient = {
   id: 7,
@@ -43,6 +71,8 @@ function renderUploadPage() {
       <Routes>
         <Route path="/patients/:patientId/upload" element={<UploadPage />} />
         <Route path="/patients/:patientId/analyses/processing" element={<ProcessingProbe />} />
+        <Route path="/patients/:patientId/documents" element={<div>Documents page stub</div>} />
+        <Route path="/patients/:patientId" element={<div>Patient Overview stub</div>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -67,6 +97,8 @@ function getFileInput(): HTMLInputElement {
 describe('UploadPage', () => {
   beforeEach(() => {
     mockedGetPatient.mockReset()
+    mockedUploadFile.mockReset()
+    mockedCreateFromText.mockReset()
     mockedGetPatient.mockResolvedValue(patient)
   })
 
@@ -96,6 +128,16 @@ describe('UploadPage', () => {
       '/patients/7',
     )
     expect(within(breadcrumb).getByText('Upload')).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('has a Back action to the patient overview', async () => {
+    const user = userEvent.setup()
+    renderUploadPage()
+
+    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
+    await user.click(screen.getByRole('button', { name: 'Back to Jane Doe' }))
+
+    expect(await screen.findByText('Patient Overview stub')).toBeInTheDocument()
   })
 
   it('adds a selected file to the list, showing its name, size, and a document type defaulting to Visit note', async () => {
@@ -261,5 +303,76 @@ describe('UploadPage', () => {
       files: [{ id: 0, file: {}, documentType: 'visit_note' }],
       notes: [{ id: 0, title: '', rawText: 'Pasted note text', documentType: 'visit_note' }],
     })
+  })
+
+  it('blocks saving when nothing has been added', async () => {
+    const user = userEvent.setup()
+    renderUploadPage()
+
+    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
+
+    await user.click(screen.getByRole('button', { name: 'Save documents' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Add at least one file or note before saving.',
+    )
+    expect(mockedUploadFile).not.toHaveBeenCalled()
+  })
+
+  it('saves documents without starting an analysis, then goes to the Clinical Documents page', async () => {
+    mockedUploadFile.mockResolvedValue(fakeDocument(1))
+    const user = userEvent.setup()
+    renderUploadPage()
+
+    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
+
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
+    await user.upload(getFileInput(), file)
+
+    await user.click(screen.getByRole('button', { name: 'Save documents' }))
+
+    await waitFor(() => expect(mockedUploadFile).toHaveBeenCalledWith(7, file, 'visit_note'))
+    expect(await screen.findByText('Documents page stub')).toBeInTheDocument()
+    expect(screen.queryByTestId('processing-probe')).not.toBeInTheDocument()
+  })
+
+  it('shows a saving state and disables both actions while saving is in flight', async () => {
+    let resolveUpload: (document: ClinicalDocument) => void = () => {}
+    mockedUploadFile.mockReturnValue(
+      new Promise((resolve) => {
+        resolveUpload = resolve
+      }),
+    )
+    const user = userEvent.setup()
+    renderUploadPage()
+
+    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
+
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
+    await user.upload(getFileInput(), file)
+    await user.click(screen.getByRole('button', { name: 'Save documents' }))
+
+    const savingButton = await screen.findByRole('button', { name: 'Saving...' })
+    expect(savingButton).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Start Analysis' })).toBeDisabled()
+
+    resolveUpload(fakeDocument(1))
+    await screen.findByText('Documents page stub')
+  })
+
+  it('shows an error and stays on the page when saving fails', async () => {
+    mockedUploadFile.mockRejectedValue({ status: 500, message: 'Could not save documents.' })
+    const user = userEvent.setup()
+    renderUploadPage()
+
+    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
+
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
+    await user.upload(getFileInput(), file)
+    await user.click(screen.getByRole('button', { name: 'Save documents' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save documents.')
+    expect(screen.queryByText('Documents page stub')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save documents' })).toBeEnabled()
   })
 })

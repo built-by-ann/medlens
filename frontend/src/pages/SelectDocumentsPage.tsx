@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/common/Button'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
-import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
+import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { EmptyDocumentsState } from '@/components/documents/EmptyDocumentsState'
 import { usePatient } from '@/hooks/usePatient'
 import { usePatientClinicalDocuments } from '@/hooks/usePatientClinicalDocuments'
@@ -83,19 +83,17 @@ export function SelectDocumentsPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PatientBreadcrumb patient={patient} trail={[{ label: 'Select documents' }]} />
+      <PatientPageNav
+        patient={patient}
+        trail={[{ label: 'Select documents' }]}
+        backTo={patientDetailPath(patient.id)}
+        backLabel={`${patient.first_name} ${patient.last_name}`}
+      />
 
       <PageHeader
         title="Select existing documents"
         description={`Choose one or more of ${patient.first_name} ${patient.last_name}'s previously uploaded documents to analyze - no need to upload them again.`}
       />
-
-      <Link
-        to={patientDetailPath(patient.id)}
-        className="self-start text-sm text-slate-600 hover:underline"
-      >
-        ← Back to {patient.first_name} {patient.last_name}
-      </Link>
 
       {documents.length === 0 ? (
         <EmptyDocumentsState patientId={patient.id} />
