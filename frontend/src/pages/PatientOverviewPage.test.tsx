@@ -190,15 +190,14 @@ describe('PatientOverviewPage', () => {
     )
   })
 
-  it('shows the empty medications state and a link to add one', async () => {
+  it('shows the empty medications state and a "View All" link to the full Medications page', async () => {
     mockedGetPatient.mockResolvedValue(patient)
     renderOverviewPage()
 
     expect(await screen.findByText('No medications recorded yet.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '+ Add medication' })).toHaveAttribute(
-      'href',
-      '/patients/1/medications',
-    )
+    const link = screen.getByRole('link', { name: 'View all medications' })
+    expect(link).toHaveTextContent('View All')
+    expect(link).toHaveAttribute('href', '/patients/1/medications')
     expect(mockedListMedications).toHaveBeenCalledWith(1)
   })
 
@@ -278,10 +277,9 @@ describe('PatientOverviewPage', () => {
     mockedListClinicalDocuments.mockResolvedValue([sampleDocument])
     renderOverviewPage()
 
-    expect(await screen.findByRole('link', { name: 'View All' })).toHaveAttribute(
-      'href',
-      '/patients/1/documents',
-    )
+    const link = await screen.findByRole('link', { name: 'View all clinical documents' })
+    expect(link).toHaveTextContent('View All')
+    expect(link).toHaveAttribute('href', '/patients/1/documents')
   })
 
   it('does not show a "View All" link when there are no documents to view', async () => {
@@ -289,7 +287,9 @@ describe('PatientOverviewPage', () => {
     renderOverviewPage()
 
     await screen.findByText('No documents uploaded')
-    expect(screen.queryByRole('link', { name: 'View All' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'View all clinical documents' }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows a breadcrumb naming Patients and the current patient', async () => {
@@ -393,10 +393,32 @@ describe('PatientOverviewPage', () => {
     renderOverviewPage()
 
     expect(await screen.findByText('Reconciliation completed with 1 finding.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'View all analyses' })).toHaveAttribute(
-      'href',
-      '/patients/1/analyses',
-    )
+    const link = screen.getByRole('link', { name: 'View all analyses' })
+    expect(link).toHaveTextContent('View All')
+    expect(link).toHaveAttribute('href', '/patients/1/analyses')
+  })
+
+  it('standardizes every preview section on the same "View All" label, distinguished for screen readers by aria-label', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    mockedListClinicalDocuments.mockResolvedValue([sampleDocument])
+    mockedListAnalyses.mockResolvedValue([sampleAnalysis])
+    mockedListMedications.mockResolvedValue([sampleMedication])
+    renderOverviewPage()
+
+    const medicationsLink = await screen.findByRole('link', { name: 'View all medications' })
+    const documentsLink = screen.getByRole('link', { name: 'View all clinical documents' })
+    const analysesLink = screen.getByRole('link', { name: 'View all analyses' })
+
+    // Same visible label everywhere - the standardization this issue asks for.
+    for (const link of [medicationsLink, documentsLink, analysesLink]) {
+      expect(link).toHaveTextContent('View All')
+    }
+
+    // Distinct accessible names (from aria-label) so a screen reader user
+    // encountering three identically-worded links can still tell them apart.
+    expect(medicationsLink).toHaveAttribute('href', '/patients/1/medications')
+    expect(documentsLink).toHaveAttribute('href', '/patients/1/documents')
+    expect(analysesLink).toHaveAttribute('href', '/patients/1/analyses')
   })
 
   it('opens an archive confirmation dialog naming the patient', async () => {
