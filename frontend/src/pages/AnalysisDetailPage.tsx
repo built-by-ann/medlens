@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card } from '@/components/common/Card'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
@@ -8,11 +8,14 @@ import { SummaryStat } from '@/components/common/SummaryStat'
 import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
 import { AnalysisStatusBadge } from '@/components/analyses/AnalysisStatusBadge'
 import { MedicationDiscrepancyCard } from '@/components/analyses/MedicationDiscrepancyCard'
+import { DeleteAnalysisDialog } from '@/components/analyses/DeleteAnalysisDialog'
 import { usePatient } from '@/hooks/usePatient'
 import { useAnalysisDetail } from '@/hooks/useAnalysisDetail'
 import { discrepancySeverityLabel } from '@/utils/discrepancy'
 import { patientAnalysesPath } from '@/routes/paths'
 import { cn } from '@/utils/cn'
+import { deleteAnalysis } from '@/api/analyses'
+import type { ApiError } from '@/api/client'
 import type {
   AnalysisInconsistency,
   AnalysisMedicationMention,
@@ -131,6 +134,7 @@ export function AnalysisDetailPage() {
   const { patientId, analysisId } = useParams<{ patientId: string; analysisId: string }>()
   const id = Number(patientId)
   const analysisIdNumber = Number(analysisId)
+  const navigate = useNavigate()
 
   const {
     patient,
@@ -144,6 +148,10 @@ export function AnalysisDetailPage() {
     error: analysisError,
     retry: retryAnalysis,
   } = useAnalysisDetail(id, analysisIdNumber)
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   if (isPatientLoading || isAnalysisLoading) {
     return <LoadingSpinner label="Loading analysis" />
@@ -177,6 +185,37 @@ export function AnalysisDetailPage() {
   const severityGroups = groupBySeverity(discrepancies)
   const medicationMentions = analysis.medication_mentions
   const followUpQuestions = analysis.possible_inconsistencies
+  const patientName = `${patient.first_name} ${patient.last_name}`
+
+  function openDeleteDialog() {
+    setDeleteError(null)
+    setIsDeleteDialogOpen(true)
+  }
+
+  function closeDeleteDialog() {
+    if (isDeleting) return
+    setIsDeleteDialogOpen(false)
+    setDeleteError(null)
+  }
+
+  async function handleConfirmDelete() {
+    if (isDeleting || !analysis) return
+
+    setIsDeleting(true)
+    setDeleteError(null)
+    try {
+      // `id`, not `patient.id`: they're the same patient once loaded, but
+      // `id` (from useParams, a plain number) needs no null-narrowing of
+      // `patient` inside this closure.
+      await deleteAnalysis(id, analysis.id)
+      navigate(patientAnalysesPath(id), {
+        state: { flashMessage: `Analysis #${analysis.id} was deleted.` },
+      })
+    } catch (caughtError) {
+      setDeleteError((caughtError as ApiError).message)
+      setIsDeleting(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -191,7 +230,18 @@ export function AnalysisDetailPage() {
       <PageHeader
         title={`Analysis #${analysis.id}`}
         description={`For ${patient.first_name} ${patient.last_name}`}
-        actions={<AnalysisStatusBadge status={analysis.status} />}
+        actions={
+          <>
+            <AnalysisStatusBadge status={analysis.status} />
+            <button
+              type="button"
+              onClick={openDeleteDialog}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              Delete analysis
+            </button>
+          </>
+        }
       />
 
       <Link
@@ -320,6 +370,14 @@ export function AnalysisDetailPage() {
           </div>
         )}
       </section>
+
+      <DeleteAnalysisDialog
+        target={isDeleteDialogOpen ? { id: analysis.id, patientName } : null}
+        isSubmitting={isDeleting}
+        error={deleteError}
+        onCancel={closeDeleteDialog}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   )
 }
