@@ -1,10 +1,17 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AnalysisDetailPage } from '@/pages/AnalysisDetailPage'
 import { getPatient } from '@/api/patients'
 import { getAnalysisDetail } from '@/api/analyses'
-import type { AnalysisDetail, MedicationDiscrepancy, Patient } from '@/types/api'
+import type {
+  AnalysisDetail,
+  AnalysisInconsistency,
+  AnalysisMedicationMention,
+  MedicationDiscrepancy,
+  Patient,
+} from '@/types/api'
 
 vi.mock('@/api/patients', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/patients')>()
@@ -52,7 +59,33 @@ const completedAnalysis: AnalysisDetail = {
   error_message: null,
   created_at: '2026-01-01T11:59:00Z',
   updated_at: '2026-01-01T12:05:00Z',
+  document_count: 1,
+  medication_mentions: [],
+  possible_inconsistencies: [],
   medication_discrepancies: [],
+}
+
+function makeMedicationMention(
+  overrides: Partial<AnalysisMedicationMention> = {},
+): AnalysisMedicationMention {
+  return {
+    id: 1,
+    medication_name: 'Lisinopril',
+    dosage: '10 mg',
+    route: 'oral',
+    frequency: 'once daily',
+    status: 'active',
+    notes: null,
+    ...overrides,
+  }
+}
+
+function makeInconsistency(overrides: Partial<AnalysisInconsistency> = {}): AnalysisInconsistency {
+  return {
+    id: 1,
+    description: 'Confirm whether the patient is still taking Lisinopril.',
+    ...overrides,
+  }
 }
 
 function makeDiscrepancy(overrides: Partial<MedicationDiscrepancy> = {}): MedicationDiscrepancy {
@@ -257,9 +290,12 @@ describe('AnalysisDetailPage', () => {
     })
     renderPage()
 
-    await screen.findByRole('heading', { name: 'Medication Reconciliation Findings' })
+    const findingsHeading = await screen.findByRole('heading', {
+      name: 'Medication Reconciliation Findings',
+    })
+    const findingsSection = findingsHeading.closest('section') as HTMLElement
 
-    const groupHeadings = screen
+    const groupHeadings = within(findingsSection)
       .getAllByRole('heading', { level: 3 })
       .map((heading) => heading.textContent)
     expect(groupHeadings).toEqual(['High severity (1)', 'Medium severity (1)', 'Low severity (1)'])
@@ -334,6 +370,8 @@ describe('AnalysisDetailPage', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Analysis #42', level: 1 })
+    expect(screen.getByRole('heading', { name: 'AI Summary', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Summary', level: 3 })).toBeInTheDocument()
     expect(
       screen.getByRole('heading', { name: 'Medication Reconciliation Findings', level: 2 }),
     ).toBeInTheDocument()
@@ -342,6 +380,94 @@ describe('AnalysisDetailPage', () => {
     expect(
       screen.getByRole('heading', { name: 'Supporting evidence', level: 5 }),
     ).toBeInTheDocument()
+  })
+
+  it('visually distinguishes the AI Summary section from the deterministic findings section', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'AI Summary' })
+    expect(screen.getByText('AI-generated')).toBeInTheDocument()
+    expect(screen.getByText('Deterministic')).toBeInTheDocument()
+  })
+
+  it('shows a helpful empty state when no AI summary is available, without hiding reconciliation findings', async () => {
+    mockedGetAnalysisDetail.mockResolvedValue({
+      ...completedAnalysis,
+      summary: null,
+      medication_discrepancies: [withMentionEvidence],
+    })
+    renderPage()
+
+    expect(
+      await screen.findByText('No AI summary is available for this analysis.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Medication Reconciliation Findings' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Lisinopril', level: 4 })).toBeInTheDocument()
+  })
+
+  it('shows medications mentioned by the AI when present', async () => {
+    mockedGetAnalysisDetail.mockResolvedValue({
+      ...completedAnalysis,
+      medication_mentions: [
+        makeMedicationMention({ id: 5, medication_name: 'Metformin', dosage: '500 mg' }),
+      ],
+    })
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Medications Mentioned' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Metformin')).toBeInTheDocument()
+    expect(screen.getByText(/500 mg/)).toBeInTheDocument()
+  })
+
+  it('omits the Medications Mentioned section entirely when there are none', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'AI Summary' })
+    expect(screen.queryByRole('heading', { name: 'Medications Mentioned' })).not.toBeInTheDocument()
+  })
+
+  it('shows follow-up questions as a checklist that can be toggled', async () => {
+    const user = userEvent.setup()
+    mockedGetAnalysisDetail.mockResolvedValue({
+      ...completedAnalysis,
+      possible_inconsistencies: [
+        makeInconsistency({
+          id: 8,
+          description: 'Confirm current Warfarin dose with the patient.',
+        }),
+      ],
+    })
+    renderPage()
+
+    const checkbox = await screen.findByRole('checkbox', {
+      name: 'Confirm current Warfarin dose with the patient.',
+    })
+    expect(checkbox).not.toBeChecked()
+
+    await user.click(checkbox)
+    expect(checkbox).toBeChecked()
+  })
+
+  it('omits the Follow-up Questions section entirely when there are none', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'AI Summary' })
+    expect(screen.queryByRole('heading', { name: 'Follow-up Questions' })).not.toBeInTheDocument()
+  })
+
+  it('shows summary metadata including provider, model, and document count', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Summary Metadata' })
+    expect(screen.getByText('gemini')).toBeInTheDocument()
+    expect(screen.getByText('gemini-2.0-flash')).toBeInTheDocument()
+
+    const documentCountStat = screen.getByText('Documents analyzed').closest('div') as HTMLElement
+    expect(within(documentCountStat).getByText('1')).toBeInTheDocument()
   })
 
   it('shows a not-found error when the analysis does not exist or is not owned by the patient', async () => {

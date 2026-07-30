@@ -100,6 +100,8 @@ def get_analysis_for_patient(db: Session, patient_id: int, analysis_id: int) -> 
             selectinload(Analysis.medication_discrepancies)
             .selectinload(MedicationDiscrepancy.medication_mention)
             .selectinload(MedicationMention.clinical_document),
+            # Issue #47: needed for the document_count property below.
+            selectinload(Analysis.clinical_documents),
         )
         .filter(
             Analysis.id == analysis_id,

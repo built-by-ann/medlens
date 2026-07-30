@@ -357,6 +357,8 @@ An analysis can be completed by either of two separate entry points into the sam
 
 Analysis is owned by `Patient`: every API route and service function scopes and authorizes by `patient_id`, the sole ownership column - there is no `user_id` on this table. See Design Decisions.
 
+A `document_count` property (`len(self.clinical_documents)`) is computed on the model rather than stored as a column, added in Issue #47 so the Analysis Results page's AI Summary metadata can show how many documents an analysis covers - the same pattern as `ClinicalDocument.analysis_count`.
+
 ### Fields
 
 ```text

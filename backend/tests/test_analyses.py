@@ -623,6 +623,46 @@ def test_get_analysis_detail_returns_items_in_deterministic_order(client):
     assert inconsistency_ids == sorted(inconsistency_ids)
 
 
+def test_get_analysis_detail_includes_document_count(client):
+    # Issue #47: the Analysis Results page's AI Summary metadata shows how
+    # many documents were analyzed.
+    token = _register_and_login(client, "detaildoccount@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+    assert response.status_code == 200
+    assert response.json()["document_count"] == 1
+
+
+def test_get_analysis_detail_document_count_reflects_every_selected_document(client):
+    token = _register_and_login(client, "detaildoccountmulti@example.com")
+    patient = _create_patient(client, token).json()
+    document_a = _create_document(client, token, patient["id"], title="Visit Note A")
+    document_b = _create_document(client, token, patient["id"], title="Visit Note B")
+
+    app.dependency_overrides[get_ai_summary_service] = _override_ai_service(_FakeProvider())
+    try:
+        response = client.post(
+            f"/patients/{patient['id']}/analyses",
+            json={"clinical_document_ids": [document_a["id"], document_b["id"]]},
+            headers=_auth_headers(token),
+        )
+    finally:
+        app.dependency_overrides.pop(get_ai_summary_service, None)
+
+    assert response.status_code == 201
+    analysis_id = response.json()["analysis_id"]
+
+    detail_response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+    assert detail_response.json()["document_count"] == 2
+
+
 def test_get_analysis_detail_includes_reconciliation_discrepancies(client):
     # Issue #148: reconciliation now runs automatically during analysis
     # creation. This patient has no medications on file, so the

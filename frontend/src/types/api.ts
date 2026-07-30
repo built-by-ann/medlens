@@ -115,11 +115,26 @@ export interface MedicationDiscrepancy {
   medication_mention: MedicationMentionEvidence | null
 }
 
-// Deliberately narrower than the backend's AnalysisDetailResponse: it also
-// returns medication_mentions and possible_inconsistencies (the AI's raw,
-// unstructured observations), but rendering those remains out of scope.
-// medication_discrepancies (Issue #148) is included, since that engine now
-// actually runs during analysis creation and has real findings to show.
+// The AI's raw, unstructured per-medication observation from the summary
+// pass - distinct from Medication (the reconciliation engine's structured
+// record) and from MedicationDiscrepancy (a reconciliation finding).
+export interface AnalysisMedicationMention {
+  id: number
+  medication_name: string
+  dosage: string | null
+  route: string | null
+  frequency: string | null
+  status: string | null
+  notes: string | null
+}
+
+// One of the AI's free-text "worth a follow-up" observations from the
+// summary pass. Rendered as a follow-up question checklist (Issue #47).
+export interface AnalysisInconsistency {
+  id: number
+  description: string
+}
+
 export interface AnalysisDetail {
   id: number
   patient_id: number
@@ -132,6 +147,16 @@ export interface AnalysisDetail {
   error_message: string | null
   created_at: string
   updated_at: string | null
+  // Issue #47: how many clinical documents this analysis covers, shown in
+  // the AI Summary section's metadata.
+  document_count: number
+  // Issue #47: the AI's raw, unstructured observations, now rendered in a
+  // visually distinct "AI Summary" section alongside the deterministic
+  // medication_discrepancies findings below.
+  medication_mentions: AnalysisMedicationMention[]
+  possible_inconsistencies: AnalysisInconsistency[]
+  // Issue #148 (and the reconciliation engine it wires up): the deterministic
+  // findings, always present as an empty array rather than omitted.
   medication_discrepancies: MedicationDiscrepancy[]
 }
 

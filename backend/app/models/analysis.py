@@ -68,3 +68,7 @@ class Analysis(Base):
         back_populates="analysis",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def document_count(self) -> int:
+        return len(self.clinical_documents)

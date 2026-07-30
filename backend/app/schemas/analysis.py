@@ -64,6 +64,12 @@ class AnalysisDetailResponse(BaseModel):
     error_message: str | None
     created_at: datetime
     updated_at: datetime | None
+    # Issue #47: how many clinical documents this analysis covers (a
+    # property on the model, len(analysis.clinical_documents) - not a
+    # stored column, the same pattern as ClinicalDocument.analysis_count),
+    # exposed here so the Analysis Results page's AI Summary metadata can
+    # show it without a second request.
+    document_count: int = Field(ge=0)
 
     medication_mentions: list[AnalysisMedicationMentionResponse]
     possible_inconsistencies: list[AnalysisInconsistencyResponse]
@@ -81,11 +87,8 @@ class AnalysisSummaryResponse(BaseModel):
     """A single row in a patient's analysis history.
 
     Deliberately narrower than AnalysisDetailResponse: no medication
-    mentions or inconsistencies, since a list view only needs enough to
-    identify an analysis and decide whether to open it. document_count is
-    computed (len(analysis.clinical_documents)), not a model column, so
-    this cannot be built with model_validate the way AnalysisDetailResponse
-    is; the route constructs it field by field instead.
+    mentions, inconsistencies, or discrepancies, since a list view only
+    needs enough to identify an analysis and decide whether to open it.
     """
 
     id: int
