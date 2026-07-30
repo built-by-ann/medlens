@@ -74,6 +74,7 @@ function renderPage() {
     <MemoryRouter initialEntries={['/patients/42/medications']}>
       <Routes>
         <Route path="/patients/:patientId/medications" element={<PatientMedicationsPage />} />
+        <Route path="/patients/:patientId" element={<div>Patient Overview stub</div>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -98,17 +99,24 @@ describe('PatientMedicationsPage', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Loading patient')
   })
 
-  it('shows the patient name in the page title and a back link to their overview', async () => {
+  it('shows the patient name in the page title, a breadcrumb, and a back action to their overview', async () => {
     mockedListMedications.mockResolvedValue([])
+    const user = userEvent.setup()
     renderPage()
 
     expect(
       await screen.findByRole('heading', { name: /Medications for Jane Doe/ }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Back to Jane Doe/ })).toHaveAttribute(
+
+    const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByText('Medications')).toHaveAttribute('aria-current', 'page')
+    expect(within(breadcrumb).getByRole('link', { name: 'Jane Doe' })).toHaveAttribute(
       'href',
       '/patients/42',
     )
+
+    await user.click(screen.getByRole('button', { name: 'Back to Jane Doe' }))
+    expect(await screen.findByText('Patient Overview stub')).toBeInTheDocument()
   })
 
   it('shows an error state when the patient fails to load', async () => {

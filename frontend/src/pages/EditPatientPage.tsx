@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
 import { PatientForm } from '@/components/patients/PatientForm'
+import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { usePatient } from '@/hooks/usePatient'
 import { updatePatient, type PatientPayload } from '@/api/patients'
 import { patientDetailPath } from '@/routes/paths'
@@ -31,6 +32,15 @@ export function EditPatientPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {!isLoading && !error && patient && (
+        <PatientPageNav
+          patient={patient}
+          trail={[{ label: 'Edit patient' }]}
+          backTo={patientDetailPath(id)}
+          backLabel={`${patient.first_name} ${patient.last_name}`}
+        />
+      )}
+
       <PageHeader title="Edit patient" description="Update this patient's information." />
 
       {isLoading && <LoadingSpinner label="Loading patient" />}

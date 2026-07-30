@@ -82,6 +82,32 @@ Protected routes are wrapped in `ProtectedRoute` (`src/components/common/Protect
 
 Sprint 3.5, Issue #131: every page nested under a patient (`PatientOverviewPage`, `UploadPage`, `PatientAnalysesPage`, `AnalysisDetailPage`) renders `PatientBreadcrumb` (`src/components/patients/PatientBreadcrumb.tsx`) above its `PageHeader`, so a provider can never lose track of which patient they're viewing or how to get back. It builds a `Patients / {patient name} / ...trail` `<nav aria-label="Breadcrumb">` with an `<ol>` of crumbs; every crumb is a link except the last, which is the current page and is rendered as plain text with `aria-current="page"` rather than a link to itself. Callers pass only the crumbs *after* the patient name (`trail`, e.g. `[{ label: 'Analyses', to: patientAnalysesPath(id) }, { label: 'Analysis #42' }]` for `AnalysisDetailPage`); `PatientOverviewPage` passes no trail at all, since the patient's own name is already the current page there. `PatientMedicationsPage` and `EditPatientPage` were not touched in this issue - they already had an adequate "← Back to {name}" link and weren't part of this issue's explicit page list.
 
+**Issue #158 standardized the Back action this section warned was inconsistent** - up to this point, most patient-nested pages each hand-rolled their own "← Back to {name}" `<Link>` pointing at a single hardcoded destination (and two pages, `PatientMedicationsPage` and `EditPatientPage`, had no breadcrumb at all, and `PatientDocumentsPage` had a breadcrumb but no Back action). Two new shared components replace all of that:
+
+- **`BackButton`** (`src/components/common/BackButton.tsx`) - a single `<button>` rendering "← Back to {label}" (the arrow is `aria-hidden`, so the accessible name is exactly "Back to {label}"). Rather than a static link to one hardcoded destination, it prefers real browser-history back navigation (`navigate(-1)`) so the user lands exactly where they actually came from, whether that's Dashboard, the Patients list, another patient-related workflow, or anywhere else - and falls back to a given logical-parent route (`to`) only when there's no in-app history to return to (a direct link, a bookmark, or a fresh page load). It distinguishes the two cases via `useLocation().key === 'default'`: React Router assigns that exact key only to the initial entry of a history session, which is the closest reliable signal available from script for "did the user arrive here via in-app navigation, or from outside it" - real `window.history` depth isn't reliably readable. This is a generic, non-patient-specific component (`components/common/`, not `components/patients/`), even though every current caller happens to be patient-related.
+- **`PatientPageNav`** (`src/components/patients/PatientPageNav.tsx`) - the shared layout combining `PatientBreadcrumb` and `BackButton` into the one navigation block every patient-nested page now renders identically: `<PatientPageNav patient={patient} trail={...} backTo={...} backLabel={...} />`. Bundling both in one component (rather than each page composing `PatientBreadcrumb` plus its own hand-rolled back link, as before) is what actually eliminates the duplicated navigation markup this issue asked to avoid - it's the "shared page header/navigation layout" component the issue described.
+
+Every page nested under a patient now uses `PatientPageNav` with a `backTo` matching its logical parent in the breadcrumb hierarchy:
+
+| Page | `backTo` | `backLabel` |
+| --- | --- | --- |
+| `PatientOverviewPage` | `ROUTES.patients` | `"Patients"` |
+| `EditPatientPage` | `patientDetailPath(id)` | patient's full name |
+| `PatientMedicationsPage` | `patientDetailPath(id)` | patient's full name |
+| `PatientDocumentsPage` | `patientDetailPath(id)` | patient's full name |
+| `PatientAnalysesPage` | `patientDetailPath(id)` | patient's full name |
+| `AnalysisDetailPage` | `patientAnalysesPath(id)` | `"analyses"` |
+| `UploadPage` | `patientDetailPath(id)` | patient's full name |
+| `SelectDocumentsPage` | `patientDetailPath(id)` | patient's full name |
+
+`EditPatientPage` and `PatientMedicationsPage` gained a breadcrumb for the first time in this issue; `PatientDocumentsPage` gained a Back action for the first time (its existing "View Patient" action inside `<nav aria-label="Document actions">` is left as-is - a purposeful action alongside Upload/Create Analysis, not a substitute for the standard top-of-page Back action every other patient page now has).
+
+**Deliberately left out of this issue's scope:**
+
+- **`AnalysisProcessingPage`** keeps its plain `PatientBreadcrumb` with no `BackButton`. This page is a special-cased, transient, auto-submitting page (see Analysis Processing below) with its own explicit recovery links (`FailureCard`'s "Return to Patient Overview" / "Return to Analysis History", and the no-submission state's "Go to Upload") for exactly the situations where leaving the page makes sense; adding a generic Back action here would either duplicate those or invite navigating away mid-submission, neither of which this issue asked for.
+- **`NewPatientPage`** (`/patients/new`) has no existing patient yet, so `PatientPageNav`'s `patient`-shaped props don't apply; its bottom-of-form "Cancel" link (a distinct, existing pattern also used by `EditPatientPage`) is unchanged and out of scope.
+- **`PatientsPage`** (`/patients`) is the top of this hierarchy - the issue's own breadcrumb example shows "Patients" alone, with nothing above it to add a Back action for.
+
 ---
 
 ## API Layer
@@ -156,6 +182,16 @@ Selected files are validated against the backend's actual supported types (`.txt
 ### Retrying a partially failed submission
 
 `useCreateAnalysis` caches each item's resulting document id (`fileItemKey(id)`/`noteItemKey(id)` to a `Map`, held in a ref) as soon as it uploads successfully. If a later item then fails, calling `submit()` again with the same queue skips re-uploading whatever already succeeded and only retries what didn't, rather than creating duplicate ClinicalDocument rows. The cache lives inside the hook, not in the caller's own state, since nothing outside a submission attempt needs to read it. The cache is also cleared automatically the moment an analysis is actually created, since any submission after that is a new attempt, not a retry. `failedItemLabel` (the failing file's name, or the note's title/fallback) is exposed alongside the error message so a multi-item failure is attributable to a specific item, not just "something failed." As of Issue #44, `invalidateItem` and this retry cache live entirely on `AnalysisProcessingPage` (see below) rather than `UploadPage` - editing a file or note now only ever happens *before* any submission attempt exists, so there is nothing yet to invalidate on the upload page itself; the "Try again" action on the processing page is what re-runs `submit()` against the same queue and benefits from the cache.
+
+### Saving documents without starting an analysis
+
+Follow-up to Issue #158: until now, uploading a document and starting an analysis were inseparable in the UI - `UploadPage`'s only action was "Start Analysis," even though the backend has always treated document creation and analysis creation as two independent operations (`POST /patients/{patientId}/clinical-documents*` vs. `POST /patients/{patientId}/analyses`; a `ClinicalDocument` with `analysis_count: 0` was already a normal, reachable state, just never one a fresh upload could produce directly - only an already-analyzed document losing its one analysis to a later delete, per Issue #48's cascade behavior, ever left one there).
+
+`UploadPage` now offers both actions side by side: **Start Analysis** (unchanged, blue/primary) and **Save documents** (new, `slate`/secondary outline - visually secondary since analyzing is still the default, more common action). Clicking Save documents uploads the queued files/notes as real `ClinicalDocument`s and stops there - no analysis is created - then navigates to `PatientDocumentsPage` (`patientDocumentsPath`), where the newly saved documents are immediately visible, the same "the list update is the feedback" pattern this codebase already uses instead of a toast (see Patients > Archiving below).
+
+`useCreateAnalysis` gained a second entry point to support this, `saveDocuments({ files, notes }): Promise<number[]>`, alongside the existing `submit`. Both share one internal helper, `uploadQueuedItems`, that does the actual per-file/per-note upload loop and cache bookkeeping described above; `submit` calls it and then also calls `createAnalysisFromDocuments`, while `saveDocuments` calls it and stops, returning the resulting document ids. Because they share the same `isSubmitting`/`error`/`failedItemLabel` state and the same upload-id cache, `UploadPage` disables both buttons while either is in flight, and a failed save surfaces its error the same way a failed analysis submission would - inline, with the offending item named - rather than needing a second, parallel error-handling path.
+
+The new button is labeled "Save documents," not the shorter "Save" - `NoteCard`'s own in-place note editor already has its own "Save" button (for saving a note's edited text) that can be visible on the very same page at the same time, and two identically-labeled but functionally unrelated "Save" buttons on one page would be genuinely ambiguous for sighted users, not just an accessible-name collision to work around.
 
 ---
 
@@ -273,7 +309,7 @@ Five routes, five pages:
 - `EmptyPatientState`: distinguishes "no patients yet" (a create CTA) from "a search matched nothing" (a plain sentence, no CTA) via a boolean prop rather than being two separate components.
 - `PatientDetails`: the Overview page's identity/demographic card, reusing `SummaryStat` for each label/value pair exactly as `RecentAnalysisCard` does.
 - `ArchivePatientDialog`: the app's first dialog. Built on the native `<dialog>` element (`showModal()`/`close()`) rather than a hand-rolled overlay - see Accessibility below.
-- `PatientBreadcrumb`: see Patient breadcrumb navigation, above.
+- `PatientBreadcrumb` / `PatientPageNav` (Issue #158): see Patient breadcrumb navigation, above.
 
 ### Clinical Documents
 
@@ -351,7 +387,7 @@ Only one file at a time: the file input has no `multiple` attribute, which is su
 
 ## Shared Components
 
-`src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`, `ErrorState`, `SummaryStat`, `ProtectedRoute`, `PublicOnlyRoute`.
+`src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`, `ErrorState`, `SummaryStat`, `ProtectedRoute`, `PublicOnlyRoute`, `BackButton` (Issue #158 - see Patient breadcrumb navigation above).
 
 These are intentionally minimal, plain-props components with no variant system (no `variant`/`size` enums, no `class-variance-authority` or similar). Introducing a design system is left until there's a real, recurring need for one.
 
@@ -376,6 +412,7 @@ This issue establishes baseline practices, not full WCAG compliance:
 - `LoadingSpinner` uses `role="status"` with visible text, rather than an icon-only spinner, for screen reader support.
 - `ArchivePatientDialog` uses the native `<dialog>` element via `showModal()`/`close()` rather than a hand-rolled overlay, so focus trapping, Escape-to-dismiss, and focus restoration on close all come from the browser rather than custom code. `onClose` (fired for every close path) is the single place that syncs React state back to "closed," so the DOM and React state can't disagree.
 - Both native-`<dialog>` components (`ArchivePatientDialog`, `DeleteAnalysisDialog`) explicitly center themselves with `fixed inset-0 m-auto h-fit` on the `<dialog>` element itself, rather than relying on the browser's own centering. Browsers normally center a modal `<dialog>` via a UA-stylesheet `margin: auto`, but Tailwind's Preflight reset (`@import 'tailwindcss'` in `globals.css`) zeroes `margin` on every element including `<dialog>`, silently overriding that default - without this explicit centering, the dialog renders pinned to the viewport's top-left corner instead of centered (caught visually in Issue #48; `ArchivePatientDialog` had the identical latent bug and was fixed at the same time).
+- `BackButton` (Issue #158) is a real `<button>`, not a styled `<span>` or `<div>`, so it's keyboard-focusable and activatable with Enter/Space by default. Its decorative "←" is wrapped in its own `aria-hidden="true"` span so the button's accessible name is exactly "Back to {label}," not "left arrow Back to {label}." `PatientBreadcrumb`'s `<nav aria-label="Breadcrumb">` plus `aria-current="page"` on the final crumb (unchanged by this issue) together satisfy "breadcrumbs use appropriate semantic navigation" and "current page is identified correctly."
 
 ---
 

@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card } from '@/components/common/Card'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
 import { SummaryStat } from '@/components/common/SummaryStat'
-import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
+import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { AnalysisStatusBadge } from '@/components/analyses/AnalysisStatusBadge'
 import { MedicationDiscrepancyCard } from '@/components/analyses/MedicationDiscrepancyCard'
 import { DeleteAnalysisDialog } from '@/components/analyses/DeleteAnalysisDialog'
@@ -219,12 +219,14 @@ export function AnalysisDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PatientBreadcrumb
+      <PatientPageNav
         patient={patient}
         trail={[
           { label: 'Analyses', to: patientAnalysesPath(patient.id) },
           { label: `Analysis #${analysis.id}` },
         ]}
+        backTo={patientAnalysesPath(patient.id)}
+        backLabel="analyses"
       />
 
       <PageHeader
@@ -243,13 +245,6 @@ export function AnalysisDetailPage() {
           </>
         }
       />
-
-      <Link
-        to={patientAnalysesPath(patient.id)}
-        className="self-start text-sm text-slate-600 hover:underline"
-      >
-        ← Back to analyses
-      </Link>
 
       {analysis.status === 'failed' && analysis.error_message && (
         <Card role="alert" className="border-l-4 border-l-red-500">

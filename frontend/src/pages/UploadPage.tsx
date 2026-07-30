@@ -1,23 +1,23 @@
 import { useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/common/Button'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
-import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
+import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { FileDropzone } from '@/components/upload/FileDropzone'
 import { UploadedFileList } from '@/components/upload/UploadedFileList'
 import { ManualNoteEditor } from '@/components/upload/ManualNoteEditor'
 import { NoteCard, type DraftNote } from '@/components/upload/NoteCard'
 import { UploadEmptyState } from '@/components/upload/UploadEmptyState'
-import { type QueuedFile } from '@/hooks/useCreateAnalysis'
+import { useCreateAnalysis, type QueuedFile } from '@/hooks/useCreateAnalysis'
 import { usePatient } from '@/hooks/usePatient'
 import {
   isSupportedFileType,
   SUPPORTED_FILE_EXTENSIONS,
   DEFAULT_DOCUMENT_TYPE,
 } from '@/api/clinicalDocuments'
-import { analysisProcessingPath, patientDetailPath } from '@/routes/paths'
+import { analysisProcessingPath, patientDetailPath, patientDocumentsPath } from '@/routes/paths'
 
 function isDuplicateFile(existing: QueuedFile[], candidate: File): boolean {
   return existing.some(
@@ -32,6 +32,7 @@ export function UploadPage() {
   const { patient, isLoading: isPatientLoading, error: patientError, retry } = usePatient(id)
   const nextFileId = useRef(0)
   const nextNoteId = useRef(0)
+  const { isSubmitting: isSaving, error: saveError, saveDocuments } = useCreateAnalysis(id)
 
   const [files, setFiles] = useState<QueuedFile[]>([])
   const [notes, setNotes] = useState<DraftNote[]>([])
@@ -99,6 +100,21 @@ export function UploadPage() {
     navigate(analysisProcessingPath(id), { state: { files, notes } })
   }
 
+  async function handleSave() {
+    if (totalCount === 0) {
+      setValidationMessage('Add at least one file or note before saving.')
+      return
+    }
+
+    setValidationMessage(null)
+    try {
+      await saveDocuments({ files, notes })
+      navigate(patientDocumentsPath(id))
+    } catch {
+      // saveError already reflects this via the hook's own state.
+    }
+  }
+
   if (isPatientLoading) {
     return <LoadingSpinner label="Loading patient" />
   }
@@ -115,19 +131,17 @@ export function UploadPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PatientBreadcrumb patient={patient} trail={[{ label: 'Upload' }]} />
+      <PatientPageNav
+        patient={patient}
+        trail={[{ label: 'Upload' }]}
+        backTo={patientDetailPath(patient.id)}
+        backLabel={`${patient.first_name} ${patient.last_name}`}
+      />
 
       <PageHeader
         title={`Upload documents for ${patient.first_name} ${patient.last_name}`}
         description="Add one or more clinical notes. MedLens extracts medications from what you provide and flags any discrepancies against this patient's medication list."
       />
-
-      <Link
-        to={patientDetailPath(patient.id)}
-        className="self-start text-sm text-slate-600 hover:underline"
-      >
-        ← Back to {patient.first_name} {patient.last_name}
-      </Link>
 
       <section aria-labelledby="file-upload-heading" className="flex flex-col gap-4">
         <h2 id="file-upload-heading" className="text-lg font-semibold text-slate-900">
@@ -170,8 +184,24 @@ export function UploadPage() {
         </p>
       )}
 
-      <div>
-        <Button onClick={handleSubmit}>Start Analysis</Button>
+      {saveError && (
+        <p role="alert" className="text-sm text-red-600">
+          {saveError}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button onClick={handleSubmit} disabled={isSaving}>
+          Start Analysis
+        </Button>
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={isSaving}
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isSaving ? 'Saving...' : 'Save documents'}
+        </button>
       </div>
     </div>
   )

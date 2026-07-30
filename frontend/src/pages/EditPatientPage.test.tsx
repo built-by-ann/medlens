@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -145,5 +145,21 @@ describe('EditPatientPage', () => {
 
     await screen.findByLabelText('First name')
     expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/patients/1')
+  })
+
+  it('shows a breadcrumb ending in "Edit patient" and a Back action to the patient overview', async () => {
+    mockedGetPatient.mockResolvedValue(existingPatient)
+    const user = userEvent.setup()
+    renderEditPatientPage()
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getByRole('link', { name: 'Jane Doe' })).toHaveAttribute(
+      'href',
+      '/patients/1',
+    )
+    expect(within(breadcrumb).getByText('Edit patient')).toHaveAttribute('aria-current', 'page')
+
+    await user.click(screen.getByRole('button', { name: 'Back to Jane Doe' }))
+    expect(mockNavigate).toHaveBeenCalledWith('/patients/1')
   })
 })

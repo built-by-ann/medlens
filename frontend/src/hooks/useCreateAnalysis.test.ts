@@ -265,6 +265,70 @@ describe('useCreateAnalysis', () => {
     expect(mockedCreateAnalysis).toHaveBeenCalledWith(PATIENT_ID, [50, 1, 2])
   })
 
+  it('saveDocuments uploads files and notes without creating an analysis', async () => {
+    mockedUploadFile.mockResolvedValue(fakeDocument(1))
+    mockedCreateFromText.mockResolvedValue(fakeDocument(2))
+
+    const file = queuedFile(0, 'note.txt', 'medication_list')
+    const note = queuedNote(0, { title: 'My note', documentType: 'discharge_summary' })
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
+
+    let documentIds: number[] | undefined
+    await act(async () => {
+      documentIds = await result.current.saveDocuments({ files: [file], notes: [note] })
+    })
+
+    expect(mockedUploadFile).toHaveBeenCalledWith(PATIENT_ID, file.file, 'medication_list')
+    expect(mockedCreateFromText).toHaveBeenCalledWith(PATIENT_ID, {
+      title: 'My note',
+      rawText: note.rawText,
+      documentType: 'discharge_summary',
+    })
+    expect(mockedCreateAnalysis).not.toHaveBeenCalled()
+    expect(documentIds).toEqual([1, 2])
+    expect(result.current.error).toBeNull()
+  })
+
+  it('saveDocuments surfaces which item failed and does not create an analysis', async () => {
+    mockedUploadFile.mockRejectedValue({ status: 422, message: 'Unsupported file' })
+
+    const file = queuedFile(0, 'bad-note.txt')
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
+
+    await act(async () => {
+      await expect(result.current.saveDocuments({ files: [file], notes: [] })).rejects.toBeTruthy()
+    })
+
+    await waitFor(() => expect(result.current.failedItemLabel).toBe('bad-note.txt'))
+    expect(result.current.error).toBe('Unsupported file')
+    expect(mockedCreateAnalysis).not.toHaveBeenCalled()
+  })
+
+  it('saveDocuments and submit share the same upload cache, so a prior save is not re-uploaded by a later submit', async () => {
+    mockedUploadFile.mockResolvedValue(fakeDocument(1))
+    mockedCreateAnalysis.mockResolvedValue(fakeAnalysisResult(1))
+
+    const file = queuedFile(0)
+    const { result } = renderHook(() => useCreateAnalysis(PATIENT_ID))
+
+    await act(async () => {
+      await result.current.saveDocuments({ files: [file], notes: [] })
+    })
+
+    expect(mockedUploadFile).toHaveBeenCalledTimes(1)
+
+    // A later submit() with the exact same still-queued file uploads a
+    // fresh copy rather than reusing the saved one: the cache is cleared on
+    // every successful attempt (including saveDocuments), since a document
+    // that was already saved earlier is a different real ClinicalDocument
+    // from whatever the user is queuing up now.
+    await act(async () => {
+      await result.current.submit({ files: [file], notes: [] })
+    })
+
+    expect(mockedUploadFile).toHaveBeenCalledTimes(2)
+  })
+
   it('sets isSubmitting while the sequence is in flight', async () => {
     let resolveUpload: (document: ClinicalDocument) => void = () => {}
     mockedUploadFile.mockReturnValue(

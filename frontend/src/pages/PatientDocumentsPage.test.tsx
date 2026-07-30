@@ -64,6 +64,7 @@ function renderPage() {
     <MemoryRouter initialEntries={['/patients/7/documents']}>
       <Routes>
         <Route path="/patients/:patientId/documents" element={<PatientDocumentsPage />} />
+        <Route path="/patients/:patientId" element={<div>Patient Overview stub</div>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -103,6 +104,17 @@ describe('PatientDocumentsPage', () => {
       'aria-current',
       'page',
     )
+  })
+
+  it('has a Back action to the patient overview', async () => {
+    mockedListClinicalDocuments.mockResolvedValue([])
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Clinical Documents', level: 1 })
+    await user.click(screen.getByRole('button', { name: 'Back to Jane Doe' }))
+
+    expect(await screen.findByText('Patient Overview stub')).toBeInTheDocument()
   })
 
   it('provides Upload Documents, Create Analysis, and View Patient actions', async () => {

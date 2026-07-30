@@ -81,6 +81,7 @@ function renderPage() {
           element={<SelectDocumentsPage />}
         />
         <Route path="/patients/:patientId/analyses/processing" element={<ProcessingProbe />} />
+        <Route path="/patients/:patientId" element={<div>Patient Overview stub</div>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -113,6 +114,16 @@ describe('SelectDocumentsPage', () => {
       '/patients/7',
     )
     expect(within(breadcrumb).getByText('Select documents')).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('has a Back action to the patient overview', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Select existing documents' })
+    await user.click(screen.getByRole('button', { name: 'Back to Jane Doe' }))
+
+    expect(await screen.findByText('Patient Overview stub')).toBeInTheDocument()
   })
 
   it('lists every document with its title, type, and upload date, each behind a checkbox', async () => {
