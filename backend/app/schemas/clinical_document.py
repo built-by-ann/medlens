@@ -28,3 +28,17 @@ class ClinicalDocumentResponse(BaseModel):
     # bytes, only its extracted raw_text, so no real byte size exists
     # anywhere to expose.
     analysis_count: int = Field(ge=0)
+
+
+class ClinicalDocumentSummaryResponse(BaseModel):
+    """Minimal document identity for citing a source document as supporting
+    evidence elsewhere (Issue #46 - see MedicationMentionEvidenceResponse in
+    schemas/medication_discrepancy.py), without exposing the full raw_text
+    a citation has no need for.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    document_type: str

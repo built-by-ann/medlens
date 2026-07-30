@@ -520,6 +520,8 @@ A discrepancy references at most one Medication and at most one MedicationMentio
 
 Rows in this table are produced by the medication reconciliation service, a deterministic backend process, not an AI call. Severity is assigned from a single, centralized mapping from discrepancy type to severity, described in docs/architecture.md.
 
+`GET /patients/{patient_id}/analyses/{analysis_id}` exposes these rows via `medication_discrepancies` (Issue #148). As of Issue #46, each one also nests the Medication or MedicationMention its `medication_id`/`medication_mention_id` points to (the mention's own source ClinicalDocument nested one level further, as a minimal citation) directly in the response, so a caller can render supporting evidence without a second request. See docs/api.md.
+
 ### Fields
 
 ```text

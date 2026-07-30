@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.analysis import Analysis
 from app.models.clinical_document import ClinicalDocument
+from app.models.medication_discrepancy import MedicationDiscrepancy
+from app.models.medication_mention import MedicationMention
 from app.models.patient import Patient
 from app.schemas.analysis import AnalysisCompletedSummary, AnalysisCreate
 
@@ -92,7 +94,12 @@ def get_analysis_for_patient(db: Session, patient_id: int, analysis_id: int) -> 
         .options(
             selectinload(Analysis.medication_mentions),
             selectinload(Analysis.possible_inconsistencies),
-            selectinload(Analysis.medication_discrepancies),
+            selectinload(Analysis.medication_discrepancies).selectinload(
+                MedicationDiscrepancy.medication
+            ),
+            selectinload(Analysis.medication_discrepancies)
+            .selectinload(MedicationDiscrepancy.medication_mention)
+            .selectinload(MedicationMention.clinical_document),
         )
         .filter(
             Analysis.id == analysis_id,

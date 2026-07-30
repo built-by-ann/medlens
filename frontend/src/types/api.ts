@@ -75,6 +75,25 @@ export type DiscrepancySeverity = 'low' | 'medium' | 'high'
 
 export type ResolutionStatus = 'open' | 'reviewed' | 'resolved' | 'dismissed'
 
+export interface ClinicalDocumentSummary {
+  id: number
+  title: string
+  document_type: string
+}
+
+// MedicationMention has no API exposure of its own - this only exists
+// nested inside a MedicationDiscrepancy as supporting evidence (Issue #46).
+export interface MedicationMentionEvidence {
+  id: number
+  medication_name: string
+  dose: string | null
+  route: string | null
+  frequency: string | null
+  status: string | null
+  context_text: string | null
+  clinical_document: ClinicalDocumentSummary
+}
+
 export interface MedicationDiscrepancy {
   id: number
   analysis_id: number
@@ -90,6 +109,10 @@ export interface MedicationDiscrepancy {
   resolution_status: ResolutionStatus
   created_at: string
   updated_at: string | null
+  // Issue #46: supporting evidence nested inline. Either, both, or neither
+  // may be present, matching the nullability of medication_id/medication_mention_id.
+  medication: Medication | null
+  medication_mention: MedicationMentionEvidence | null
 }
 
 // Deliberately narrower than the backend's AnalysisDetailResponse: it also

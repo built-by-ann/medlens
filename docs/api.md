@@ -1047,7 +1047,22 @@ Success response
       "observed_value": "Lisinopril",
       "resolution_status": "open",
       "created_at": "2026-07-12T19:59:16.000000Z",
-      "updated_at": null
+      "updated_at": null,
+      "medication": null,
+      "medication_mention": {
+        "id": 3,
+        "medication_name": "Lisinopril",
+        "dose": "10 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": "active",
+        "context_text": "Patient takes Lisinopril 10mg oral daily.",
+        "clinical_document": {
+          "id": 4,
+          "title": "March Visit Note",
+          "document_type": "visit_note"
+        }
+      }
     }
   ]
 }
@@ -1055,7 +1070,12 @@ Success response
 
 `medication_mentions`, `possible_inconsistencies`, and `medication_discrepancies` are always returned, sorted by ascending `id`, even for analyses that have none (an empty list) or that failed before persisting any results (all three lists empty, `summary`, `provider`, and `model_name` are `null`).
 
-`medication_discrepancies` (added in Issue #148) are the deterministic reconciliation engine's findings - see `docs/architecture.md`'s Reconciliation Engine and Analysis Creation Pipeline sections for how they are produced during `POST /patients/{patient_id}/analyses`. `medication_mention_id` references a `MedicationMention` row created as supporting evidence for that finding (attached to one of the analysis's own clinical documents); `medication_id`, when set instead, references a row in the patient's own medication list. This response intentionally does not nest the mention or medication objects themselves - only their ids - keeping this endpoint's shape unchanged for that field; a caller needing the evidence's own details does not have a way to fetch it separately today.
+`medication_discrepancies` (added in Issue #148) are the deterministic reconciliation engine's findings - see `docs/architecture.md`'s Reconciliation Engine and Analysis Creation Pipeline sections for how they are produced during `POST /patients/{patient_id}/analyses`. `medication_mention_id`/`medication_id` are the raw foreign keys; as of Issue #46, each discrepancy also nests the evidence those ids point to, so the Analysis Results page can render supporting evidence without a second request:
+
+- `medication_mention`, present when `medication_mention_id` is set: the `MedicationMention` extracted as supporting evidence, including `context_text` (the relevant text snippet, when the AI provided one) and a nested `clinical_document` - a minimal citation (`id`, `title`, `document_type`) of the source document, deliberately not the full document (no `raw_text`), since a citation has no need for it.
+- `medication`, present when `medication_id` is set instead: the patient's own `Medication` row (the full existing `MedicationResponse` shape), for findings like `unsupported_medication_list_entry` where the evidence is "this is on the list but was never mentioned," not an extracted mention.
+
+Either, both, or neither may be `null`, matching the nullability of the two source foreign keys (both `ON DELETE SET NULL`, so a discrepancy always survives its linked medication or mention being deleted, just with that piece of evidence now missing). `MedicationMention` has no API exposure anywhere else in the app; this nested, read-only view is the only place its fields are ever serialized.
 
 `error_message` is `null` unless `status` is `"failed"`, in which case it holds the same sanitized message returned by `POST /patients/{patient_id}/analyses` at failure time (see that endpoint's `503` response above). It never contains a stack trace, a provider exception, `ValidationError` details, raw AI output, or a raw SQL error; only the sanitized message already stored on the Analysis is exposed.
 
