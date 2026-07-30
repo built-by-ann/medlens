@@ -3,7 +3,7 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.medication_discrepancy import MedicationDiscrepancyResponse
+from app.schemas.medication_discrepancy import MedicationDiscrepancyDetailResponse
 
 
 class AnalysisStatus(str, Enum):
@@ -70,8 +70,11 @@ class AnalysisDetailResponse(BaseModel):
     # Issue #148: real, structured reconciliation findings, alongside the
     # AI's own unstructured medication_mentions/possible_inconsistencies
     # observations above. Always an empty list rather than omitted when
-    # reconciliation found nothing to flag.
-    medication_discrepancies: list[MedicationDiscrepancyResponse]
+    # reconciliation found nothing to flag. Issue #46 upgraded each item
+    # from MedicationDiscrepancyResponse to MedicationDiscrepancyDetailResponse,
+    # nesting the medication/medication_mention evidence so the Analysis
+    # Results page can render supporting evidence without a second request.
+    medication_discrepancies: list[MedicationDiscrepancyDetailResponse]
 
 
 class AnalysisSummaryResponse(BaseModel):

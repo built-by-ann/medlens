@@ -55,23 +55,80 @@ const completedAnalysis: AnalysisDetail = {
   medication_discrepancies: [],
 }
 
-const sampleDiscrepancy: MedicationDiscrepancy = {
-  id: 1,
-  analysis_id: 42,
-  medication_id: null,
-  medication_mention_id: 9,
-  discrepancy_type: 'missing_from_medication_list',
-  severity: 'high',
-  title: 'Lisinopril not found in medication list',
-  ai_explanation:
-    'Lisinopril is mentioned in the selected clinical documents but does not appear in the current medication list.',
-  recommendation: null,
-  expected_value: null,
-  observed_value: 'Lisinopril',
-  resolution_status: 'open',
-  created_at: '2026-01-01T12:01:00Z',
-  updated_at: null,
+function makeDiscrepancy(overrides: Partial<MedicationDiscrepancy> = {}): MedicationDiscrepancy {
+  return {
+    id: 1,
+    analysis_id: 42,
+    medication_id: null,
+    medication_mention_id: null,
+    discrepancy_type: 'missing_from_medication_list',
+    severity: 'high',
+    title: 'Lisinopril not found in medication list',
+    ai_explanation:
+      'Lisinopril is mentioned in the selected clinical documents but does not appear in the current medication list.',
+    recommendation: null,
+    expected_value: null,
+    observed_value: 'Lisinopril',
+    resolution_status: 'open',
+    created_at: '2026-01-01T12:01:00Z',
+    updated_at: null,
+    medication: null,
+    medication_mention: null,
+    ...overrides,
+  }
 }
+
+const withMentionEvidence = makeDiscrepancy({
+  id: 1,
+  medication_mention_id: 9,
+  medication_mention: {
+    id: 9,
+    medication_name: 'Lisinopril',
+    dose: '10 mg',
+    route: 'oral',
+    frequency: 'once daily',
+    status: 'active',
+    context_text: 'Patient takes Lisinopril 10mg oral daily.',
+    clinical_document: {
+      id: 3,
+      title: 'March Visit Note',
+      document_type: 'visit_note',
+    },
+  },
+})
+
+const withMedicationEvidence = makeDiscrepancy({
+  id: 2,
+  severity: 'low',
+  discrepancy_type: 'unsupported_medication_list_entry',
+  title: 'Warfarin not mentioned in selected documents',
+  medication_id: 12,
+  medication_mention_id: null,
+  expected_value: 'Warfarin',
+  observed_value: null,
+  medication: {
+    id: 12,
+    patient_id: 7,
+    medication_name: 'Warfarin',
+    dose: '5 mg',
+    route: 'oral',
+    frequency: 'once daily',
+    status: 'active',
+    source: 'patient_reported',
+    notes: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: null,
+  },
+})
+
+const withNoEvidence = makeDiscrepancy({
+  id: 3,
+  severity: 'medium',
+  discrepancy_type: 'dose_conflict',
+  title: 'A finding with no linked evidence',
+  ai_explanation: 'This finding has no linked medication or medication mention.',
+  observed_value: null,
+})
 
 function renderPage() {
   return render(
@@ -162,47 +219,129 @@ describe('AnalysisDetailPage', () => {
     expect(screen.getByText('Failed')).toBeInTheDocument()
   })
 
-  it('shows an empty state when reconciliation found no discrepancies', async () => {
+  it('shows a positive empty state when reconciliation found no discrepancies', async () => {
     renderPage()
 
     expect(
-      await screen.findByText('No medication discrepancies were found for this analysis.'),
+      await screen.findByText('No medication inconsistencies were detected.'),
     ).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('No medication inconsistencies')
   })
 
-  it('displays persisted medication discrepancies once reconciliation data exists', async () => {
+  it('shows summary counts that match the number of displayed findings', async () => {
     mockedGetAnalysisDetail.mockResolvedValue({
       ...completedAnalysis,
-      medication_discrepancies: [sampleDiscrepancy],
+      medication_discrepancies: [withMentionEvidence, withMedicationEvidence, withNoEvidence],
     })
     renderPage()
 
     await screen.findByRole('heading', { name: 'Medication Reconciliation Findings' })
-    expect(screen.getByText('Lisinopril not found in medication list')).toBeInTheDocument()
-    expect(screen.getByText(/High severity/)).toBeInTheDocument()
-    expect(screen.getByText(/Missing from medication list/)).toBeInTheDocument()
+
+    const totalStat = screen.getByText('Total').closest('div') as HTMLElement
+    expect(within(totalStat).getByText('3')).toBeInTheDocument()
+
+    const highStat = screen.getByText('High').closest('div') as HTMLElement
+    expect(within(highStat).getByText('1')).toBeInTheDocument()
+
+    const mediumStat = screen.getByText('Medium').closest('div') as HTMLElement
+    expect(within(mediumStat).getByText('1')).toBeInTheDocument()
+
+    const lowStat = screen.getByText('Low').closest('div') as HTMLElement
+    expect(within(lowStat).getByText('1')).toBeInTheDocument()
+  })
+
+  it('groups and sorts findings highest-severity-first', async () => {
+    mockedGetAnalysisDetail.mockResolvedValue({
+      ...completedAnalysis,
+      medication_discrepancies: [withMedicationEvidence, withNoEvidence, withMentionEvidence],
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Medication Reconciliation Findings' })
+
+    const groupHeadings = screen
+      .getAllByRole('heading', { level: 3 })
+      .map((heading) => heading.textContent)
+    expect(groupHeadings).toEqual(['High severity (1)', 'Medium severity (1)', 'Low severity (1)'])
+
+    const medicationHeadings = screen
+      .getAllByRole('heading', { level: 4 })
+      .map((heading) => heading.textContent)
+    expect(medicationHeadings).toEqual(['Lisinopril', 'Unknown medication', 'Warfarin'])
+  })
+
+  it('shows severity, discrepancy type, and resolution status on each card', async () => {
+    mockedGetAnalysisDetail.mockResolvedValue({
+      ...completedAnalysis,
+      medication_discrepancies: [withMentionEvidence],
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Lisinopril', level: 4 })
+    expect(screen.getByText('High severity')).toBeInTheDocument()
+    expect(screen.getByText('Missing from medication list')).toBeInTheDocument()
+    expect(screen.getByText('Open')).toBeInTheDocument()
     expect(
       screen.getByText(
         'Lisinopril is mentioned in the selected clinical documents but does not appear in the current medication list.',
       ),
     ).toBeInTheDocument()
-    expect(
-      screen.queryByText('No medication discrepancies were found for this analysis.'),
-    ).not.toBeInTheDocument()
   })
 
-  it('displays every discrepancy when reconciliation finds more than one', async () => {
+  it('shows supporting evidence with the source document and text snippet', async () => {
     mockedGetAnalysisDetail.mockResolvedValue({
       ...completedAnalysis,
-      medication_discrepancies: [
-        sampleDiscrepancy,
-        { ...sampleDiscrepancy, id: 2, title: 'Metformin dose does not match', severity: 'medium' },
-      ],
+      medication_discrepancies: [withMentionEvidence],
     })
     renderPage()
 
-    await screen.findByText('Lisinopril not found in medication list')
-    expect(screen.getByText('Metformin dose does not match')).toBeInTheDocument()
+    await screen.findByRole('heading', { name: 'Lisinopril', level: 4 })
+    expect(screen.getByText(/Source: March Visit Note/)).toBeInTheDocument()
+    expect(
+      screen.getByText('“Patient takes Lisinopril 10mg oral daily.”', { exact: false }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows medication-list evidence when there is no mention', async () => {
+    mockedGetAnalysisDetail.mockResolvedValue({
+      ...completedAnalysis,
+      medication_discrepancies: [withMedicationEvidence],
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Warfarin', level: 4 })
+    expect(screen.getByText(/Currently on the medication list: Warfarin/)).toBeInTheDocument()
+  })
+
+  it('explains when a finding has no supporting evidence', async () => {
+    mockedGetAnalysisDetail.mockResolvedValue({
+      ...completedAnalysis,
+      medication_discrepancies: [withNoEvidence],
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Unknown medication', level: 4 })
+    expect(
+      screen.getByText('No supporting evidence was recorded for this finding.'),
+    ).toBeInTheDocument()
+  })
+
+  it('uses a sane, non-skipping heading hierarchy', async () => {
+    mockedGetAnalysisDetail.mockResolvedValue({
+      ...completedAnalysis,
+      medication_discrepancies: [withMentionEvidence],
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Analysis #42', level: 1 })
+    expect(
+      screen.getByRole('heading', { name: 'Medication Reconciliation Findings', level: 2 }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'High severity (1)', level: 3 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Lisinopril', level: 4 })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Supporting evidence', level: 5 }),
+    ).toBeInTheDocument()
   })
 
   it('shows a not-found error when the analysis does not exist or is not owned by the patient', async () => {

@@ -97,11 +97,16 @@ def _create_patient(client, token, **overrides):
 
 
 def _create_document(
-    client, token, patient_id, title="Visit Note", raw_text="Patient takes Lisinopril 10 mg."
+    client,
+    token,
+    patient_id,
+    title="Visit Note",
+    raw_text="Patient takes Lisinopril 10 mg.",
+    document_type="visit_note",
 ):
     response = client.post(
         f"/patients/{patient_id}/clinical-documents",
-        json={"document_type": "visit_note", "title": title, "raw_text": raw_text},
+        json={"document_type": document_type, "title": title, "raw_text": raw_text},
         headers=_auth_headers(token),
     )
 
@@ -641,6 +646,91 @@ def test_get_analysis_detail_includes_reconciliation_discrepancies(client):
     assert discrepancy["severity"] == "high"
     assert discrepancy["resolution_status"] == "open"
     assert discrepancy["medication_mention_id"] is not None
+
+
+def test_get_analysis_detail_nests_mention_evidence_with_source_document(client):
+    # Issue #46: the discrepancy's supporting evidence - the MedicationMention
+    # that triggered it, and that mention's own source document - is nested
+    # directly in the response rather than requiring a second request.
+    token = _register_and_login(client, "detailevidence@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"], title="March Visit Note")
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    discrepancy = response.json()["medication_discrepancies"][0]
+
+    assert discrepancy["medication"] is None
+    mention = discrepancy["medication_mention"]
+    assert mention is not None
+    assert mention["medication_name"] == "Lisinopril"
+    assert mention["dose"] == "10 mg"
+    assert mention["route"] == "oral"
+    assert mention["frequency"] == "once daily"
+    assert mention["status"] == "active"
+
+    source_document = mention["clinical_document"]
+    assert source_document["id"] == document["id"]
+    assert source_document["title"] == "March Visit Note"
+    assert source_document["document_type"] == "visit_note"
+    # The evidence citation deliberately excludes the document's full text.
+    assert "raw_text" not in source_document
+
+
+def test_get_analysis_detail_nests_medication_evidence_for_unsupported_entry(client):
+    # "unsupported_medication_list_entry" is only checked when a selected
+    # document is medication-list-shaped (see UNSUPPORTED_ENTRY_ELIGIBLE_DOCUMENT_TYPES
+    # in medication_reconciliation_service.py) - this is the one finding
+    # type whose evidence is the patient's own Medication row rather than a
+    # MedicationMention, since it fires precisely because nothing mentions it.
+    token = _register_and_login(client, "detailmedicationevidence@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(
+        client,
+        token,
+        patient["id"],
+        raw_text="Patient reports taking Metformin 500 mg.",
+        document_type="medication_list",
+    )
+    medication_response = _create_medication(
+        client, token, patient["id"], medication_name="Warfarin", dose="5 mg"
+    )
+    assert medication_response.status_code == 201
+
+    metformin_response = json.dumps(
+        {
+            "medications": [{"name": "Metformin", "dosage": "500 mg"}],
+            "possible_inconsistencies": [],
+            "summary": "Metformin 500 mg noted.",
+        }
+    )
+    analysis_id = _create_completed_analysis(
+        client, token, patient["id"], document["id"], response_text=metformin_response
+    )
+
+    response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    discrepancies = response.json()["medication_discrepancies"]
+
+    unsupported = next(
+        d for d in discrepancies if d["discrepancy_type"] == "unsupported_medication_list_entry"
+    )
+    assert unsupported["medication_mention"] is None
+    assert unsupported["medication"]["medication_name"] == "Warfarin"
+    assert unsupported["medication"]["dose"] == "5 mg"
+
+    missing = next(
+        d for d in discrepancies if d["discrepancy_type"] == "missing_from_medication_list"
+    )
+    assert missing["medication"] is None
+    assert missing["medication_mention"]["medication_name"] == "Metformin"
 
 
 def test_get_analysis_detail_has_no_discrepancies_when_medications_match(client):

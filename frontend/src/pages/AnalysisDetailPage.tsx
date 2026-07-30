@@ -6,9 +6,12 @@ import { ErrorState } from '@/components/common/ErrorState'
 import { SummaryStat } from '@/components/common/SummaryStat'
 import { PatientBreadcrumb } from '@/components/patients/PatientBreadcrumb'
 import { AnalysisStatusBadge } from '@/components/analyses/AnalysisStatusBadge'
+import { MedicationDiscrepancyCard } from '@/components/analyses/MedicationDiscrepancyCard'
 import { usePatient } from '@/hooks/usePatient'
 import { useAnalysisDetail } from '@/hooks/useAnalysisDetail'
+import { discrepancySeverityLabel } from '@/utils/discrepancy'
 import { patientAnalysesPath } from '@/routes/paths'
+import type { DiscrepancySeverity, MedicationDiscrepancy } from '@/types/api'
 
 function formatDateTime(value: string | null): string | null {
   if (!value) {
@@ -18,23 +21,28 @@ function formatDateTime(value: string | null): string | null {
   return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-// Plain label maps, not a shared utils module - this is presentation
-// formatting local to this one page, not a reason to add new component
-// files (Issue #148 is an integration task, not a UI redesign).
-const DISCREPANCY_TYPE_LABELS: Record<string, string> = {
-  missing_from_medication_list: 'Missing from medication list',
-  discontinued_status_conflict: 'Discontinued status conflict',
-  dose_conflict: 'Dose conflict',
-  route_conflict: 'Route conflict',
-  frequency_conflict: 'Frequency conflict',
-  status_conflict: 'Status conflict',
-  unsupported_medication_list_entry: 'Unsupported medication list entry',
+// Ordering (and grouping) drives "most important findings first" - there is
+// no "critical" tier to include here: DiscrepancySeverity only ever has
+// high/medium/low (see docs/frontend.md for why a 4th tier was not invented
+// just to match this issue's example wording).
+const SEVERITY_GROUP_ORDER: DiscrepancySeverity[] = ['high', 'medium', 'low']
+
+interface SeverityGroup {
+  severity: DiscrepancySeverity
+  items: MedicationDiscrepancy[]
 }
 
-const DISCREPANCY_SEVERITY_LABELS: Record<string, string> = {
-  high: 'High severity',
-  medium: 'Medium severity',
-  low: 'Low severity',
+function groupBySeverity(discrepancies: MedicationDiscrepancy[]): SeverityGroup[] {
+  return SEVERITY_GROUP_ORDER.map((severity) => ({
+    severity,
+    items: discrepancies
+      .filter((discrepancy) => discrepancy.severity === severity)
+      .sort((a, b) => a.id - b.id),
+  })).filter((group) => group.items.length > 0)
+}
+
+function countBySeverity(discrepancies: MedicationDiscrepancy[], severity: DiscrepancySeverity) {
+  return discrepancies.filter((discrepancy) => discrepancy.severity === severity).length
 }
 
 export function AnalysisDetailPage() {
@@ -83,6 +91,9 @@ export function AnalysisDetailPage() {
   const startedAt = formatDateTime(analysis.started_at)
   const completedAt = formatDateTime(analysis.completed_at)
 
+  const discrepancies = analysis.medication_discrepancies
+  const severityGroups = groupBySeverity(discrepancies)
+
   return (
     <div className="flex flex-col gap-6">
       <PatientBreadcrumb
@@ -124,36 +135,49 @@ export function AnalysisDetailPage() {
         </dl>
       </Card>
 
-      <Card className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-slate-900">
+      <section aria-labelledby="findings-heading" className="flex flex-col gap-4">
+        <h2 id="findings-heading" className="text-lg font-semibold text-slate-900">
           Medication Reconciliation Findings
         </h2>
 
-        {analysis.medication_discrepancies.length === 0 ? (
-          <p className="text-sm text-slate-600">
-            No medication discrepancies were found for this analysis.
-          </p>
+        <Card>
+          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <SummaryStat label="Total" value={discrepancies.length} />
+            <SummaryStat label="High" value={countBySeverity(discrepancies, 'high')} />
+            <SummaryStat label="Medium" value={countBySeverity(discrepancies, 'medium')} />
+            <SummaryStat label="Low" value={countBySeverity(discrepancies, 'low')} />
+          </dl>
+        </Card>
+
+        {discrepancies.length === 0 ? (
+          <Card role="status" className="flex flex-col items-center gap-2 py-10 text-center">
+            <p className="text-sm font-semibold text-green-700">
+              No medication inconsistencies were detected.
+            </p>
+            <p className="max-w-md text-sm text-slate-600">
+              Reconciliation compared the medications extracted from this analysis's documents
+              against {patient.first_name}'s medication list and found nothing to flag.
+            </p>
+          </Card>
         ) : (
-          <ul className="flex flex-col gap-3">
-            {analysis.medication_discrepancies.map((discrepancy) => (
-              <li
-                key={discrepancy.id}
-                className="border-t border-slate-200 pt-3 first:border-t-0 first:pt-0"
-              >
-                <p className="text-sm font-semibold text-slate-900">{discrepancy.title}</p>
-                <p className="text-xs text-slate-500">
-                  {DISCREPANCY_SEVERITY_LABELS[discrepancy.severity] ?? discrepancy.severity} ·{' '}
-                  {DISCREPANCY_TYPE_LABELS[discrepancy.discrepancy_type] ??
-                    discrepancy.discrepancy_type}
-                </p>
-                {discrepancy.ai_explanation && (
-                  <p className="mt-1 text-sm text-slate-700">{discrepancy.ai_explanation}</p>
-                )}
-              </li>
+          <div className="flex flex-col gap-6">
+            {severityGroups.map((group) => (
+              <div key={group.severity} className="flex flex-col gap-3">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  {discrepancySeverityLabel(group.severity)} ({group.items.length})
+                </h3>
+                <ul className="flex flex-col gap-4">
+                  {group.items.map((discrepancy) => (
+                    <li key={discrepancy.id}>
+                      <MedicationDiscrepancyCard discrepancy={discrepancy} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
-      </Card>
+      </section>
     </div>
   )
 }

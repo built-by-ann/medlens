@@ -9,7 +9,11 @@ from app.schemas.analysis import (
     AnalysisSummaryResponse,
 )
 from app.schemas.auth import Token, UserLogin
-from app.schemas.clinical_document import ClinicalDocumentCreate, ClinicalDocumentResponse
+from app.schemas.clinical_document import (
+    ClinicalDocumentCreate,
+    ClinicalDocumentResponse,
+    ClinicalDocumentSummaryResponse,
+)
 from app.schemas.medication import (
     MedicationCreate,
     MedicationImportSummary,
@@ -20,7 +24,9 @@ from app.schemas.medication_discrepancy import (
     DiscrepancySeverity,
     DiscrepancyType,
     MedicationDiscrepancyCreate,
+    MedicationDiscrepancyDetailResponse,
     MedicationDiscrepancyResponse,
+    MedicationMentionEvidenceResponse,
     ResolutionStatus,
 )
 from app.schemas.user import UserCreate, UserResponse
@@ -36,12 +42,15 @@ __all__ = [
     "AnalysisSummaryResponse",
     "ClinicalDocumentCreate",
     "ClinicalDocumentResponse",
+    "ClinicalDocumentSummaryResponse",
     "DiscrepancySeverity",
     "DiscrepancyType",
     "MedicationCreate",
     "MedicationDiscrepancyCreate",
+    "MedicationDiscrepancyDetailResponse",
     "MedicationDiscrepancyResponse",
     "MedicationImportSummary",
+    "MedicationMentionEvidenceResponse",
     "MedicationResponse",
     "MedicationUpdate",
     "ResolutionStatus",
