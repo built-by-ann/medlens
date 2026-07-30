@@ -1,10 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AnalysisDetailPage } from '@/pages/AnalysisDetailPage'
 import { getPatient } from '@/api/patients'
-import { getAnalysisDetail } from '@/api/analyses'
+import { deleteAnalysis, getAnalysisDetail } from '@/api/analyses'
 import type {
   AnalysisDetail,
   AnalysisInconsistency,
@@ -28,11 +28,24 @@ vi.mock('@/api/analyses', async (importOriginal) => {
   return {
     ...actual,
     getAnalysisDetail: vi.fn(),
+    deleteAnalysis: vi.fn(),
+  }
+})
+
+const mockNavigate = vi.fn()
+
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
   }
 })
 
 const mockedGetPatient = vi.mocked(getPatient)
 const mockedGetAnalysisDetail = vi.mocked(getAnalysisDetail)
+const mockedDeleteAnalysis = vi.mocked(deleteAnalysis)
 
 const patient: Patient = {
   id: 7,
@@ -177,6 +190,8 @@ describe('AnalysisDetailPage', () => {
   beforeEach(() => {
     mockedGetPatient.mockReset()
     mockedGetAnalysisDetail.mockReset()
+    mockedDeleteAnalysis.mockReset()
+    mockNavigate.mockReset()
     mockedGetPatient.mockResolvedValue(patient)
     mockedGetAnalysisDetail.mockResolvedValue(completedAnalysis)
   })
@@ -468,6 +483,118 @@ describe('AnalysisDetailPage', () => {
 
     const documentCountStat = screen.getByText('Documents analyzed').closest('div') as HTMLElement
     expect(within(documentCountStat).getByText('1')).toBeInTheDocument()
+  })
+
+  it('shows a visible Delete analysis action alongside the status badge', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('button', { name: 'Delete analysis' })).toBeInTheDocument()
+  })
+
+  it('opens a confirmation dialog naming the analysis and patient with a permanent-deletion warning', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete analysis' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('Delete this analysis?')).toBeInTheDocument()
+    expect(within(dialog).getByText('Analysis #42 for Jane Doe')).toBeInTheDocument()
+    expect(within(dialog).getByText(/cannot be undone/)).toBeInTheDocument()
+    expect(mockedDeleteAnalysis).not.toHaveBeenCalled()
+  })
+
+  it('places initial focus on Cancel, the safest action', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete analysis' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+  })
+
+  it('closes the dialog without deleting when Cancel is clicked', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete analysis' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(mockedDeleteAnalysis).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('dismisses the dialog with the Escape key, without deleting', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete analysis' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(mockedDeleteAnalysis).not.toHaveBeenCalled()
+  })
+
+  it('deletes the analysis and navigates back to the patient analyses page with a success message', async () => {
+    const user = userEvent.setup()
+    mockedDeleteAnalysis.mockResolvedValue(undefined)
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete analysis' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete analysis' }))
+
+    await waitFor(() => expect(mockedDeleteAnalysis).toHaveBeenCalledWith(7, 42))
+    expect(mockNavigate).toHaveBeenCalledWith('/patients/7/analyses', {
+      state: { flashMessage: 'Analysis #42 was deleted.' },
+    })
+  })
+
+  it('shows a loading state while deleting and prevents duplicate submissions', async () => {
+    const user = userEvent.setup()
+    let resolveDelete: () => void = () => {}
+    mockedDeleteAnalysis.mockReturnValue(
+      new Promise((resolve) => {
+        resolveDelete = () => resolve(undefined)
+      }),
+    )
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete analysis' }))
+    const dialog = screen.getByRole('dialog')
+    const confirmButton = within(dialog).getByRole('button', { name: 'Delete analysis' })
+
+    await user.click(confirmButton)
+    expect(await within(dialog).findByRole('button', { name: 'Deleting...' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Deleting...' }))
+    expect(mockedDeleteAnalysis).toHaveBeenCalledTimes(1)
+
+    resolveDelete()
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
+  })
+
+  it('shows an error inside the dialog and keeps the user on the page when deletion fails', async () => {
+    const user = userEvent.setup()
+    mockedDeleteAnalysis.mockRejectedValue({ status: 500, message: 'Could not delete analysis.' })
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete analysis' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete analysis' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not delete analysis.')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(mockNavigate).not.toHaveBeenCalled()
+
+    // Allows retry: the confirm button is re-enabled after the failure.
+    expect(within(dialog).getByRole('button', { name: 'Delete analysis' })).toBeEnabled()
   })
 
   it('shows a not-found error when the analysis does not exist or is not owned by the patient', async () => {

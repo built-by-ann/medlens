@@ -60,9 +60,9 @@ const sampleAnalysis: AnalysisSummary = {
   model_name: 'gemini-2.0-flash',
 }
 
-function renderPage() {
+function renderPage(state: { flashMessage?: string } | null = null) {
   return render(
-    <MemoryRouter initialEntries={['/patients/7/analyses']}>
+    <MemoryRouter initialEntries={[{ pathname: '/patients/7/analyses', state }]}>
       <Routes>
         <Route path="/patients/:patientId/analyses" element={<PatientAnalysesPage />} />
       </Routes>
@@ -150,6 +150,48 @@ describe('PatientAnalysesPage', () => {
 
     await waitFor(() => expect(mockedDeleteAnalysis).toHaveBeenCalledWith(7, 42))
     expect(screen.queryByText('Reconciliation completed with 1 finding.')).not.toBeInTheDocument()
+  })
+
+  it('does not show a success notification on a normal visit', async () => {
+    mockedListAnalyses.mockResolvedValue([])
+    renderPage()
+
+    await screen.findByRole('heading', { name: /Analyses for Jane Doe/ })
+    expect(screen.queryByRole('button', { name: 'Dismiss notification' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/was deleted/)).not.toBeInTheDocument()
+  })
+
+  it('shows a temporary success notification after being navigated here with a flash message', async () => {
+    mockedListAnalyses.mockResolvedValue([])
+    renderPage({ flashMessage: 'Analysis #42 was deleted.' })
+
+    expect(await screen.findByText('Analysis #42 was deleted.')).toBeInTheDocument()
+  })
+
+  it('dismisses the success notification when its close button is clicked', async () => {
+    const user = userEvent.setup()
+    mockedListAnalyses.mockResolvedValue([])
+    renderPage({ flashMessage: 'Analysis #42 was deleted.' })
+
+    await screen.findByText('Analysis #42 was deleted.')
+    await user.click(screen.getByRole('button', { name: 'Dismiss notification' }))
+
+    expect(screen.queryByText('Analysis #42 was deleted.')).not.toBeInTheDocument()
+  })
+
+  it('auto-dismisses the success notification after a short delay', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockedListAnalyses.mockResolvedValue([])
+    renderPage({ flashMessage: 'Analysis #42 was deleted.' })
+
+    expect(await screen.findByText('Analysis #42 was deleted.')).toBeInTheDocument()
+
+    await vi.advanceTimersByTimeAsync(7000)
+
+    await waitFor(() =>
+      expect(screen.queryByText('Analysis #42 was deleted.')).not.toBeInTheDocument(),
+    )
+    vi.useRealTimers()
   })
 
   it('shows an error state for the analysis list independent of the patient details', async () => {
