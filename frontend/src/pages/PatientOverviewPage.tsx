@@ -149,6 +149,7 @@ export function PatientOverviewPage() {
               {documents.length > 0 && (
                 <Link
                   to={patientDocumentsPath(patient.id)}
+                  aria-label="View all clinical documents"
                   className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                 >
                   View All
@@ -182,9 +183,10 @@ export function PatientOverviewPage() {
               </h2>
               <Link
                 to={patientAnalysesPath(patient.id)}
+                aria-label="View all analyses"
                 className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               >
-                View all analyses
+                View All
               </Link>
             </div>
 
@@ -214,9 +216,10 @@ export function PatientOverviewPage() {
               </h2>
               <Link
                 to={patientMedicationsPath(patient.id)}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                aria-label="View all medications"
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               >
-                + Add medication
+                View All
               </Link>
             </div>
 
