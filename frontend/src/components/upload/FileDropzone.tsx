@@ -6,7 +6,12 @@ interface FileDropzoneProps {
   onFilesSelected: (files: File[]) => void
 }
 
-const ACCEPT_ATTRIBUTE = [...SUPPORTED_FILE_EXTENSIONS, 'text/plain', 'application/pdf'].join(',')
+const ACCEPT_ATTRIBUTE = [
+  ...SUPPORTED_FILE_EXTENSIONS,
+  'text/plain',
+  'application/pdf',
+  'text/csv',
+].join(',')
 
 export function FileDropzone({ onFilesSelected }: FileDropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null)

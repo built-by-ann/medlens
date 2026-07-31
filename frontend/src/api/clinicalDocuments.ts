@@ -29,9 +29,13 @@ export function documentTypeLabel(value: string): string {
 
 // Matches the backend's own validation exactly (app/api/routes/
 // clinical_documents.py): each upload endpoint accepts a file if its
-// extension OR its content type matches, whichever is present.
-export const SUPPORTED_FILE_EXTENSIONS = ['.txt', '.pdf']
-const SUPPORTED_MIME_TYPES = ['text/plain', 'application/pdf']
+// extension OR its content type matches, whichever is present. A CSV here
+// (Issue #164) is just another document format alongside .txt/.pdf - it's
+// stored and analyzed as plain evidence text, never parsed into structured
+// rows or imported into the patient's medication list the way
+// MedicationCsvUpload/api/medications.ts's importMedications does.
+export const SUPPORTED_FILE_EXTENSIONS = ['.txt', '.pdf', '.csv']
+const SUPPORTED_MIME_TYPES = ['text/plain', 'application/pdf', 'text/csv']
 
 export function isSupportedFileType(file: File): boolean {
   const name = file.name.toLowerCase()
@@ -44,6 +48,10 @@ export function isSupportedFileType(file: File): boolean {
 
 function isPdf(file: File): boolean {
   return file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf'
+}
+
+export function isCsv(file: File): boolean {
+  return file.name.toLowerCase().endsWith('.csv') || file.type === 'text/csv'
 }
 
 export function deriveTitleFromFileName(fileName: string): string {
@@ -95,7 +103,9 @@ export async function uploadClinicalDocumentFile(
 ): Promise<ClinicalDocument> {
   const endpoint = isPdf(file)
     ? `/patients/${patientId}/clinical-documents/upload-pdf`
-    : `/patients/${patientId}/clinical-documents/upload-txt`
+    : isCsv(file)
+      ? `/patients/${patientId}/clinical-documents/upload-csv`
+      : `/patients/${patientId}/clinical-documents/upload-txt`
 
   const formData = new FormData()
   formData.append('document_type', documentType)

@@ -1,6 +1,13 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+  useLocation,
+} from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CreateAnalysisPage } from '@/pages/CreateAnalysisPage'
 import { getPatient } from '@/api/patients'
@@ -142,6 +149,31 @@ describe('CreateAnalysisPage', () => {
     await user.click(screen.getByRole('link', { name: 'Cancel' }))
 
     expect(await screen.findByText('Patient Overview stub')).toBeInTheDocument()
+  })
+
+  it('replaces its own history entry on Cancel, so the browser back button never returns to it', async () => {
+    // Reproduces a reported bug: Cancel used to push a new history entry
+    // instead of replacing the current one, so pressing the browser back
+    // button (or an in-app "Back to X" control relying on real history,
+    // like BackButton) from the page Cancel lands on would go back to this
+    // cancelled Create Analysis page instead of skipping over it.
+    const user = userEvent.setup()
+    const router = createMemoryRouter(
+      [
+        { path: '/patients/:patientId/analyses/new', element: <CreateAnalysisPage /> },
+        { path: '/patients/:patientId', element: <div>Patient Overview stub</div> },
+      ],
+      { initialEntries: ['/patients/7', '/patients/7/analyses/new'], initialIndex: 1 },
+    )
+    render(<RouterProvider router={router} />)
+
+    await screen.findByRole('heading', { name: 'Create Analysis' })
+    await user.click(screen.getByRole('link', { name: 'Cancel' }))
+    expect(await screen.findByText('Patient Overview stub')).toBeInTheDocument()
+
+    router.navigate(-1)
+
+    await waitFor(() => expect(router.state.location.pathname).not.toBe('/patients/7/analyses/new'))
   })
 
   it('lists every existing document with its title, type, and upload date, each behind a checkbox', async () => {
@@ -427,6 +459,52 @@ describe('CreateAnalysisPage', () => {
       notes: [{ id: 0, title: '', rawText: 'Pasted note text', documentType: 'visit_note' }],
       existingDocumentIds: [1, 2],
     })
+  })
+
+  it('accepts a CSV medication list, combining it with an existing document and a plain text upload in one submission', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Create Analysis' })
+
+    await user.click(screen.getByRole('checkbox', { name: /March Visit Note/ }))
+
+    const textFile = new File(['Patient reports improvement.'], 'note.txt', {
+      type: 'text/plain',
+    })
+    const csvFile = new File(['medication_name,dose\nLisinopril,10mg'], 'medications.csv', {
+      type: 'text/csv',
+    })
+    await user.upload(getFileInput(), [textFile, csvFile])
+
+    // Confirmed right in Upload Additional Documents, the same as any other
+    // file - there's no separate "CSV upload" mode or UI.
+    const uploadSection = screen.getByRole('region', { name: 'Upload Additional Documents' })
+    expect(within(uploadSection).getByText(/medications\.csv/)).toBeInTheDocument()
+
+    expect(screen.getByText(selectedDocumentsHeading(3))).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Create Analysis' }))
+
+    const probe = await screen.findByTestId('processing-probe')
+    expect(JSON.parse(probe.textContent ?? 'null')).toEqual({
+      files: [
+        { id: 0, file: {}, documentType: 'visit_note' },
+        { id: 1, file: {}, documentType: 'medication_list' },
+      ],
+      notes: [],
+      existingDocumentIds: [1],
+    })
+  })
+
+  it('advertises CSV as a supported upload format on the (keyboard-accessible) dropzone', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Create Analysis' })
+
+    const dropzone = screen.getByRole('button', { name: /Upload clinical note files/ })
+    expect(dropzone).toHaveAccessibleName(/\.csv/)
+    expect(dropzone).toHaveAttribute('tabIndex', '0')
   })
 
   it('navigates with only existing document ids when nothing was uploaded', async () => {

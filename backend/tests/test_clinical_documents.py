@@ -534,3 +534,137 @@ def test_upload_pdf_rejects_malformed_pdf(client):
     response = _upload_pdf(client, token, patient["id"], content=b"this is not a real pdf file")
 
     assert response.status_code == 422
+
+
+def _upload_csv(
+    client,
+    token,
+    patient_id,
+    filename="medications.csv",
+    content=b"medication_name,dose,route,frequency,status,source\nLisinopril,10mg,oral,daily,active,pharmacy",
+    content_type="text/csv",
+    **form_overrides,
+):
+    form = {"document_type": "medication_list", "title": "Uploaded Medication CSV"}
+    form.update(form_overrides)
+
+    return client.post(
+        f"/patients/{patient_id}/clinical-documents/upload-csv",
+        data=form,
+        files={"file": (filename, content, content_type)},
+        headers=_auth_headers(token),
+    )
+
+
+def test_upload_csv_succeeds(client):
+    token = _register_and_login(client, "csvuploader@example.com")
+    patient = _create_patient(client, token).json()
+
+    response = _upload_csv(client, token, patient["id"])
+
+    assert response.status_code == 201
+
+    body = response.json()
+    assert body["document_type"] == "medication_list"
+    assert body["title"] == "Uploaded Medication CSV"
+    assert "Lisinopril" in body["raw_text"]
+    assert body["file_name"] == "medications.csv"
+    assert body["file_type"] == "csv"
+    assert body["patient_id"] == patient["id"]
+
+
+def test_upload_csv_does_not_import_medications(client):
+    # Issue #164: a CSV uploaded here must only ever become a clinical
+    # document (evidence for AI extraction), never a direct medication
+    # import via app/services/medication_import_service.py - this is the
+    # test that would catch the two pipelines being conflated.
+    token = _register_and_login(client, "csvnoimport@example.com")
+    patient = _create_patient(client, token).json()
+
+    _upload_csv(client, token, patient["id"])
+
+    medications_response = client.get(
+        f"/patients/{patient['id']}/medications", headers=_auth_headers(token)
+    )
+    assert medications_response.status_code == 200
+    assert medications_response.json() == []
+
+
+def test_upload_csv_requires_authentication(client):
+    response = client.post(
+        "/patients/1/clinical-documents/upload-csv",
+        data={"document_type": "medication_list", "title": "Uploaded Medication CSV"},
+        files={
+            "file": (
+                "medications.csv",
+                b"medication_name,dose,route,frequency,status,source\nLisinopril,10mg,oral,daily,active,pharmacy",
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_upload_csv_returns_404_for_another_users_patient(client):
+    token_a = _register_and_login(client, "csvownera@example.com")
+    token_b = _register_and_login(client, "csvintruderb@example.com")
+    patient = _create_patient(client, token_a).json()
+
+    response = _upload_csv(client, token_b, patient["id"])
+
+    assert response.status_code == 404
+
+
+def test_upload_csv_rejects_invalid_file_type(client):
+    token = _register_and_login(client, "csvbadfiletype@example.com")
+    patient = _create_patient(client, token).json()
+
+    response = _upload_csv(
+        client,
+        token,
+        patient["id"],
+        filename="note.txt",
+        content=b"Patient reports improvement.",
+        content_type="text/plain",
+    )
+
+    assert response.status_code == 422
+
+
+def test_upload_csv_rejects_empty_file(client):
+    token = _register_and_login(client, "csvemptyfile@example.com")
+    patient = _create_patient(client, token).json()
+
+    response = _upload_csv(client, token, patient["id"], content=b"")
+
+    assert response.status_code == 422
+
+
+def test_upload_csv_rejects_invalid_encoding(client):
+    token = _register_and_login(client, "csvbadencoding@example.com")
+    patient = _create_patient(client, token).json()
+
+    response = _upload_csv(client, token, patient["id"], content=b"\xff\xfe\x00invalid")
+
+    assert response.status_code == 422
+
+
+def test_upload_csv_accepts_malformed_medication_csv_content(client):
+    # Deliberately the opposite of medication import's validation: this
+    # endpoint never parses the CSV structurally (no required columns, no
+    # row validation), since it's just evidence text for the AI, not a
+    # medication import. Content that parse_medication_csv would reject
+    # outright must still succeed here.
+    token = _register_and_login(client, "csvmalformed@example.com")
+    patient = _create_patient(client, token).json()
+
+    response = _upload_csv(
+        client,
+        token,
+        patient["id"],
+        content=b"this is not a valid medication csv at all",
+    )
+
+    assert response.status_code == 201
+    assert "this is not a valid medication csv at all" in response.json()["raw_text"]

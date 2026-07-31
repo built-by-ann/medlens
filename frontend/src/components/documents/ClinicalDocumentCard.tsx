@@ -20,6 +20,7 @@ const FILE_TYPE_LABELS: Record<string, string> = {
   manual_entry: 'Pasted note',
   txt: 'Uploaded .txt file',
   pdf: 'Uploaded .pdf file',
+  csv: 'Uploaded .csv file',
 }
 
 interface ClinicalDocumentCardProps {
