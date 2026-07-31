@@ -151,7 +151,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText(/Updated: /)).toBeInTheDocument()
   })
 
-  it('limits recent patients to the top 5', async () => {
+  it('limits recent patients to the top 3', async () => {
     const patients = Array.from({ length: 7 }, (_, index) =>
       makePatient({
         id: index + 1,
@@ -163,7 +163,7 @@ describe('DashboardPage', () => {
     renderDashboard()
 
     await screen.findByRole('heading', { name: 'Recent patients' })
-    expect(screen.getAllByRole('listitem')).toHaveLength(5)
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
   })
 
   it('search updates live and searches the full patient list, not just the recent preview', async () => {

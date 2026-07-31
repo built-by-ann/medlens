@@ -8,7 +8,7 @@ import { SignupPage } from '@/pages/SignupPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { AnalysisDetailPage } from '@/pages/AnalysisDetailPage'
 import { AnalysisProcessingPage } from '@/pages/AnalysisProcessingPage'
-import { SelectDocumentsPage } from '@/pages/SelectDocumentsPage'
+import { CreateAnalysisPage } from '@/pages/CreateAnalysisPage'
 import { PatientAnalysesPage } from '@/pages/PatientAnalysesPage'
 import { UploadPage } from '@/pages/UploadPage'
 import { PatientsPage } from '@/pages/PatientsPage'
@@ -52,7 +52,7 @@ export function AppRoutes() {
         <Route path={ROUTES.patientDocuments} element={<PatientDocumentsPage />} />
         <Route path={ROUTES.patientUpload} element={<UploadPage />} />
         <Route path={ROUTES.patientAnalyses} element={<PatientAnalysesPage />} />
-        <Route path={ROUTES.patientSelectDocuments} element={<SelectDocumentsPage />} />
+        <Route path={ROUTES.patientCreateAnalysis} element={<CreateAnalysisPage />} />
         <Route path={ROUTES.patientAnalysisProcessing} element={<AnalysisProcessingPage />} />
         <Route path={ROUTES.patientAnalysisDetail} element={<AnalysisDetailPage />} />
         <Route path={ROUTES.patientDetail} element={<PatientOverviewPage />} />

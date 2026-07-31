@@ -7,7 +7,7 @@ import { ClinicalDocumentList } from '@/components/documents/ClinicalDocumentLis
 import { EmptyDocumentsState } from '@/components/documents/EmptyDocumentsState'
 import { usePatient } from '@/hooks/usePatient'
 import { usePatientClinicalDocuments } from '@/hooks/usePatientClinicalDocuments'
-import { patientDetailPath, patientUploadPath, selectDocumentsPath } from '@/routes/paths'
+import { createAnalysisPath, patientDetailPath, patientUploadPath } from '@/routes/paths'
 
 export function PatientDocumentsPage() {
   const { patientId } = useParams<{ patientId: string }>()
@@ -63,7 +63,7 @@ export function PatientDocumentsPage() {
           Upload Documents
         </Link>
         <Link
-          to={selectDocumentsPath(patient.id)}
+          to={createAnalysisPath(patient.id)}
           className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
         >
           Create Analysis

@@ -130,7 +130,7 @@ describe('PatientDocumentsPage', () => {
     )
     expect(within(nav).getByRole('link', { name: 'Create Analysis' })).toHaveAttribute(
       'href',
-      '/patients/7/analyses/select-documents',
+      '/patients/7/analyses/new',
     )
     expect(within(nav).getByRole('link', { name: 'View Patient' })).toHaveAttribute(
       'href',

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UploadPage } from '@/pages/UploadPage'
 import { getPatient } from '@/api/patients'
@@ -58,19 +58,11 @@ const patient: Patient = {
   updated_at: null,
 }
 
-// Stands in for AnalysisProcessingPage: submission now happens there, so
-// UploadPage's job is just to navigate with the right router state.
-function ProcessingProbe() {
-  const location = useLocation()
-  return <div data-testid="processing-probe">{JSON.stringify(location.state)}</div>
-}
-
 function renderUploadPage() {
   return render(
     <MemoryRouter initialEntries={['/patients/7/upload']}>
       <Routes>
         <Route path="/patients/:patientId/upload" element={<UploadPage />} />
-        <Route path="/patients/:patientId/analyses/processing" element={<ProcessingProbe />} />
         <Route path="/patients/:patientId/documents" element={<div>Documents page stub</div>} />
         <Route path="/patients/:patientId" element={<div>Patient Overview stub</div>} />
       </Routes>
@@ -270,41 +262,6 @@ describe('UploadPage', () => {
     expect(screen.getByText('Edited text')).toBeInTheDocument()
   })
 
-  it('blocks submission when nothing has been added', async () => {
-    const user = userEvent.setup()
-    renderUploadPage()
-
-    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
-
-    await user.click(screen.getByRole('button', { name: 'Start Analysis' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Add at least one file or note before starting an analysis.',
-    )
-    expect(screen.queryByTestId('processing-probe')).not.toBeInTheDocument()
-  })
-
-  it('navigates to the Analysis Processing page with the queued files and notes', async () => {
-    const user = userEvent.setup()
-    renderUploadPage()
-
-    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
-
-    const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
-    await user.upload(getFileInput(), file)
-
-    await user.type(screen.getByLabelText('Note text'), 'Pasted note text')
-    await user.click(screen.getByRole('button', { name: 'Add note' }))
-
-    await user.click(screen.getByRole('button', { name: 'Start Analysis' }))
-
-    const probe = await screen.findByTestId('processing-probe')
-    expect(JSON.parse(probe.textContent ?? 'null')).toEqual({
-      files: [{ id: 0, file: {}, documentType: 'visit_note' }],
-      notes: [{ id: 0, title: '', rawText: 'Pasted note text', documentType: 'visit_note' }],
-    })
-  })
-
   it('blocks saving when nothing has been added', async () => {
     const user = userEvent.setup()
     renderUploadPage()
@@ -333,10 +290,9 @@ describe('UploadPage', () => {
 
     await waitFor(() => expect(mockedUploadFile).toHaveBeenCalledWith(7, file, 'visit_note'))
     expect(await screen.findByText('Documents page stub')).toBeInTheDocument()
-    expect(screen.queryByTestId('processing-probe')).not.toBeInTheDocument()
   })
 
-  it('shows a saving state and disables both actions while saving is in flight', async () => {
+  it('shows a saving state and disables the action while saving is in flight', async () => {
     let resolveUpload: (document: ClinicalDocument) => void = () => {}
     mockedUploadFile.mockReturnValue(
       new Promise((resolve) => {
@@ -354,7 +310,6 @@ describe('UploadPage', () => {
 
     const savingButton = await screen.findByRole('button', { name: 'Saving...' })
     expect(savingButton).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Start Analysis' })).toBeDisabled()
 
     resolveUpload(fakeDocument(1))
     await screen.findByText('Documents page stub')

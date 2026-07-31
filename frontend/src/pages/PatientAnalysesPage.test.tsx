@@ -114,7 +114,7 @@ describe('PatientAnalysesPage', () => {
     await screen.findByRole('heading', { name: /Analyses for Jane Doe/ })
     expect(screen.getByRole('link', { name: '+ Start analysis' })).toHaveAttribute(
       'href',
-      '/patients/7/upload',
+      '/patients/7/analyses/new',
     )
 
     await user.click(screen.getByRole('button', { name: 'Back to Jane Doe' }))
@@ -128,7 +128,7 @@ describe('PatientAnalysesPage', () => {
     expect(await screen.findByText('No analyses yet')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Start an analysis' })).toHaveAttribute(
       'href',
-      '/patients/7/upload',
+      '/patients/7/analyses/new',
     )
   })
 

@@ -1,0 +1,307 @@
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { PageHeader } from '@/components/common/PageHeader'
+import { Button } from '@/components/common/Button'
+import { Input } from '@/components/common/Input'
+import { LoadingSpinner } from '@/components/common/LoadingSpinner'
+import { ErrorState } from '@/components/common/ErrorState'
+import { PatientPageNav } from '@/components/patients/PatientPageNav'
+import { EmptyDocumentsState } from '@/components/documents/EmptyDocumentsState'
+import { filterClinicalDocuments } from '@/components/documents/filterClinicalDocuments'
+import { FileDropzone } from '@/components/upload/FileDropzone'
+import { UploadedFileList } from '@/components/upload/UploadedFileList'
+import { ManualNoteEditor } from '@/components/upload/ManualNoteEditor'
+import { NoteCard } from '@/components/upload/NoteCard'
+import { usePatient } from '@/hooks/usePatient'
+import { usePatientClinicalDocuments } from '@/hooks/usePatientClinicalDocuments'
+import { useDocumentQueue } from '@/hooks/useDocumentQueue'
+import { documentTypeLabel } from '@/api/clinicalDocuments'
+import { analysisProcessingPath, patientDetailPath } from '@/routes/paths'
+
+// Existing Documents shows this many at a time before "Show more" is needed -
+// a patient with a long document history shouldn't dump dozens of checkboxes
+// onto the page at once.
+const EXISTING_DOCUMENTS_PREVIEW_LIMIT = 3
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString(undefined, { dateStyle: 'medium' })
+}
+
+export function CreateAnalysisPage() {
+  const { patientId } = useParams<{ patientId: string }>()
+  const id = Number(patientId)
+  const navigate = useNavigate()
+
+  const {
+    patient,
+    isLoading: isPatientLoading,
+    error: patientError,
+    retry: retryPatient,
+  } = usePatient(id)
+  const {
+    documents,
+    isLoading: areDocumentsLoading,
+    error: documentsError,
+    retry: retryDocuments,
+  } = usePatientClinicalDocuments(id)
+
+  const [selectedExistingIds, setSelectedExistingIds] = useState<Set<number>>(new Set())
+  const [existingDocumentsQuery, setExistingDocumentsQuery] = useState('')
+  const [showAllExisting, setShowAllExisting] = useState(false)
+  const {
+    files,
+    notes,
+    fileError,
+    totalCount: queuedCount,
+    handleFilesSelected,
+    handleRemoveFile,
+    handleFileDocumentTypeChange,
+    handleAddNote,
+    handleUpdateNote,
+    handleRemoveNote,
+  } = useDocumentQueue()
+
+  const totalSelectedCount = selectedExistingIds.size + queuedCount
+
+  function handleExistingDocumentsQueryChange(value: string) {
+    setExistingDocumentsQuery(value)
+    // A new search should always start collapsed - showing every match right
+    // away for a broad query would recreate the same content overload
+    // Show more exists to avoid.
+    setShowAllExisting(false)
+  }
+
+  function toggleExistingDocument(documentId: number) {
+    setSelectedExistingIds((current) => {
+      const next = new Set(current)
+
+      if (next.has(documentId)) {
+        next.delete(documentId)
+      } else {
+        next.add(documentId)
+      }
+
+      return next
+    })
+  }
+
+  function handleCreateAnalysis() {
+    if (totalSelectedCount === 0) return
+
+    navigate(analysisProcessingPath(id), {
+      state: { files, notes, existingDocumentIds: Array.from(selectedExistingIds) },
+    })
+  }
+
+  if (isPatientLoading) {
+    return <LoadingSpinner label="Loading patient" />
+  }
+
+  if (patientError || !patient) {
+    return (
+      <ErrorState
+        title="Couldn't load this patient"
+        message={patientError ?? 'Patient not found.'}
+        onRetry={retryPatient}
+      />
+    )
+  }
+
+  const selectedExistingDocuments = documents.filter((document) =>
+    selectedExistingIds.has(document.id),
+  )
+
+  const filteredExistingDocuments = filterClinicalDocuments(documents, existingDocumentsQuery)
+  const visibleExistingDocuments = showAllExisting
+    ? filteredExistingDocuments
+    : filteredExistingDocuments.slice(0, EXISTING_DOCUMENTS_PREVIEW_LIMIT)
+  const hiddenExistingDocumentsCount =
+    filteredExistingDocuments.length - visibleExistingDocuments.length
+
+  return (
+    <div className="flex flex-col gap-8">
+      <PatientPageNav
+        patient={patient}
+        trail={[{ label: 'Create Analysis' }]}
+        backTo={patientDetailPath(patient.id)}
+        backLabel={`${patient.first_name} ${patient.last_name}`}
+      />
+
+      <PageHeader
+        title="Create Analysis"
+        description={`Build an analysis for ${patient.first_name} ${patient.last_name} from any combination of existing and newly uploaded documents.`}
+      />
+
+      <section aria-labelledby="existing-documents-heading" className="flex flex-col gap-4">
+        <h2 id="existing-documents-heading" className="text-lg font-semibold text-slate-900">
+          Existing Documents
+        </h2>
+
+        {areDocumentsLoading && <LoadingSpinner label="Loading documents" />}
+
+        {!areDocumentsLoading && documentsError && (
+          <ErrorState
+            title="Couldn't load documents"
+            message={documentsError}
+            onRetry={retryDocuments}
+          />
+        )}
+
+        {!areDocumentsLoading && !documentsError && documents.length === 0 && (
+          <EmptyDocumentsState patientId={patient.id} />
+        )}
+
+        {!areDocumentsLoading && !documentsError && documents.length > 0 && (
+          <>
+            <Input
+              type="search"
+              label="Search existing documents"
+              value={existingDocumentsQuery}
+              onChange={(event) => handleExistingDocumentsQueryChange(event.target.value)}
+              placeholder="Search by title or document type"
+              className="sm:max-w-xs"
+            />
+
+            {filteredExistingDocuments.length === 0 ? (
+              <p className="text-sm text-slate-500">No documents match your search.</p>
+            ) : (
+              <>
+                <ul className="flex flex-col gap-3">
+                  {visibleExistingDocuments.map((document) => {
+                    const isSelected = selectedExistingIds.has(document.id)
+
+                    return (
+                      <li key={document.id}>
+                        <label
+                          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 shadow-sm hover:bg-slate-50 ${
+                            isSelected ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleExistingDocument(document.id)}
+                            className="mt-1 h-4 w-4 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                          />
+                          <span className="flex flex-col gap-0.5">
+                            <span className="text-sm font-semibold text-slate-900">
+                              {document.title}
+                            </span>{' '}
+                            <span className="text-xs text-slate-500">
+                              {documentTypeLabel(document.document_type)} · Uploaded{' '}
+                              {formatDate(document.created_at)}
+                            </span>
+                          </span>
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
+
+                {hiddenExistingDocumentsCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllExisting(true)}
+                    className="self-start rounded-md px-2 py-1 text-sm font-medium text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                  >
+                    Show {hiddenExistingDocumentsCount} more
+                  </button>
+                )}
+
+                {showAllExisting &&
+                  filteredExistingDocuments.length > EXISTING_DOCUMENTS_PREVIEW_LIMIT && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllExisting(false)}
+                      className="self-start rounded-md px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    >
+                      Show less
+                    </button>
+                  )}
+              </>
+            )}
+          </>
+        )}
+      </section>
+
+      <section aria-labelledby="upload-additional-heading" className="flex flex-col gap-4">
+        <h2 id="upload-additional-heading" className="text-lg font-semibold text-slate-900">
+          Upload Additional Documents
+        </h2>
+
+        <FileDropzone onFilesSelected={handleFilesSelected} />
+        {fileError && (
+          <p role="alert" className="text-sm text-red-600">
+            {fileError}
+          </p>
+        )}
+        <ManualNoteEditor onAdd={handleAddNote} />
+      </section>
+
+      <section aria-labelledby="selected-documents-heading" className="flex flex-col gap-4">
+        <h2 id="selected-documents-heading" className="text-lg font-semibold text-slate-900">
+          Selected Documents ({totalSelectedCount})
+        </h2>
+
+        {totalSelectedCount === 0 ? (
+          <p className="text-sm text-slate-500">
+            No documents selected yet. Check an existing document above, or upload a new one.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {selectedExistingDocuments.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {selectedExistingDocuments.map((document) => (
+                  <li
+                    key={document.id}
+                    className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <span>
+                      <span className="font-medium text-slate-900">{document.title}</span>{' '}
+                      <span className="text-xs text-slate-500">
+                        ({documentTypeLabel(document.document_type)}, already on file)
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleExistingDocument(document.id)}
+                      aria-label={`Remove ${document.title} from selection`}
+                      className="self-start rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:self-auto"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <UploadedFileList
+              files={files}
+              onRemove={handleRemoveFile}
+              onDocumentTypeChange={handleFileDocumentTypeChange}
+            />
+
+            {notes.length > 0 && (
+              <ul className="flex flex-col gap-3">
+                {notes.map((note) => (
+                  <li key={note.id}>
+                    <NoteCard note={note} onUpdate={handleUpdateNote} onRemove={handleRemoveNote} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </section>
+
+      <div className="flex flex-wrap items-center gap-4">
+        <Button onClick={handleCreateAnalysis} disabled={totalSelectedCount === 0}>
+          Create Analysis
+        </Button>
+        <p aria-live="polite" className="text-sm text-slate-600">
+          {totalSelectedCount} document{totalSelectedCount === 1 ? '' : 's'} selected
+        </p>
+      </div>
+    </div>
+  )
+}
