@@ -17,9 +17,20 @@ export interface ApiError {
  * validation errors return `detail` as a list of field errors rather than a
  * string, so both cases are collapsed into one message here.
  */
-function toApiError(error: AxiosError): ApiError {
+export function toApiError(error: AxiosError): ApiError {
   const status = error.response?.status ?? null
-  const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail
+
+  // No response at all - the request never reached a server to produce a
+  // `detail` body (offline, DNS/CORS failure, the backend is down, a
+  // timeout). Axios's own `error.message` for this case is developer-facing
+  // ("Network Error", "timeout of 10000ms exceeded"), not something to show
+  // a user, so this is the one case with a fixed, friendly message rather
+  // than passing anything from `error` through.
+  if (!error.response) {
+    return { status, message: 'Unable to reach the server. Check your connection and try again.' }
+  }
+
+  const detail = (error.response.data as { detail?: unknown } | undefined)?.detail
 
   if (typeof detail === 'string') {
     return { status, message: detail, detail }

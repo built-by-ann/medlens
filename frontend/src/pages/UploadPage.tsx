@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
+import { FormError } from '@/components/common/FormError'
 import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { FileDropzone } from '@/components/upload/FileDropzone'
 import { UploadedFileList } from '@/components/upload/UploadedFileList'
@@ -19,7 +20,12 @@ export function UploadPage() {
   const id = Number(patientId)
   const navigate = useNavigate()
   const { patient, isLoading: isPatientLoading, error: patientError, retry } = usePatient(id)
-  const { isSubmitting: isSaving, error: saveError, saveDocuments } = useCreateAnalysis(id)
+  const {
+    isSubmitting: isSaving,
+    error: saveError,
+    failedItemLabel,
+    saveDocuments,
+  } = useCreateAnalysis(id)
 
   const {
     files,
@@ -51,6 +57,14 @@ export function UploadPage() {
       // saveError already reflects this via the hook's own state.
     }
   }
+
+  // Names which file/note failed to upload, when known, so a batch of
+  // several items doesn't leave the user guessing which one needs fixing.
+  const saveErrorMessage = saveError
+    ? failedItemLabel
+      ? `${failedItemLabel}: ${saveError}`
+      : saveError
+    : null
 
   if (isPatientLoading) {
     return <LoadingSpinner label="Loading patient" />
@@ -84,12 +98,11 @@ export function UploadPage() {
         <h2 id="file-upload-heading" className="text-lg font-semibold text-slate-900">
           Upload files
         </h2>
-        <FileDropzone onFilesSelected={handleFilesSelected} />
-        {fileError && (
-          <p role="alert" className="text-sm text-red-600">
-            {fileError}
-          </p>
-        )}
+        <FileDropzone
+          onFilesSelected={handleFilesSelected}
+          errorId={fileError ? 'upload-file-error' : undefined}
+        />
+        {fileError && <FormError id="upload-file-error" message={fileError} />}
         <UploadedFileList
           files={files}
           onRemove={handleRemoveFile}
@@ -121,17 +134,9 @@ export function UploadPage() {
 
       {totalCount === 0 && <UploadEmptyState />}
 
-      {validationMessage && (
-        <p role="alert" className="text-sm text-red-600">
-          {validationMessage}
-        </p>
-      )}
+      {validationMessage && <FormError message={validationMessage} />}
 
-      {saveError && (
-        <p role="alert" className="text-sm text-red-600">
-          {saveError}
-        </p>
-      )}
+      {saveErrorMessage && <FormError message={saveErrorMessage} />}
 
       <div>
         <button

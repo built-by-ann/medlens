@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Card } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
+import { FormError } from '@/components/common/FormError'
 import { PatientFields } from '@/components/patients/PatientFields'
 import {
   EMPTY_PATIENT_PAYLOAD,
@@ -58,11 +59,7 @@ export function PatientForm({
   return (
     <Card className="flex flex-col gap-4">
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-        {formError && (
-          <p role="alert" className="text-sm text-red-600">
-            {formError}
-          </p>
-        )}
+        {formError && <FormError message={formError} />}
         <PatientFields
           idPrefix="patient-form"
           values={values}

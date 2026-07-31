@@ -5,6 +5,7 @@ import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
+import { FormError } from '@/components/common/FormError'
 import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { EmptyDocumentsState } from '@/components/documents/EmptyDocumentsState'
 import { filterClinicalDocuments } from '@/components/documents/filterClinicalDocuments'
@@ -230,12 +231,11 @@ export function CreateAnalysisPage() {
           Upload Additional Documents
         </h2>
 
-        <FileDropzone onFilesSelected={handleFilesSelected} />
-        {fileError && (
-          <p role="alert" className="text-sm text-red-600">
-            {fileError}
-          </p>
-        )}
+        <FileDropzone
+          onFilesSelected={handleFilesSelected}
+          errorId={fileError ? 'create-analysis-file-error' : undefined}
+        />
+        {fileError && <FormError id="create-analysis-file-error" message={fileError} />}
         <UploadedFileList
           files={files}
           onRemove={handleRemoveFile}

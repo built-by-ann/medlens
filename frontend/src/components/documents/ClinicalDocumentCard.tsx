@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Card } from '@/components/common/Card'
+import { FormError } from '@/components/common/FormError'
 import { documentTypeLabel } from '@/api/clinicalDocuments'
 import type { ApiError } from '@/api/client'
 import type { ClinicalDocument } from '@/types/api'
@@ -91,11 +92,7 @@ export function ClinicalDocumentCard({ document, onDelete }: ClinicalDocumentCar
         </p>
       )}
 
-      {deleteError && (
-        <p role="alert" className="text-sm text-red-600">
-          {deleteError}
-        </p>
-      )}
+      {deleteError && <FormError message={deleteError} />}
     </Card>
   )
 }

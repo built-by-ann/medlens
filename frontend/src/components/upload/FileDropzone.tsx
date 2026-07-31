@@ -4,6 +4,11 @@ import { cn } from '@/utils/cn'
 
 interface FileDropzoneProps {
   onFilesSelected: (files: File[]) => void
+  // Id of the element (typically a `role="alert"` paragraph the caller
+  // renders alongside this dropzone) describing a current file-selection
+  // error, so assistive tech reading this control also reads why the last
+  // selection failed - not just a floating paragraph elsewhere on the page.
+  errorId?: string
 }
 
 const ACCEPT_ATTRIBUTE = [
@@ -13,7 +18,7 @@ const ACCEPT_ATTRIBUTE = [
   'text/csv',
 ].join(',')
 
-export function FileDropzone({ onFilesSelected }: FileDropzoneProps) {
+export function FileDropzone({ onFilesSelected, errorId }: FileDropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
 
@@ -48,6 +53,7 @@ export function FileDropzone({ onFilesSelected }: FileDropzoneProps) {
       role="button"
       tabIndex={0}
       aria-label={`Upload clinical note files. Drag and drop, or activate to browse. Supported formats: ${SUPPORTED_FILE_EXTENSIONS.join(', ')}.`}
+      aria-describedby={errorId}
       onClick={openFilePicker}
       onKeyDown={handleKeyDown}
       onDragOver={(event) => {

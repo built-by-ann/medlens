@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/common/Card'
 import { SummaryStat } from '@/components/common/SummaryStat'
+import { FormError } from '@/components/common/FormError'
 import { AnalysisStatusBadge } from '@/components/analyses/AnalysisStatusBadge'
+import { AnalysisFailureNotice } from '@/components/analyses/AnalysisFailureNotice'
 import { analysisStatusLabel } from '@/utils/analysisStatus'
 import { analysisDetailPath } from '@/routes/paths'
 import type { ApiError } from '@/api/client'
@@ -72,7 +74,7 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
         )}
 
         {analysis.status === 'failed' && analysis.error_message && (
-          <p className="text-sm break-words text-red-600">{analysis.error_message}</p>
+          <AnalysisFailureNotice message={analysis.error_message} />
         )}
 
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -93,9 +95,7 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
       {onDelete && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-6 py-3">
           {deleteError ? (
-            <p role="alert" className="min-w-0 break-words text-sm text-red-600">
-              {deleteError}
-            </p>
+            <FormError message={deleteError} className="min-w-0 break-words" />
           ) : (
             <span />
           )}

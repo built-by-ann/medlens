@@ -168,7 +168,7 @@ export function PatientOverviewPage() {
 
             {!areDocumentsLoading && documentsError && (
               <ErrorState
-                title="Couldn't load documents"
+                title="Couldn't load clinical documents"
                 message={documentsError}
                 onRetry={retryDocuments}
               />

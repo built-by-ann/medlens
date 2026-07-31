@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Card } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
+import { FormError } from '@/components/common/FormError'
 import { DocumentTypeSelect } from '@/components/upload/DocumentTypeSelect'
 import { documentTypeLabel } from '@/api/clinicalDocuments'
 
@@ -25,20 +26,40 @@ interface NoteCardProps {
   onRemove: (id: number) => void
 }
 
+const TEXT_ERROR_ID_PREFIX = 'note-text-error'
+
 export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [draftTitle, setDraftTitle] = useState(note.title)
   const [draftText, setDraftText] = useState(note.rawText)
   const [draftDocumentType, setDraftDocumentType] = useState(note.documentType)
+  // Only set once Save is clicked with empty text - matching every other
+  // form in the app (validate on submit, not disable the button with no
+  // explanation of why).
+  const [showTextError, setShowTextError] = useState(false)
+  const textErrorId = `${TEXT_ERROR_ID_PREFIX}-${note.id}`
 
   function startEditing() {
     setDraftTitle(note.title)
     setDraftText(note.rawText)
     setDraftDocumentType(note.documentType)
+    setShowTextError(false)
     setIsEditing(true)
   }
 
+  function handleDraftTextChange(value: string) {
+    setDraftText(value)
+    if (showTextError && value.trim()) {
+      setShowTextError(false)
+    }
+  }
+
   function saveEdit() {
+    if (!draftText.trim()) {
+      setShowTextError(true)
+      return
+    }
+
     onUpdate(note.id, {
       title: draftTitle.trim(),
       rawText: draftText.trim(),
@@ -64,10 +85,15 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
           <textarea
             id={`note-text-${note.id}`}
             value={draftText}
-            onChange={(event) => setDraftText(event.target.value)}
+            onChange={(event) => handleDraftTextChange(event.target.value)}
             rows={6}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            aria-invalid={showTextError ? true : undefined}
+            aria-describedby={showTextError ? textErrorId : undefined}
+            className={`w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+              showTextError ? 'border-red-500' : 'border-slate-300'
+            }`}
           />
+          {showTextError && <FormError id={textErrorId} message="Note text is required." />}
         </div>
         <DocumentTypeSelect
           id={`note-doctype-${note.id}`}
@@ -75,9 +101,7 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
           onChange={setDraftDocumentType}
         />
         <div className="flex flex-wrap gap-2">
-          <Button onClick={saveEdit} disabled={!draftText.trim()}>
-            Save
-          </Button>
+          <Button onClick={saveEdit}>Save</Button>
           <button
             type="button"
             onClick={() => setIsEditing(false)}

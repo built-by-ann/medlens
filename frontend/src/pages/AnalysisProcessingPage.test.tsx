@@ -115,7 +115,7 @@ describe('AnalysisProcessingPage', () => {
       saveDocuments,
       invalidateItem,
     })
-    mockedUseAnalysisPolling.mockReturnValue({ analysis: null, error: null })
+    mockedUseAnalysisPolling.mockReturnValue({ analysis: null, error: null, retry: vi.fn() })
   })
 
   it('shows a loading state while the patient is being fetched', () => {
@@ -180,6 +180,7 @@ describe('AnalysisProcessingPage', () => {
     mockedUseAnalysisPolling.mockReturnValue({
       analysis: makeAnalysis({ status: 'processing' }),
       error: null,
+      retry: vi.fn(),
     })
     const { container } = renderProcessingPage()
 
@@ -192,6 +193,7 @@ describe('AnalysisProcessingPage', () => {
     mockedUseAnalysisPolling.mockReturnValue({
       analysis: makeAnalysis({ id: 99, status: 'completed' }),
       error: null,
+      retry: vi.fn(),
     })
     renderProcessingPage()
 
@@ -212,7 +214,10 @@ describe('AnalysisProcessingPage', () => {
     renderProcessingPage()
 
     expect(await screen.findByRole('heading', { name: 'Analysis failed' })).toBeInTheDocument()
-    expect(screen.getByText('Something went wrong on the server.')).toBeInTheDocument()
+    // Prefixed with which item failed (failedItemLabel), so a batch of
+    // several documents doesn't leave the user guessing which one needs
+    // fixing.
+    expect(screen.getByText('note: Something went wrong on the server.')).toBeInTheDocument()
 
     const retryButton = screen.getByRole('button', { name: 'Try again' })
     await user.click(retryButton)
@@ -233,6 +238,7 @@ describe('AnalysisProcessingPage', () => {
     mockedUseAnalysisPolling.mockReturnValue({
       analysis: makeAnalysis({ status: 'failed', error_message: 'The AI provider timed out.' }),
       error: null,
+      retry: vi.fn(),
     })
     renderProcessingPage()
 
@@ -241,16 +247,26 @@ describe('AnalysisProcessingPage', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 
-  it('shows a failure state without a retry option when only the status check fails', async () => {
+  it('offers a retry that re-checks status (not a new submission) when only the status check fails', async () => {
     submit.mockResolvedValue(99)
+    const retryPolling = vi.fn()
     mockedUseAnalysisPolling.mockReturnValue({
       analysis: null,
       error: 'Network error.',
+      retry: retryPolling,
     })
+    const user = userEvent.setup()
     renderProcessingPage()
 
     expect(await screen.findByRole('heading', { name: 'Analysis failed' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Return to Analysis History' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+    // Re-checks the analysis's status - does not submit a new analysis,
+    // since the original submission already succeeded and only confirming
+    // its status failed.
+    expect(retryPolling).toHaveBeenCalledTimes(1)
+    expect(submit).toHaveBeenCalledTimes(1)
   })
 })

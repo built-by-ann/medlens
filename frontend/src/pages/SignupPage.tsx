@@ -3,6 +3,7 @@ import { Card } from '@/components/common/Card'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
+import { FormError } from '@/components/common/FormError'
 import { registerUser } from '@/api/auth'
 import { useAuthForm } from '@/hooks/useAuthForm'
 import type { ApiError } from '@/api/client'
@@ -102,11 +103,7 @@ export function SignupPage() {
         <PageHeader title="Create an account" description="Sign up for MedLens." />
         <Card>
           <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
-            {formError && (
-              <p role="alert" className="text-sm text-red-600">
-                {formError}
-              </p>
-            )}
+            {formError && <FormError message={formError} />}
 
             <Input
               label="Full Name"

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card } from '@/components/common/Card'
+import { Button } from '@/components/common/Button'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
 import { SummaryStat } from '@/components/common/SummaryStat'
@@ -45,13 +46,12 @@ function FailureCard({ message, onRetry, patientId }: FailureCardProps) {
       <p className="max-w-md text-sm text-slate-600">{message}</p>
       <div className="flex flex-wrap justify-center gap-2">
         {onRetry && (
-          <button
-            type="button"
+          <Button
             onClick={onRetry}
-            className="cursor-pointer rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             Try again
-          </button>
+          </Button>
         )}
         <Link
           to={patientDetailPath(patientId)}
@@ -82,12 +82,12 @@ export function AnalysisProcessingPage() {
     error: patientError,
     retry: retryPatient,
   } = usePatient(id)
-  const { isSubmitting, error: submitError, submit } = useCreateAnalysis(id)
+  const { isSubmitting, error: submitError, failedItemLabel, submit } = useCreateAnalysis(id)
   const [analysisId, setAnalysisId] = useState<number | null>(null)
   const message = useRotatingMessages(PROGRESS_MESSAGES, 3500)
 
   const submission = (location.state as SubmitInput | null) ?? null
-  const { analysis, error: pollError } = useAnalysisPolling(id, analysisId)
+  const { analysis, error: pollError, retry: retryPolling } = useAnalysisPolling(id, analysisId)
 
   const runSubmission = useCallback(async () => {
     if (!submission) return
@@ -164,8 +164,13 @@ export function AnalysisProcessingPage() {
 
   const createdAt = formatDateTime(analysis?.created_at ?? null)
 
+  // Names which file/note failed to upload, when known, so a submission
+  // that combined several documents doesn't leave the user guessing which
+  // one needs fixing.
   const failureMessage = submitError
-    ? submitError
+    ? failedItemLabel
+      ? `${failedItemLabel}: ${submitError}`
+      : submitError
     : analysis?.status === 'failed'
       ? (analysis.error_message ?? 'The analysis failed to complete.')
       : pollError
@@ -187,7 +192,11 @@ export function AnalysisProcessingPage() {
         <FailureCard
           message={failureMessage}
           onRetry={
-            submitError || analysis?.status === 'failed' ? () => void runSubmission() : undefined
+            submitError || analysis?.status === 'failed'
+              ? () => void runSubmission()
+              : pollError
+                ? retryPolling
+                : undefined
           }
           patientId={patient.id}
         />

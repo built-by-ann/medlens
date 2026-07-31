@@ -1,5 +1,6 @@
 import { useEffect, useRef, type MouseEvent } from 'react'
 import { Button } from '@/components/common/Button'
+import { FormError } from '@/components/common/FormError'
 import type { Patient } from '@/types/api'
 
 interface ArchivePatientDialogProps {
@@ -62,11 +63,7 @@ export function ArchivePatientDialog({
             This removes {patient.first_name} {patient.last_name} from your active patient list.
             Their record is kept, and you can still open it directly whenever you need to.
           </p>
-          {error && (
-            <p role="alert" className="text-sm text-red-600">
-              {error}
-            </p>
-          )}
+          {error && <FormError message={error} />}
           <div className="flex flex-wrap justify-end gap-2">
             <button
               type="button"

@@ -229,6 +229,25 @@ describe('UploadPage', () => {
     expect(screen.getByLabelText('Note text')).toHaveValue('')
   })
 
+  it('shows an accessible validation error when adding a note with no text, and clears it once text is entered', async () => {
+    const user = userEvent.setup()
+    renderUploadPage()
+
+    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
+
+    await user.click(screen.getByRole('button', { name: 'Add note' }))
+
+    const noteText = screen.getByLabelText('Note text')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Note text is required.')
+    expect(noteText).toHaveAttribute('aria-invalid', 'true')
+    expect(noteText).toHaveAccessibleDescription('Note text is required.')
+
+    await user.type(noteText, 'Patient reports improvement.')
+
+    expect(screen.queryByText('Note text is required.')).not.toBeInTheDocument()
+    expect(noteText).not.toHaveAttribute('aria-invalid')
+  })
+
   it('removes a manually entered note', async () => {
     const user = userEvent.setup()
     renderUploadPage()
@@ -260,6 +279,27 @@ describe('UploadPage', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(screen.getByText('Edited text')).toBeInTheDocument()
+  })
+
+  it('shows an accessible validation error when saving an edited note with no text', async () => {
+    const user = userEvent.setup()
+    const { container } = renderUploadPage()
+
+    await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
+
+    await user.type(screen.getByLabelText('Note text'), 'Original text')
+    await user.click(screen.getByRole('button', { name: 'Add note' }))
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    const editTextbox = getById<HTMLTextAreaElement>(container, 'note-text-0')
+    await user.clear(editTextbox)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Note text is required.')
+    expect(editTextbox).toHaveAttribute('aria-invalid', 'true')
+    // The note was never saved with empty text - still editing, original
+    // text never got cleared.
+    expect(editTextbox).toHaveValue('')
   })
 
   it('blocks saving when nothing has been added', async () => {
