@@ -18,7 +18,7 @@ import type { Patient } from '@/types/api'
 // A glance-and-go preview, not the full browsable list (that's
 // PatientsPage) - keeps the dashboard from growing unbounded as a provider
 // accumulates patients over time.
-const RECENT_PATIENTS_LIMIT = 5
+const RECENT_PATIENTS_LIMIT = 3
 
 // As of Sprint 3.5 (Issue #132), the Dashboard answers "what patient do I
 // want to work on?" instead of "what analysis recently happened?" -

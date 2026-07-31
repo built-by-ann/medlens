@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/common/Card'
-import { patientUploadPath } from '@/routes/paths'
+import { createAnalysisPath } from '@/routes/paths'
 
 interface AnalysesEmptyStateProps {
   patientId: number
@@ -16,7 +16,7 @@ export function AnalysesEmptyState({ patientId }: AnalysesEmptyStateProps) {
         first analysis.
       </p>
       <Link
-        to={patientUploadPath(patientId)}
+        to={createAnalysisPath(patientId)}
         className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
       >
         Start an analysis

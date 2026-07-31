@@ -8,7 +8,7 @@ import { RecentAnalysesList } from '@/components/analyses/RecentAnalysesList'
 import { AnalysesEmptyState } from '@/components/analyses/AnalysesEmptyState'
 import { usePatient } from '@/hooks/usePatient'
 import { usePatientAnalyses } from '@/hooks/usePatientAnalyses'
-import { patientDetailPath, patientUploadPath } from '@/routes/paths'
+import { createAnalysisPath, patientDetailPath } from '@/routes/paths'
 
 // Set by AnalysisDetailPage after a successful delete (see DeleteAnalysisDialog),
 // via navigate(patientAnalysesPath(id), { state: { flashMessage } }).
@@ -103,7 +103,7 @@ export function PatientAnalysesPage() {
             description="Review past medication reconciliation analyses for this patient."
             actions={
               <Link
-                to={patientUploadPath(patient.id)}
+                to={createAnalysisPath(patient.id)}
                 className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               >
                 + Start analysis

@@ -19,6 +19,7 @@ import { usePatientAnalyses } from '@/hooks/usePatientAnalyses'
 import { archivePatient } from '@/api/patients'
 import {
   ROUTES,
+  createAnalysisPath,
   patientAnalysesPath,
   patientDocumentsPath,
   patientEditPath,
@@ -38,7 +39,7 @@ const RECENT_ANALYSES_PREVIEW_LIMIT = 3
 // backend's clinical-documents list endpoint has no limit query param (see
 // docs/api.md), so this is applied client-side against the same full list
 // usePatientClinicalDocuments already fetches, rather than a backend change.
-const RECENT_DOCUMENTS_PREVIEW_LIMIT = 5
+const RECENT_DOCUMENTS_PREVIEW_LIMIT = 3
 
 export function PatientOverviewPage() {
   const { patientId } = useParams<{ patientId: string }>()
@@ -128,8 +129,14 @@ export function PatientOverviewPage() {
 
           <nav aria-label="Quick actions" className="flex flex-wrap gap-2">
             <Link
-              to={patientUploadPath(patient.id)}
+              to={createAnalysisPath(patient.id)}
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              Create Analysis
+            </Link>
+            <Link
+              to={patientUploadPath(patient.id)}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
             >
               Upload document
             </Link>

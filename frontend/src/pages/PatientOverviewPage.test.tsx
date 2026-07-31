@@ -270,11 +270,15 @@ describe('PatientOverviewPage', () => {
     await waitFor(() => expect(mockedDeleteMedication).toHaveBeenCalledWith(1, 5))
   })
 
-  it('links the Quick Actions to Upload and Medications for this patient', async () => {
+  it('links the Quick Actions to Create Analysis, Upload, and Medications for this patient', async () => {
     mockedGetPatient.mockResolvedValue(patient)
     renderOverviewPage()
 
-    expect(await screen.findByRole('link', { name: 'Upload document' })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: 'Create Analysis' })).toHaveAttribute(
+      'href',
+      '/patients/1/analyses/new',
+    )
+    expect(screen.getByRole('link', { name: 'Upload document' })).toHaveAttribute(
       'href',
       '/patients/1/upload',
     )
@@ -375,8 +379,8 @@ describe('PatientOverviewPage', () => {
 
     await screen.findByText('Document 1')
     const titles = screen.getAllByRole('heading', { level: 4 }).map((el) => el.textContent)
-    expect(titles).toEqual(['Document 1', 'Document 2', 'Document 3', 'Document 4', 'Document 5'])
-    expect(screen.queryByText('Document 6')).not.toBeInTheDocument()
+    expect(titles).toEqual(['Document 1', 'Document 2', 'Document 3'])
+    expect(screen.queryByText('Document 4')).not.toBeInTheDocument()
   })
 
   it('shows an error state for the document list independent of the patient details', async () => {
