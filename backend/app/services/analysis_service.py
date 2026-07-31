@@ -53,6 +53,25 @@ def create_analysis(db: Session, patient: Patient, analysis_in: AnalysisCreate) 
     return analysis
 
 
+def ordered_clinical_documents(analysis: Analysis) -> list[ClinicalDocument]:
+    """A deterministic order for `analysis.clinical_documents`.
+
+    It's a plain many-to-many relationship (see analysis_clinical_documents
+    in docs/data-model.md) with no inherent ordering guarantee - the rows
+    SQLAlchemy returns aren't reliably insertion order or id order. This
+    matters as of Issue #152: the AI prompt numbers each document it is
+    given ("Note 1", "Note 2", ...; see app/ai/prompts.py), and the AI's
+    response reports which numbered note a given medication came from, so
+    that numbering has to be reproducible - the same order used to build
+    the prompt (app/api/routes/analyses.py) must be the same order used
+    afterward to map a reported note number back to a real document id
+    (medication_reconciliation_service.py). Sorting by id ascending is that
+    one canonical order, used by both call sites instead of each re-deriving
+    (and risking disagreeing about) their own.
+    """
+    return sorted(analysis.clinical_documents, key=lambda document: document.id)
+
+
 def mark_analysis_processing(db: Session, analysis: Analysis) -> Analysis:
     analysis.status = "processing"
     analysis.started_at = datetime.now(timezone.utc)

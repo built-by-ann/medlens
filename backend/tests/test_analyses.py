@@ -721,6 +721,67 @@ def test_get_analysis_detail_nests_mention_evidence_with_source_document(client)
     assert "raw_text" not in source_document
 
 
+def test_get_analysis_detail_attributes_each_medication_to_its_true_source_document(client):
+    # Issue #152: two documents selected, two different medications each
+    # reported against a different numbered note. Before this issue, both
+    # mentions would have been attached to whichever selected document had
+    # the lowest id, regardless of which note they actually came from - this
+    # proves the nested evidence now cites each medication's true source.
+    token = _register_and_login(client, "detailtrueprovenance@example.com")
+    patient = _create_patient(client, token).json()
+    document_a = _create_document(
+        client, token, patient["id"], title="Visit Note", raw_text="Note A text."
+    )
+    document_b = _create_document(
+        client, token, patient["id"], title="Discharge Summary", raw_text="Note B text."
+    )
+
+    response_text = json.dumps(
+        {
+            "medications": [
+                {"name": "Lisinopril", "dosage": "10 mg", "source_note": 1},
+                {"name": "Metformin", "dosage": "500 mg", "source_note": 2},
+            ],
+            "possible_inconsistencies": [],
+            "summary": "Two medications noted.",
+        }
+    )
+
+    app.dependency_overrides[get_ai_summary_service] = _override_ai_service(
+        _FakeProvider(text=response_text)
+    )
+    try:
+        create_response = client.post(
+            f"/patients/{patient['id']}/analyses",
+            json={"clinical_document_ids": [document_a["id"], document_b["id"]]},
+            headers=_auth_headers(token),
+        )
+    finally:
+        app.dependency_overrides.pop(get_ai_summary_service, None)
+
+    assert create_response.status_code == 201
+    analysis_id = create_response.json()["analysis_id"]
+
+    detail_response = client.get(
+        f"/patients/{patient['id']}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+    assert detail_response.status_code == 200
+
+    discrepancies = detail_response.json()["medication_discrepancies"]
+    assert len(discrepancies) == 2
+
+    source_document_by_medication = {
+        discrepancy["medication_mention"]["medication_name"]: discrepancy["medication_mention"][
+            "clinical_document"
+        ]["id"]
+        for discrepancy in discrepancies
+    }
+    assert source_document_by_medication == {
+        "Lisinopril": document_a["id"],
+        "Metformin": document_b["id"],
+    }
+
+
 def test_get_analysis_detail_nests_medication_evidence_for_unsupported_entry(client):
     # "unsupported_medication_list_entry" is only checked when a selected
     # document is medication-list-shaped (see UNSUPPORTED_ENTRY_ELIGIBLE_DOCUMENT_TYPES

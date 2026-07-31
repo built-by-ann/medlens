@@ -48,13 +48,15 @@ def _create_patient(db, user, **overrides):
     return patient
 
 
-def _create_clinical_document(db, patient):
-    document = ClinicalDocument(
-        patient_id=patient.id,
-        document_type="visit_note",
-        title="Visit Note",
-        raw_text="Patient takes Lisinopril 10 mg oral once daily.",
-    )
+def _create_clinical_document(db, patient, **overrides):
+    defaults = {
+        "document_type": "visit_note",
+        "title": "Visit Note",
+        "raw_text": "Patient takes Lisinopril 10 mg oral once daily.",
+    }
+    defaults.update(overrides)
+
+    document = ClinicalDocument(patient_id=patient.id, **defaults)
     db.add(document)
     db.commit()
     db.refresh(document)
@@ -386,3 +388,64 @@ def test_persist_analysis_result_does_not_duplicate_discrepancies_for_repeated_m
         .count()
         == 1
     )
+
+
+def test_persist_analysis_result_attributes_each_medication_to_its_true_source_document(db):
+    # Issue #152: a genuinely multi-document analysis, where two different
+    # medications are each mentioned in a different one of the two selected
+    # documents - the case the earlier lowest-id placeholder could never
+    # represent correctly (both would have landed on document_a regardless).
+    user = _create_user(db, "trueprovenance@example.com")
+    patient = _create_patient(db, user)
+    document_a = _create_clinical_document(db, patient, title="Visit Note")
+    document_b = _create_clinical_document(
+        db, patient, title="Discharge Summary", raw_text="Patient takes Metformin 500 mg."
+    )
+    analysis = create_analysis(
+        db, patient, AnalysisCreate(clinical_document_ids=[document_a.id, document_b.id])
+    )
+
+    summary = _clinical_summary(
+        medications=[
+            {"name": "Lisinopril", "dosage": "10 mg", "source_note": 1},
+            {"name": "Metformin", "dosage": "500 mg", "source_note": 2},
+        ]
+    )
+
+    persist_analysis_result(db, analysis, summary, provider="gemini", model="gemini-2.0-flash")
+
+    lisinopril = db.query(MedicationMention).filter_by(medication_name="Lisinopril").one()
+    metformin = db.query(MedicationMention).filter_by(medication_name="Metformin").one()
+    assert lisinopril.clinical_document_id == document_a.id
+    assert metformin.clinical_document_id == document_b.id
+
+
+def test_persist_analysis_result_attributes_a_repeated_medication_to_each_of_its_documents(db):
+    # The same medication mentioned in both selected documents becomes two
+    # separate MedicationMention rows, each tied to its own real source
+    # document, rather than one mention (or two mentions collapsed onto a
+    # single document).
+    user = _create_user(db, "repeatedacrossdocs@example.com")
+    patient = _create_patient(db, user)
+    document_a = _create_clinical_document(db, patient, title="Visit Note")
+    document_b = _create_clinical_document(
+        db, patient, title="Follow-up Note", raw_text="Lisinopril increased to 20 mg."
+    )
+    analysis = create_analysis(
+        db, patient, AnalysisCreate(clinical_document_ids=[document_a.id, document_b.id])
+    )
+
+    summary = _clinical_summary(
+        medications=[
+            {"name": "Lisinopril", "dosage": "10 mg", "source_note": 1},
+            {"name": "Lisinopril", "dosage": "20 mg", "source_note": 2},
+        ]
+    )
+
+    persist_analysis_result(db, analysis, summary, provider="gemini", model="gemini-2.0-flash")
+
+    mentions_by_dose = {
+        mention.dose: mention.clinical_document_id
+        for mention in db.query(MedicationMention).filter_by(medication_name="Lisinopril").all()
+    }
+    assert mentions_by_dose == {"10 mg": document_a.id, "20 mg": document_b.id}

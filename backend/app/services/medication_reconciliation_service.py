@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.schemas import Medication as AIExtractedMedication
 from app.models.analysis import Analysis
+from app.models.clinical_document import ClinicalDocument
 from app.models.medication import Medication
 from app.models.medication_mention import MedicationMention
 from app.models.patient import Patient
@@ -16,6 +17,7 @@ from app.services.analysis_service import (
     mark_analysis_completed,
     mark_analysis_failed,
     mark_analysis_processing,
+    ordered_clinical_documents,
 )
 from app.services.medication_discrepancy_service import create_medication_discrepancies
 from app.services.medication_normalization import (
@@ -351,6 +353,35 @@ def reconcile_medications(
     return count_findings_by_severity(findings)
 
 
+def _resolve_source_document_id(
+    source_note: int | None,
+    ordered_documents: list[ClinicalDocument],
+    fallback_document_id: int,
+) -> int:
+    """Maps an AI-reported "source_note" (1-indexed, matching the "Note N"
+    labels app/ai/prompts.py's build_summary_prompt assigns) back to the
+    real document at that position in `ordered_documents` - the exact same
+    order that was used to build the prompt in the first place (see
+    ordered_clinical_documents, analysis_service.py).
+
+    Falls back to `fallback_document_id` (the lowest-id selected document -
+    the same placeholder Issue #148 always used) only when the AI omitted
+    source_note entirely, or reported a number outside the actual range of
+    selected documents - both malformed-response cases that the prompt
+    instructs against but that `Medication.source_note` deliberately allows
+    (it's optional, not required - see app/ai/schemas.py) rather than
+    failing the whole analysis over one mis-attributed medication.
+    """
+    if source_note is None:
+        return fallback_document_id
+
+    index = source_note - 1
+    if index < 0 or index >= len(ordered_documents):
+        return fallback_document_id
+
+    return ordered_documents[index].id
+
+
 def reconcile_ai_extracted_medications(
     db: Session,
     analysis: Analysis,
@@ -369,17 +400,30 @@ def reconcile_ai_extracted_medications(
     the exact same reconciliation engine used by run_medication_reconciliation
     (below) can run against it.
 
-    The AI's prompt numbers each selected document ("Note 1", "Note 2", ...
-    see app/ai/prompts.py) but its response schema never reports which note
-    a given medication came from - extraction happens across all selected
-    documents at once, with no per-medication source attribution in the
-    response. Rather than changing that response contract (a larger,
-    separate change), every extracted medication is attached to the same
-    document - the selected document with the lowest id, picked
-    deterministically - as its supporting evidence. For the common case of
-    a single selected document this is exact, not an approximation; for a
-    multi-document analysis it is a documented simplification, not a claim
-    that the medication was found in every selected document.
+    Document-level provenance (Issue #152): the AI's prompt numbers each
+    selected document ("Note 1", "Note 2", ... see app/ai/prompts.py) and,
+    as of this issue, its response reports which numbered note each
+    medication actually came from (`Medication.source_note`). Each mention
+    is attached to that real document via _resolve_source_document_id,
+    falling back to the lowest-id selected document only for the rare
+    malformed response that omits or misreports the note number - not, as
+    before, unconditionally for every mention regardless of source. A
+    medication mentioned in more than one selected document is expected to
+    appear as more than one entry in `ai_medications` (one per note it was
+    found in, per the prompt's own instructions) and so becomes more than
+    one MedicationMention, one correctly attached to each real source
+    document - build_discrepancy_findings already groups mentions of the
+    same medication name together regardless of how many there are or which
+    document each came from, so this needed no change there.
+
+    Historical analyses created before this issue still have their
+    MedicationMention rows attached to whichever document happened to have
+    the lowest id among those selected, not necessarily their true source -
+    this function cannot retroactively correct data it didn't write, and no
+    migration re-derives it (the original note text isn't stored per
+    mention, so which document a historical mention "really" came from
+    can't be recovered after the fact). Only analyses created from this
+    point forward get true provenance.
 
     Medications and MedicationMentions are queried/created the same way
     run_medication_reconciliation does, so the exact same discrepancy rules
@@ -388,14 +432,17 @@ def reconcile_ai_extracted_medications(
     if not ai_medications:
         return {"total": 0, "high": 0, "medium": 0, "low": 0}
 
-    documents = analysis.clinical_documents
-    primary_document = min(documents, key=lambda document: document.id)
+    documents = ordered_clinical_documents(analysis)
+    fallback_document_id = documents[0].id
 
     mentions: list[MedicationMention] = []
 
     for ai_medication in ai_medications:
+        source_document_id = _resolve_source_document_id(
+            ai_medication.source_note, documents, fallback_document_id
+        )
         mention = MedicationMention(
-            clinical_document_id=primary_document.id,
+            clinical_document_id=source_document_id,
             medication_name=ai_medication.name,
             dose=ai_medication.dosage,
             route=ai_medication.route,
