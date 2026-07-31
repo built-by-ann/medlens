@@ -14,11 +14,18 @@ export interface DraftNote {
 
 interface NoteCardProps {
   note: DraftNote
+  // 1-based position of this note among the currently queued notes, used
+  // only for the untitled fallback name below. Deliberately not note.id:
+  // that's a counter that only ever increases (Issue #164), so after
+  // removing an earlier note it would skip numbers instead of renumbering,
+  // and wouldn't match the title useCreateAnalysis itself falls back to at
+  // submit time (which numbers by position in the array, not by id).
+  position: number
   onUpdate: (id: number, note: { title: string; rawText: string; documentType: string }) => void
   onRemove: (id: number) => void
 }
 
-export function NoteCard({ note, onUpdate, onRemove }: NoteCardProps) {
+export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [draftTitle, setDraftTitle] = useState(note.title)
   const [draftText, setDraftText] = useState(note.rawText)
@@ -40,7 +47,7 @@ export function NoteCard({ note, onUpdate, onRemove }: NoteCardProps) {
     setIsEditing(false)
   }
 
-  const displayTitle = note.title || `Note ${note.id + 1}`
+  const displayTitle = note.title || `Note ${position}`
 
   if (isEditing) {
     return (

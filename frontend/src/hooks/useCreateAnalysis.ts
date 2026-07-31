@@ -7,6 +7,10 @@ export interface QueuedFile {
   id: number
   file: File
   documentType: string
+  // Unset by default - the document is titled from the filename on upload
+  // (deriveTitleFromFileName). Only set once a provider edits it, e.g. to
+  // resolve a same-name collision with a document already on file.
+  title?: string
 }
 
 export interface QueuedNote {
@@ -106,6 +110,7 @@ export function useCreateAnalysis(patientId: number): UseCreateAnalysisResult {
             patientId,
             queuedFile.file,
             queuedFile.documentType,
+            queuedFile.title,
           )
           documentId = document.id
         } catch (caughtError) {

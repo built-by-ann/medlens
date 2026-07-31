@@ -29,6 +29,7 @@ export function UploadPage() {
     handleFilesSelected,
     handleRemoveFile,
     handleFileDocumentTypeChange,
+    handleFileTitleChange,
     handleAddNote,
     handleUpdateNote,
     handleRemoveNote,
@@ -93,6 +94,7 @@ export function UploadPage() {
           files={files}
           onRemove={handleRemoveFile}
           onDocumentTypeChange={handleFileDocumentTypeChange}
+          onTitleChange={handleFileTitleChange}
         />
       </section>
 
@@ -102,9 +104,14 @@ export function UploadPage() {
         </h2>
         {notes.length > 0 && (
           <ul className="flex flex-col gap-3">
-            {notes.map((note) => (
+            {notes.map((note, index) => (
               <li key={note.id}>
-                <NoteCard note={note} onUpdate={handleUpdateNote} onRemove={handleRemoveNote} />
+                <NoteCard
+                  note={note}
+                  position={index + 1}
+                  onUpdate={handleUpdateNote}
+                  onRemove={handleRemoveNote}
+                />
               </li>
             ))}
           </ul>

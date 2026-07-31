@@ -73,7 +73,12 @@ describe('useCreateAnalysis', () => {
       analysisId = await result.current.submit({ files: [file], notes: [note] })
     })
 
-    expect(mockedUploadFile).toHaveBeenCalledWith(PATIENT_ID, file.file, 'medication_list')
+    expect(mockedUploadFile).toHaveBeenCalledWith(
+      PATIENT_ID,
+      file.file,
+      'medication_list',
+      undefined,
+    )
     expect(mockedCreateFromText).toHaveBeenCalledWith(PATIENT_ID, {
       title: 'My note',
       rawText: note.rawText,
@@ -278,7 +283,12 @@ describe('useCreateAnalysis', () => {
       documentIds = await result.current.saveDocuments({ files: [file], notes: [note] })
     })
 
-    expect(mockedUploadFile).toHaveBeenCalledWith(PATIENT_ID, file.file, 'medication_list')
+    expect(mockedUploadFile).toHaveBeenCalledWith(
+      PATIENT_ID,
+      file.file,
+      'medication_list',
+      undefined,
+    )
     expect(mockedCreateFromText).toHaveBeenCalledWith(PATIENT_ID, {
       title: 'My note',
       rawText: note.rawText,

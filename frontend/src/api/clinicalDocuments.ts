@@ -46,10 +46,19 @@ function isPdf(file: File): boolean {
   return file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf'
 }
 
-function deriveTitleFromFileName(fileName: string): string {
+export function deriveTitleFromFileName(fileName: string): string {
   const withoutExtension = fileName.replace(/\.[^./]+$/, '').trim()
 
   return withoutExtension || fileName
+}
+
+// The single source of truth for "what title will this queued file get on
+// upload" - a provider-edited title if they've set one, otherwise the
+// filename-derived default. Shared with findDuplicateExistingTitle
+// (utils/queuedFiles.ts) so the same-name warning always reflects exactly
+// what's about to be saved, not just the original filename.
+export function effectiveFileTitle(fileName: string, title?: string): string {
+  return title?.trim() || deriveTitleFromFileName(fileName)
 }
 
 export interface CreateNoteFromTextPayload {
@@ -78,6 +87,11 @@ export async function uploadClinicalDocumentFile(
   patientId: number,
   file: File,
   documentType: string,
+  // A provider-edited title, when they've renamed the file's default title
+  // (e.g. to resolve a same-name collision with a document already on
+  // file). Falls back to the same filename-derived title used everywhere
+  // else when unset or blank.
+  title?: string,
 ): Promise<ClinicalDocument> {
   const endpoint = isPdf(file)
     ? `/patients/${patientId}/clinical-documents/upload-pdf`
@@ -85,7 +99,7 @@ export async function uploadClinicalDocumentFile(
 
   const formData = new FormData()
   formData.append('document_type', documentType)
-  formData.append('title', deriveTitleFromFileName(file.name))
+  formData.append('title', effectiveFileTitle(file.name, title))
   formData.append('file', file)
 
   const response = await apiClient.post<ClinicalDocument>(endpoint, formData)

@@ -288,7 +288,9 @@ describe('UploadPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Save documents' }))
 
-    await waitFor(() => expect(mockedUploadFile).toHaveBeenCalledWith(7, file, 'visit_note'))
+    await waitFor(() =>
+      expect(mockedUploadFile).toHaveBeenCalledWith(7, file, 'visit_note', undefined),
+    )
     expect(await screen.findByText('Documents page stub')).toBeInTheDocument()
   })
 

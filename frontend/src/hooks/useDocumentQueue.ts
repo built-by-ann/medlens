@@ -16,6 +16,7 @@ interface UseDocumentQueueResult {
   handleFilesSelected: (selected: File[]) => void
   handleRemoveFile: (id: number) => void
   handleFileDocumentTypeChange: (id: number, documentType: string) => void
+  handleFileTitleChange: (id: number, title: string) => void
   handleAddNote: (note: { title: string; rawText: string; documentType: string }) => void
   handleUpdateNote: (
     id: number,
@@ -73,6 +74,12 @@ export function useDocumentQueue(): UseDocumentQueueResult {
     )
   }
 
+  function handleFileTitleChange(id: number, title: string) {
+    setFiles((current) =>
+      current.map((queued) => (queued.id === id ? { ...queued, title } : queued)),
+    )
+  }
+
   function handleAddNote(note: { title: string; rawText: string; documentType: string }) {
     setNotes((current) => [...current, { id: nextNoteId.current++, ...note }])
   }
@@ -98,6 +105,7 @@ export function useDocumentQueue(): UseDocumentQueueResult {
     handleFilesSelected,
     handleRemoveFile,
     handleFileDocumentTypeChange,
+    handleFileTitleChange,
     handleAddNote,
     handleUpdateNote,
     handleRemoveNote,

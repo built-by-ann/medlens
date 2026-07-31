@@ -88,6 +88,13 @@ function getFileInput(): HTMLInputElement {
   return screen.getByTestId('file-input')
 }
 
+// The separate "N documents selected" line was removed as a redundant
+// duplicate of this heading's own count - the heading itself is now the
+// live-updating source of truth every selection-count assertion checks.
+function selectedDocumentsHeading(count: number): string {
+  return `Selected Documents (${count})`
+}
+
 describe('CreateAnalysisPage', () => {
   beforeEach(() => {
     mockedGetPatient.mockReset()
@@ -125,6 +132,18 @@ describe('CreateAnalysisPage', () => {
     expect(await screen.findByText('Patient Overview stub')).toBeInTheDocument()
   })
 
+  it('has a Cancel link next to Create Analysis that leaves without submitting anything', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Create Analysis' })
+    await user.click(screen.getByRole('checkbox', { name: /March Visit Note/ }))
+
+    await user.click(screen.getByRole('link', { name: 'Cancel' }))
+
+    expect(await screen.findByText('Patient Overview stub')).toBeInTheDocument()
+  })
+
   it('lists every existing document with its title, type, and upload date, each behind a checkbox', async () => {
     renderPage()
 
@@ -148,12 +167,12 @@ describe('CreateAnalysisPage', () => {
 
     const submitButton = screen.getByRole('button', { name: 'Create Analysis' })
     expect(submitButton).toBeDisabled()
-    expect(screen.getByText('0 documents selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(0))).toBeInTheDocument()
 
     await user.click(screen.getByRole('checkbox', { name: /March Visit Note/ }))
 
     expect(submitButton).toBeEnabled()
-    expect(screen.getByText('1 document selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(1))).toBeInTheDocument()
   })
 
   it('supports selecting and deselecting multiple existing documents, updating the count', async () => {
@@ -167,12 +186,12 @@ describe('CreateAnalysisPage', () => {
 
     await user.click(checkboxA)
     await user.click(checkboxB)
-    expect(screen.getByText('2 documents selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(2))).toBeInTheDocument()
     expect(checkboxA).toBeChecked()
     expect(checkboxB).toBeChecked()
 
     await user.click(checkboxA)
-    expect(screen.getByText('1 document selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(1))).toBeInTheDocument()
     expect(checkboxA).not.toBeChecked()
     expect(checkboxB).toBeChecked()
   })
@@ -204,7 +223,7 @@ describe('CreateAnalysisPage', () => {
     await user.click(screen.getByRole('button', { name: 'Remove March Visit Note from selection' }))
 
     expect(screen.getByRole('checkbox', { name: /March Visit Note/ })).not.toBeChecked()
-    expect(screen.getByText('0 documents selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(0))).toBeInTheDocument()
   })
 
   it('uploading a new file immediately adds it to the selection without restarting the workflow', async () => {
@@ -216,9 +235,98 @@ describe('CreateAnalysisPage', () => {
     const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
     await user.upload(getFileInput(), file)
 
-    expect(screen.getByText('1 document selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(1))).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create Analysis' })).toBeEnabled()
     expect(screen.getByText(/note\.txt/)).toBeInTheDocument()
+  })
+
+  it('confirms an uploaded file right in Upload Additional Documents, not just in the summary count', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Create Analysis' })
+
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
+    await user.upload(getFileInput(), file)
+
+    const uploadSection = screen.getByRole('region', { name: 'Upload Additional Documents' })
+    expect(within(uploadSection).getByText(/note\.txt/)).toBeInTheDocument()
+    expect(
+      within(uploadSection).getByRole('button', { name: 'Remove note.txt' }),
+    ).toBeInTheDocument()
+
+    const summary = screen.getByRole('region', { name: /Selected Documents/ })
+    expect(
+      within(summary).getByText('Uploaded files are listed above, in Upload Additional Documents.'),
+    ).toBeInTheDocument()
+  })
+
+  it('warns when an uploaded file shares its title with a document already on file', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Create Analysis' })
+
+    const file = new File(['hello'], 'March Visit Note.txt', { type: 'text/plain' })
+    await user.upload(getFileInput(), file)
+
+    expect(
+      screen.getByText('A document named "March Visit Note" already exists for this patient.'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not warn when an uploaded file has no matching existing document', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Create Analysis' })
+
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
+    await user.upload(getFileInput(), file)
+
+    expect(screen.queryByText(/already exists for this patient/)).not.toBeInTheDocument()
+  })
+
+  it('renaming an uploaded file updates whether it warns about an existing document', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Create Analysis' })
+
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
+    await user.upload(getFileInput(), file)
+
+    expect(screen.queryByText(/already exists for this patient/)).not.toBeInTheDocument()
+
+    const fileTitleInput = screen.getAllByLabelText('Title (optional)')[0]!
+    await user.type(fileTitleInput, 'March Visit Note')
+
+    expect(
+      screen.getByText('A document named "March Visit Note" already exists for this patient.'),
+    ).toBeInTheDocument()
+
+    await user.clear(fileTitleInput)
+
+    expect(screen.queryByText(/already exists for this patient/)).not.toBeInTheDocument()
+  })
+
+  it('submits an uploaded file with its edited title instead of the filename-derived one', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Create Analysis' })
+
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
+    await user.upload(getFileInput(), file)
+    await user.type(screen.getAllByLabelText('Title (optional)')[0]!, 'Renamed Note')
+
+    await user.click(screen.getByRole('button', { name: 'Create Analysis' }))
+
+    const probe = await screen.findByTestId('processing-probe')
+    const state = JSON.parse(probe.textContent ?? 'null')
+    expect(state.files).toEqual([
+      { id: 0, file: {}, documentType: 'visit_note', title: 'Renamed Note' },
+    ])
   })
 
   it('adding a pasted note immediately adds it to the selection', async () => {
@@ -230,8 +338,40 @@ describe('CreateAnalysisPage', () => {
     await user.type(screen.getByLabelText('Note text'), 'Pasted note text')
     await user.click(screen.getByRole('button', { name: 'Add note' }))
 
-    expect(screen.getByText('1 document selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(1))).toBeInTheDocument()
     expect(screen.getByText('Note 1')).toBeInTheDocument()
+  })
+
+  it('renumbers untitled notes by their position after one is removed, instead of skipping numbers', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Create Analysis' })
+
+    async function addNote(text: string) {
+      await user.type(screen.getByLabelText('Note text'), text)
+      await user.click(screen.getByRole('button', { name: 'Add note' }))
+    }
+
+    await addNote('First note')
+    await addNote('Second note')
+    await addNote('Third note')
+
+    expect(screen.getByText('Note 1')).toBeInTheDocument()
+    expect(screen.getByText('Note 2')).toBeInTheDocument()
+    expect(screen.getByText('Note 3')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Remove Note 2' }))
+    expect(screen.queryByText('Second note')).not.toBeInTheDocument()
+
+    await addNote('Fourth note')
+
+    // The newly added note fills the now-vacant second slot by position -
+    // it's still just "Note 1", "Note 2", "Note 3", never "Note 4".
+    expect(screen.getByText('Note 1')).toBeInTheDocument()
+    expect(screen.getByText('Note 2')).toBeInTheDocument()
+    expect(screen.getByText('Note 3')).toBeInTheDocument()
+    expect(screen.queryByText('Note 4')).not.toBeInTheDocument()
   })
 
   it('rejects an unsupported file type without adding it to the selection', async () => {
@@ -244,7 +384,7 @@ describe('CreateAnalysisPage', () => {
     fireEvent.drop(dropzone, { dataTransfer: { files: [file] } })
 
     expect(await screen.findByRole('alert')).toHaveTextContent('not a supported file type')
-    expect(screen.getByText('0 documents selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(0))).toBeInTheDocument()
   })
 
   it('removes a queued file from the selection', async () => {
@@ -255,11 +395,11 @@ describe('CreateAnalysisPage', () => {
 
     const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
     await user.upload(getFileInput(), file)
-    expect(screen.getByText('1 document selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(1))).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Remove note.txt' }))
 
-    expect(screen.getByText('0 documents selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(0))).toBeInTheDocument()
   })
 
   it('combines existing and newly uploaded documents into a single analysis submission', async () => {
@@ -277,7 +417,7 @@ describe('CreateAnalysisPage', () => {
     await user.type(screen.getByLabelText('Note text'), 'Pasted note text')
     await user.click(screen.getByRole('button', { name: 'Add note' }))
 
-    expect(screen.getByText('4 documents selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(4))).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Create Analysis' }))
 
@@ -344,7 +484,7 @@ describe('CreateAnalysisPage', () => {
     const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
     await user.upload(getFileInput(), file)
 
-    expect(screen.getByText('1 document selected')).toBeInTheDocument()
+    expect(screen.getByText(selectedDocumentsHeading(1))).toBeInTheDocument()
   })
 
   describe('searching and paging existing documents', () => {
