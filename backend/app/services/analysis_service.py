@@ -8,6 +8,7 @@ from app.models.medication_discrepancy import MedicationDiscrepancy
 from app.models.medication_mention import MedicationMention
 from app.models.patient import Patient
 from app.schemas.analysis import AnalysisCompletedSummary, AnalysisCreate
+from app.services.patient_service import ARCHIVED_STATUS
 
 
 class InvalidClinicalDocumentIdsError(Exception):
@@ -122,6 +123,28 @@ def list_analyses_for_patient(db: Session, patient_id: int, limit: int) -> list[
         db.query(Analysis)
         .options(selectinload(Analysis.clinical_documents))
         .filter(Analysis.patient_id == patient_id)
+        .order_by(Analysis.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def list_recent_analyses_for_user(db: Session, user_id: int, limit: int) -> list[Analysis]:
+    # Issue #157: the Dashboard's Recent Analyses feed, the one place an
+    # analysis is shown across every patient a user owns rather than one
+    # patient's own pages. Joins to Patient purely to scope by user_id and
+    # exclude archived patients (the same exclusion list_patients already
+    # applies) - selectinload still eager-loads the patient relationship so
+    # the route can read analysis.patient.first_name/last_name with no
+    # further query.
+    return (
+        db.query(Analysis)
+        .join(Patient, Analysis.patient_id == Patient.id)
+        .options(selectinload(Analysis.patient))
+        .filter(
+            Patient.user_id == user_id,
+            Patient.status != ARCHIVED_STATUS,
+        )
         .order_by(Analysis.id.desc())
         .limit(limit)
         .all()

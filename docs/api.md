@@ -1128,6 +1128,57 @@ Possible error responses
 
 ---
 
+### GET /analyses/recent
+
+Purpose
+
+Issue #157: the Dashboard's Recent Analyses feed. Unlike every other analyses endpoint, this one is **not** nested under `/patients/{patient_id}` - it spans every patient the current user owns, since the Dashboard is a cross-patient entry point, not a single patient's own page. Read-only.
+
+Query parameters
+
+- `limit` (optional, integer, default `10`, minimum `1`, maximum `50`): the maximum number of analyses to return - the same bounds as `GET /patients/{patient_id}/analyses`.
+
+Success response
+
+`200 OK`
+
+```json
+[
+  {
+    "id": 7,
+    "patient_id": 1,
+    "status": "completed",
+    "created_at": "2026-07-12T19:59:14.500000Z",
+    "completed_at": "2026-07-12T19:59:16.112249Z",
+    "error_message": null,
+    "summary": "Reconciliation completed across 2 clinical document(s) with 1 finding(s): 0 high, 1 medium, 0 low severity.",
+    "document_count": 2,
+    "total_findings": 1,
+    "high_severity_findings": 0,
+    "medium_severity_findings": 1,
+    "low_severity_findings": 0,
+    "provider": "gemini",
+    "model_name": "gemini-2.0-flash",
+    "patient": {
+      "id": 1,
+      "first_name": "Jane",
+      "last_name": "Doe"
+    }
+  }
+]
+```
+
+Identical to `AnalysisSummaryResponse` (see `GET /patients/{patient_id}/analyses` above) with one addition: a nested `patient` object (`id`, `first_name`, `last_name` only - just enough to identify whose analysis this is, the same "citation, not the full resource" shape as `ClinicalDocumentSummaryResponse`), since the caller has no `patient_id` in the URL to already know this from. Ordering is by `id` descending, across every patient, for the same reason `GET /patients/{patient_id}/analyses` isn't ordered by `created_at`. Analyses belonging to archived patients are excluded, the same exclusion `GET /patients` already applies to the patient list itself.
+
+An empty list is returned if the user has no analyses across any of their patients yet; this is a normal, successful response, not an error.
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `422 Unprocessable Entity`: `limit` is outside the `1`-`50` range.
+
+---
+
 ## Error Responses
 
 ### 400 Bad Request
@@ -1207,3 +1258,5 @@ Returned by `POST /patients/{patient_id}/analyses` when the configured AI provid
 ## Notes
 
 This API currently supports authentication, application infrastructure, patient management, and patient-scoped clinical document management, medication list management, and AI-generated document summaries persisted as analyses, including listing, retrieval, and deletion of a patient's own analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/patients`, `/patients/{patient_id}/medications`, `/patients/{patient_id}/clinical-documents`, `/patients/{patient_id}/analyses`). Medication, ClinicalDocument, and Analysis are owned solely through `Patient` - `patient_id` is their only ownership column (Sprint 3.5, Issue #133 removed the transitional `user_id` these three tables carried during the migration; see `docs/data-model.md`), and the earlier flat `/medications`, `/clinical-documents`, `/ai/summarize`, and `/ai/analyses` routes no longer exist. `User` is used only for authentication and for owning `Patient` directly. Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.
+
+Issue #157 added the first exception to "every analysis is reached through its patient": `GET /analyses/recent`, a cross-patient feed for the Dashboard's Recent Analyses section, scoped to the current user (via the same `get_current_user` dependency every other endpoint uses) rather than nested under a single `patient_id`.

@@ -4,6 +4,7 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.medication_discrepancy import MedicationDiscrepancyDetailResponse
+from app.schemas.patient import PatientSummaryResponse
 
 
 class AnalysisStatus(str, Enum):
@@ -105,3 +106,13 @@ class AnalysisSummaryResponse(BaseModel):
     low_severity_findings: int
     provider: str | None
     model_name: str | None
+
+
+class RecentAnalysisResponse(AnalysisSummaryResponse):
+    """Issue #157: the Dashboard's Recent Analyses feed is the one place an
+    analysis is ever shown outside a single patient's own pages, so - unlike
+    every other analysis response - the patient it belongs to isn't already
+    established by the URL and has to be identified inline.
+    """
+
+    patient: PatientSummaryResponse
