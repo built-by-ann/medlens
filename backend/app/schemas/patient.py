@@ -32,3 +32,17 @@ class PatientResponse(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime | None
+
+
+class PatientSummaryResponse(BaseModel):
+    """Just enough to identify a patient inline in another resource's
+    response (e.g. which patient a cross-patient analysis belongs to) -
+    the same "nested citation, not the full resource" pattern as
+    ClinicalDocumentSummaryResponse.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    first_name: str
+    last_name: str

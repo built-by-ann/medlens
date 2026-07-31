@@ -22,9 +22,13 @@ function formatDateTime(value: string | null): string | null {
 interface RecentAnalysisCardProps {
   analysis: AnalysisSummary
   onDelete?: (id: number) => Promise<void>
+  // Set only by the Dashboard's cross-patient Recent Analyses feed (Issue
+  // #157) - every other caller already has the patient established by the
+  // page it's on, so this stays undefined (and unrendered) there.
+  patientName?: string
 }
 
-export function RecentAnalysisCard({ analysis, onDelete }: RecentAnalysisCardProps) {
+export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAnalysisCardProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -49,9 +53,15 @@ export function RecentAnalysisCard({ analysis, onDelete }: RecentAnalysisCardPro
     <Card className="p-0">
       <Link
         to={analysisDetailPath(analysis.patient_id, analysis.id)}
-        aria-label={`View analysis from ${createdAt ?? 'an unknown date'}, status: ${statusLabel}`}
+        aria-label={
+          patientName
+            ? `View analysis for ${patientName} from ${createdAt ?? 'an unknown date'}, status: ${statusLabel}`
+            : `View analysis from ${createdAt ?? 'an unknown date'}, status: ${statusLabel}`
+        }
         className="flex flex-col gap-3 rounded-t-lg p-6 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
       >
+        {patientName && <span className="text-sm font-semibold text-slate-900">{patientName}</span>}
+
         <div className="flex flex-wrap items-center justify-between gap-2">
           <AnalysisStatusBadge status={analysis.status} />
           {createdAt && <span className="text-xs text-slate-500">{createdAt}</span>}

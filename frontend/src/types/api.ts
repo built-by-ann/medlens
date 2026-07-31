@@ -37,6 +37,22 @@ export interface AnalysisSummary {
   model_name: string | null
 }
 
+// Just enough to identify a patient inline in another resource's response -
+// e.g. which patient a cross-patient analysis belongs to (Issue #157).
+export interface PatientSummary {
+  id: number
+  first_name: string
+  last_name: string
+}
+
+// The Dashboard's Recent Analyses feed (Issue #157) is the one place an
+// analysis is shown outside a single patient's own pages, so - unlike
+// AnalysisSummary - the patient it belongs to isn't already established by
+// the URL and has to be identified inline.
+export interface RecentAnalysis extends AnalysisSummary {
+  patient: PatientSummary
+}
+
 export interface ClinicalDocument {
   id: number
   patient_id: number

@@ -1,5 +1,10 @@
 import { apiClient } from '@/api/client'
-import type { AnalysisCreateResult, AnalysisDetail, AnalysisSummary } from '@/types/api'
+import type {
+  AnalysisCreateResult,
+  AnalysisDetail,
+  AnalysisSummary,
+  RecentAnalysis,
+} from '@/types/api'
 
 export async function listAnalyses(patientId: number, limit = 10): Promise<AnalysisSummary[]> {
   const response = await apiClient.get<AnalysisSummary[]>(`/patients/${patientId}/analyses`, {
@@ -33,4 +38,14 @@ export async function getAnalysisDetail(
 
 export async function deleteAnalysis(patientId: number, analysisId: number): Promise<void> {
   await apiClient.delete(`/patients/${patientId}/analyses/${analysisId}`)
+}
+
+// Cross-patient, unlike every other function here - the Dashboard's Recent
+// Analyses feed (Issue #157).
+export async function getRecentAnalyses(limit = 3): Promise<RecentAnalysis[]> {
+  const response = await apiClient.get<RecentAnalysis[]>('/analyses/recent', {
+    params: { limit },
+  })
+
+  return response.data
 }

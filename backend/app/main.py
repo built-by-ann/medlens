@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.api.routes.analyses import recent_analyses_router
 from app.api.routes.analyses import router as analyses_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.clinical_documents import router as clinical_documents_router
@@ -46,6 +47,7 @@ app.include_router(clinical_documents_router)
 app.include_router(medications_router)
 app.include_router(patients_router)
 app.include_router(analyses_router)
+app.include_router(recent_analyses_router)
 
 
 @app.get("/")

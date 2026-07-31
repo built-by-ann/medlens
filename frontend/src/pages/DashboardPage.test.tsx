@@ -1,11 +1,12 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { useAuth } from '@/hooks/useAuth'
 import { archivePatient, listPatients } from '@/api/patients'
-import type { Patient } from '@/types/api'
+import { getRecentAnalyses } from '@/api/analyses'
+import type { Patient, RecentAnalysis } from '@/types/api'
 
 vi.mock('@/hooks/useAuth')
 
@@ -19,9 +20,19 @@ vi.mock('@/api/patients', async (importOriginal) => {
   }
 })
 
+vi.mock('@/api/analyses', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/analyses')>()
+
+  return {
+    ...actual,
+    getRecentAnalyses: vi.fn(),
+  }
+})
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedListPatients = vi.mocked(listPatients)
 const mockedArchivePatient = vi.mocked(archivePatient)
+const mockedGetRecentAnalyses = vi.mocked(getRecentAnalyses)
 
 function makePatient(overrides: Partial<Patient>): Patient {
   return {
@@ -35,6 +46,27 @@ function makePatient(overrides: Partial<Patient>): Patient {
     notes: null,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: null,
+    ...overrides,
+  }
+}
+
+function makeRecentAnalysis(overrides: Partial<RecentAnalysis> = {}): RecentAnalysis {
+  return {
+    id: 1,
+    patient_id: 1,
+    status: 'completed',
+    created_at: '2026-01-01T12:00:00Z',
+    completed_at: '2026-01-01T12:05:00Z',
+    error_message: null,
+    summary: 'Reconciliation completed with 1 finding.',
+    document_count: 1,
+    total_findings: 1,
+    high_severity_findings: 1,
+    medium_severity_findings: 0,
+    low_severity_findings: 0,
+    provider: 'gemini',
+    model_name: 'gemini-2.0-flash',
+    patient: { id: 1, first_name: 'Jane', last_name: 'Doe' },
     ...overrides,
   }
 }
@@ -60,7 +92,14 @@ const recentlyUpdatedPatient = makePatient({
 function renderDashboard() {
   return render(
     <MemoryRouter initialEntries={['/dashboard']}>
-      <DashboardPage />
+      <Routes>
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/patients/:patientId/analyses/new" element={<div>Create Analysis stub</div>} />
+        <Route
+          path="/patients/:patientId/analyses/:analysisId"
+          element={<div>Analysis Detail stub</div>}
+        />
+      </Routes>
     </MemoryRouter>,
   )
 }
@@ -69,6 +108,8 @@ describe('DashboardPage', () => {
   beforeEach(() => {
     mockedListPatients.mockReset()
     mockedArchivePatient.mockReset()
+    mockedGetRecentAnalyses.mockReset()
+    mockedGetRecentAnalyses.mockResolvedValue([])
     mockedUseAuth.mockReturnValue({
       user: { id: 1, email: 'a@example.com', name: 'Jane', created_at: '2026-01-01T00:00:00Z' },
       token: 'token',
@@ -106,7 +147,10 @@ describe('DashboardPage', () => {
     mockedListPatients.mockReturnValue(new Promise(() => {}))
     renderDashboard()
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading your patients')
+    // Recent Analyses loads independently and in parallel, so this checks
+    // the specific "Loading your patients" text rather than a bare
+    // role="status" query, which could match either section's spinner.
+    expect(screen.getByText('Loading your patients')).toBeInTheDocument()
   })
 
   it('shows an error state with a retry action', async () => {
@@ -131,9 +175,12 @@ describe('DashboardPage', () => {
       'href',
       '/patients/new',
     )
-    // No search box or quick actions when there is nothing to search or act on.
+    // No search box when there is nothing to search, but Quick Actions
+    // (including "+ New patient") stays visible - it's meant to be reachable
+    // near the top of the Dashboard regardless of whether any patients exist.
     expect(screen.queryByLabelText('Search patients')).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '+ New patient' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '+ New patient' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ New Analysis' })).toBeDisabled()
   })
 
   it('shows recent patients, most recently updated first, with status and updated date', async () => {
@@ -232,7 +279,7 @@ describe('DashboardPage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Archive Jane Doe' }))
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Archive Jane Doe?' })).toBeInTheDocument()
     expect(screen.getByText('Archive Jane Doe?')).toBeInTheDocument()
   })
 
@@ -247,5 +294,122 @@ describe('DashboardPage', () => {
 
     await waitFor(() => expect(mockedArchivePatient).toHaveBeenCalledWith(1))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  describe('starting an analysis from the Dashboard', () => {
+    it('disables + New Analysis when there are no patients yet', async () => {
+      mockedListPatients.mockResolvedValue([])
+      renderDashboard()
+
+      expect(await screen.findByRole('button', { name: '+ New Analysis' })).toBeDisabled()
+    })
+
+    it('opens a searchable patient picker', async () => {
+      mockedListPatients.mockResolvedValue([olderPatient, recentlyUpdatedPatient])
+      const user = userEvent.setup()
+      renderDashboard()
+
+      await user.click(await screen.findByRole('button', { name: '+ New Analysis' }))
+
+      const dialog = screen.getByRole('dialog', { name: 'Start an analysis' })
+      expect(within(dialog).getByRole('button', { name: /Jane Doe/ })).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: /John Smith/ })).toBeInTheDocument()
+    })
+
+    it('filters the patient picker using the same search behavior as Recent Patients', async () => {
+      mockedListPatients.mockResolvedValue([olderPatient, recentlyUpdatedPatient])
+      const user = userEvent.setup()
+      renderDashboard()
+
+      await user.click(await screen.findByRole('button', { name: '+ New Analysis' }))
+      const dialog = screen.getByRole('dialog', { name: 'Start an analysis' })
+
+      await user.type(within(dialog).getByLabelText('Search patients'), 'Smith')
+
+      expect(within(dialog).queryByRole('button', { name: /Jane Doe/ })).not.toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: /John Smith/ })).toBeInTheDocument()
+    })
+
+    it('selecting a patient navigates straight into that patient’s Create Analysis workflow', async () => {
+      mockedListPatients.mockResolvedValue([olderPatient])
+      const user = userEvent.setup()
+      renderDashboard()
+
+      await user.click(await screen.findByRole('button', { name: '+ New Analysis' }))
+      const dialog = screen.getByRole('dialog', { name: 'Start an analysis' })
+      await user.click(within(dialog).getByRole('button', { name: /Jane Doe/ }))
+
+      expect(await screen.findByText('Create Analysis stub')).toBeInTheDocument()
+    })
+
+    it('canceling the picker closes it without navigating anywhere', async () => {
+      mockedListPatients.mockResolvedValue([olderPatient])
+      const user = userEvent.setup()
+      renderDashboard()
+
+      await user.click(await screen.findByRole('button', { name: '+ New Analysis' }))
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(screen.queryByText('Create Analysis stub')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Recent Analyses', () => {
+    it('shows a loading state while recent analyses are being fetched', async () => {
+      mockedListPatients.mockResolvedValue([])
+      mockedGetRecentAnalyses.mockReturnValue(new Promise(() => {}))
+      renderDashboard()
+
+      expect(await screen.findByText('Loading recent analyses')).toBeInTheDocument()
+    })
+
+    it('shows an empty state when there are no analyses yet', async () => {
+      mockedListPatients.mockResolvedValue([])
+      renderDashboard()
+
+      expect(await screen.findByText(/No analyses yet/)).toBeInTheDocument()
+    })
+
+    it('shows an error state with its own retry action', async () => {
+      mockedListPatients.mockResolvedValue([])
+      mockedGetRecentAnalyses.mockRejectedValueOnce({ status: 500, message: 'Server error.' })
+      mockedGetRecentAnalyses.mockResolvedValueOnce([makeRecentAnalysis()])
+      const user = userEvent.setup()
+      renderDashboard()
+
+      expect(await screen.findByText('Server error.')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+      expect(await screen.findByText('Jane Doe', { selector: 'span' })).toBeInTheDocument()
+    })
+
+    it('identifies the patient and links to the Analysis Results page', async () => {
+      mockedListPatients.mockResolvedValue([])
+      mockedGetRecentAnalyses.mockResolvedValue([
+        makeRecentAnalysis({
+          id: 42,
+          patient_id: 7,
+          patient: { id: 7, first_name: 'Jane', last_name: 'Doe' },
+        }),
+      ])
+      renderDashboard()
+
+      const link = await screen.findByRole('link', { name: /View analysis for Jane Doe/ })
+      expect(link).toHaveAttribute('href', '/patients/7/analyses/42')
+      expect(screen.getByText('Jane Doe', { selector: 'span' })).toBeInTheDocument()
+    })
+
+    it('navigates to the Analysis Results page when clicked', async () => {
+      mockedListPatients.mockResolvedValue([])
+      mockedGetRecentAnalyses.mockResolvedValue([makeRecentAnalysis({ id: 42, patient_id: 7 })])
+      const user = userEvent.setup()
+      renderDashboard()
+
+      await user.click(await screen.findByRole('link', { name: /View analysis for Jane Doe/ }))
+
+      expect(await screen.findByText('Analysis Detail stub')).toBeInTheDocument()
+    })
   })
 })

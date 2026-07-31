@@ -1175,3 +1175,99 @@ def test_list_analyses_rejects_limit_out_of_range(client):
         f"/patients/{patient['id']}/analyses?limit=51", headers=_auth_headers(token)
     )
     assert response.status_code == 422
+
+
+def test_recent_analyses_requires_authentication(client):
+    response = client.get("/analyses/recent")
+
+    assert response.status_code == 401
+
+
+def test_recent_analyses_returns_empty_list_when_user_has_no_analyses(client):
+    token = _register_and_login(client, "recentanalysesnone@example.com")
+
+    response = client.get("/analyses/recent", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_recent_analyses_spans_multiple_patients_and_identifies_each_one(client):
+    token = _register_and_login(client, "recentanalysesspan@example.com")
+    patient_a = _create_patient(client, token, first_name="Jane", last_name="Doe").json()
+    patient_b = _create_patient(client, token, first_name="John", last_name="Smith").json()
+    document_a = _create_document(client, token, patient_a["id"])
+    document_b = _create_document(client, token, patient_b["id"])
+
+    analysis_a_id = _create_completed_analysis(client, token, patient_a["id"], document_a["id"])
+    analysis_b_id = _create_completed_analysis(client, token, patient_b["id"], document_b["id"])
+
+    response = client.get("/analyses/recent", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["id"] for item in body] == [analysis_b_id, analysis_a_id]
+
+    by_id = {item["id"]: item for item in body}
+    assert by_id[analysis_a_id]["patient"] == {
+        "id": patient_a["id"],
+        "first_name": "Jane",
+        "last_name": "Doe",
+    }
+    assert by_id[analysis_b_id]["patient"] == {
+        "id": patient_b["id"],
+        "first_name": "John",
+        "last_name": "Smith",
+    }
+
+
+def test_recent_analyses_excludes_another_users_analyses(client):
+    token_a = _register_and_login(client, "recentanalysesownera@example.com")
+    token_b = _register_and_login(client, "recentanalysesownerb@example.com")
+    patient_a = _create_patient(client, token_a).json()
+    document_a = _create_document(client, token_a, patient_a["id"])
+    _create_completed_analysis(client, token_a, patient_a["id"], document_a["id"])
+
+    response = client.get("/analyses/recent", headers=_auth_headers(token_b))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_recent_analyses_excludes_analyses_belonging_to_archived_patients(client):
+    token = _register_and_login(client, "recentanalysesarchived@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    archive_response = client.delete(f"/patients/{patient['id']}", headers=_auth_headers(token))
+    assert archive_response.status_code == 204
+
+    response = client.get("/analyses/recent", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_recent_analyses_respects_limit_query_param(client):
+    token = _register_and_login(client, "recentanalyseslimit@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+
+    for _ in range(3):
+        _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    response = client.get("/analyses/recent?limit=2", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+
+def test_recent_analyses_rejects_limit_out_of_range(client):
+    token = _register_and_login(client, "recentanalyseslimitinvalid@example.com")
+
+    response = client.get("/analyses/recent?limit=0", headers=_auth_headers(token))
+    assert response.status_code == 422
+
+    response = client.get("/analyses/recent?limit=51", headers=_auth_headers(token))
+    assert response.status_code == 422
