@@ -97,7 +97,7 @@ export function MedicationCard({ medication, onEdit, onDelete }: MedicationCardP
             disabled={isSaving}
             onChange={handleChange}
           />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save'}
             </Button>
@@ -118,8 +118,10 @@ export function MedicationCard({ medication, onEdit, onDelete }: MedicationCardP
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
-        <h4 className="text-sm font-semibold text-slate-900">{medication.medication_name}</h4>
-        <div className="flex shrink-0 gap-2">
+        <h4 className="min-w-0 truncate text-sm font-semibold text-slate-900">
+          {medication.medication_name}
+        </h4>
+        <div className="flex shrink-0 flex-wrap gap-2">
           <button
             type="button"
             onClick={startEditing}
@@ -144,7 +146,7 @@ export function MedicationCard({ medication, onEdit, onDelete }: MedicationCardP
         <SummaryStat label="Frequency" value={medication.frequency} />
         <SummaryStat label="Status" value={medication.status} />
       </dl>
-      {medication.notes && <p className="text-sm text-slate-600">{medication.notes}</p>}
+      {medication.notes && <p className="text-sm break-words text-slate-600">{medication.notes}</p>}
       {deleteError && (
         <p role="alert" className="text-sm text-red-600">
           {deleteError}

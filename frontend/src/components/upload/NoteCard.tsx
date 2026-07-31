@@ -66,7 +66,7 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
             value={draftText}
             onChange={(event) => setDraftText(event.target.value)}
             rows={6}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           />
         </div>
         <DocumentTypeSelect
@@ -74,7 +74,7 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
           value={draftDocumentType}
           onChange={setDraftDocumentType}
         />
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={saveEdit} disabled={!draftText.trim()}>
             Save
           </Button>
@@ -93,11 +93,11 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
   return (
     <Card className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-semibold text-slate-900">{displayTitle}</h4>
+        <div className="min-w-0">
+          <h4 className="truncate text-sm font-semibold text-slate-900">{displayTitle}</h4>
           <p className="text-xs text-slate-500">{documentTypeLabel(note.documentType)}</p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           <button
             type="button"
             onClick={startEditing}

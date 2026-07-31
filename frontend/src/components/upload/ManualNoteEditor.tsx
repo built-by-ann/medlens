@@ -43,7 +43,7 @@ export function ManualNoteEditor({ onAdd }: ManualNoteEditorProps) {
           onChange={(event) => setRawText(event.target.value)}
           rows={6}
           placeholder="Paste or type the clinical note text here"
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
         />
       </div>
       <DocumentTypeSelect id="new-note-doctype" value={documentType} onChange={setDocumentType} />

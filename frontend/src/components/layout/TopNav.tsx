@@ -17,11 +17,11 @@ export function TopNav() {
     <header className="border-b border-slate-200 bg-white">
       <nav
         aria-label="Main navigation"
-        className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6"
+        className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6"
       >
         <span className="text-base font-semibold text-slate-900">MedLens</span>
 
-        <ul className="flex items-center gap-1">
+        <ul className="flex flex-wrap items-center gap-1">
           <li>
             <NavLink to={ROUTES.dashboard} className={navLinkClassName}>
               Dashboard

@@ -78,9 +78,9 @@ function MedicationMentionItem({ mention }: { mention: AnalysisMedicationMention
 
   return (
     <li className="rounded-md bg-violet-50 p-3">
-      <p className="text-sm font-medium text-slate-900">{mention.medication_name}</p>
-      {details && <p className="text-xs text-slate-600">{details}</p>}
-      {mention.notes && <p className="mt-1 text-sm text-slate-700">{mention.notes}</p>}
+      <p className="text-sm font-medium break-words text-slate-900">{mention.medication_name}</p>
+      {details && <p className="text-xs break-words text-slate-600">{details}</p>}
+      {mention.notes && <p className="mt-1 text-sm break-words text-slate-700">{mention.notes}</p>}
     </li>
   )
 }
@@ -119,7 +119,10 @@ function FollowUpQuestionsChecklist({ items }: { items: AnalysisInconsistency[] 
             />
             <label
               htmlFor={inputId}
-              className={cn('text-sm text-slate-700', checked && 'text-slate-400 line-through')}
+              className={cn(
+                'min-w-0 break-words text-sm text-slate-700',
+                checked && 'text-slate-400 line-through',
+              )}
             >
               {item.description}
             </label>
@@ -275,7 +278,7 @@ export function AnalysisDetailPage() {
           <div>
             <h3 className="text-sm font-semibold text-slate-900">Summary</h3>
             {analysis.summary ? (
-              <p className="mt-1 text-sm text-slate-700">{analysis.summary}</p>
+              <p className="mt-1 text-sm break-words text-slate-700">{analysis.summary}</p>
             ) : (
               <p className="mt-1 text-sm text-slate-500">
                 No AI summary is available for this analysis.

@@ -65,14 +65,14 @@ export function PatientAnalysesPage() {
       {flashMessage && (
         <div
           role="status"
-          className="flex items-center justify-between gap-3 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
         >
-          <span>{flashMessage}</span>
+          <span className="min-w-0 break-words">{flashMessage}</span>
           <button
             type="button"
             onClick={() => setFlashMessage(null)}
             aria-label="Dismiss notification"
-            className="rounded-md px-1 text-green-700 hover:text-green-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="shrink-0 rounded-md px-1 text-green-700 hover:text-green-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             ✕
           </button>
