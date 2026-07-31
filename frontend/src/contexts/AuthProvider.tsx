@@ -20,6 +20,7 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const [sessionExpiredMessage, setSessionExpiredMessage] = useState<string | null>(null)
   // When there is no stored token there is nothing to restore, so this can
   // be computed synchronously up front rather than always starting at true
   // and flipping to false in an effect a moment later.
@@ -59,6 +60,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setAuthToken(null)
       setToken(null)
       setUser(null)
+      setSessionExpiredMessage('Your session has expired. Please log in again.')
     })
 
     return () => setUnauthorizedHandler(null)
@@ -83,6 +85,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(null)
   }, [])
 
+  const clearSessionExpiredMessage = useCallback(() => setSessionExpiredMessage(null), [])
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -91,8 +95,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isLoading,
       login,
       logout,
+      sessionExpiredMessage,
+      clearSessionExpiredMessage,
     }),
-    [user, token, isLoading, login, logout],
+    [user, token, isLoading, login, logout, sessionExpiredMessage, clearSessionExpiredMessage],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Card } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
+import { FormError } from '@/components/common/FormError'
 import { SummaryStat } from '@/components/common/SummaryStat'
 import { MedicationFields } from '@/components/medications/MedicationFields'
 import {
@@ -85,11 +86,7 @@ export function MedicationCard({ medication, onEdit, onDelete }: MedicationCardP
     return (
       <Card className="flex flex-col gap-4">
         <form onSubmit={handleSave} noValidate className="flex flex-col gap-4">
-          {formError && (
-            <p role="alert" className="text-sm text-red-600">
-              {formError}
-            </p>
-          )}
+          {formError && <FormError message={formError} />}
           <MedicationFields
             idPrefix={`medication-${medication.id}`}
             values={values}
@@ -147,11 +144,7 @@ export function MedicationCard({ medication, onEdit, onDelete }: MedicationCardP
         <SummaryStat label="Status" value={medication.status} />
       </dl>
       {medication.notes && <p className="text-sm break-words text-slate-600">{medication.notes}</p>}
-      {deleteError && (
-        <p role="alert" className="text-sm text-red-600">
-          {deleteError}
-        </p>
-      )}
+      {deleteError && <FormError message={deleteError} />}
     </Card>
   )
 }

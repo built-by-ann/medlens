@@ -128,6 +128,27 @@ describe('useAnalysisPolling', () => {
     expect(result.current.analysis).toBeNull()
   })
 
+  it('retries a failed poll and clears the error once it succeeds', async () => {
+    mockedGetAnalysisDetail
+      .mockRejectedValueOnce({ status: 500, message: 'Server error.' })
+      .mockResolvedValueOnce(makeAnalysis({ status: 'completed' }))
+
+    const { result } = renderHook(() => useAnalysisPolling(42, 7, 1000))
+    await flush()
+
+    expect(result.current.error).toBe('Server error.')
+    expect(mockedGetAnalysisDetail).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      result.current.retry()
+    })
+    await flush()
+
+    expect(result.current.error).toBeNull()
+    expect(result.current.analysis?.status).toBe('completed')
+    expect(mockedGetAnalysisDetail).toHaveBeenCalledTimes(2)
+  })
+
   it('restarts polling when analysisId changes', async () => {
     mockedGetAnalysisDetail.mockResolvedValueOnce(makeAnalysis({ id: 7, status: 'completed' }))
     mockedGetAnalysisDetail.mockResolvedValueOnce(makeAnalysis({ id: 8, status: 'processing' }))

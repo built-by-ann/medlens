@@ -1,8 +1,10 @@
+import { useEffect } from 'react'
 import { Link, useLocation, useNavigate, type Location } from 'react-router-dom'
 import { Card } from '@/components/common/Card'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
+import { FormError } from '@/components/common/FormError'
 import { useAuth } from '@/hooks/useAuth'
 import { useAuthForm } from '@/hooks/useAuthForm'
 import type { ApiError } from '@/api/client'
@@ -44,7 +46,7 @@ function validate(values: FormValues): FormErrors {
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login } = useAuth()
+  const { login, sessionExpiredMessage, clearSessionExpiredMessage } = useAuth()
 
   const { values, errors, formError, setFormError, isSubmitting, updateField, handleSubmit } =
     useAuthForm<FormValues>({
@@ -74,17 +76,26 @@ export function LoginPage() {
       },
     })
 
+  // Surfaces a silent, session-ending logout (the token expired or was
+  // revoked) the one time it's read, through the exact same form-level
+  // message every other login failure already uses - not a separate banner
+  // or toast. Cleared immediately after so it can't reappear on a later
+  // visit to this page.
+  useEffect(() => {
+    if (sessionExpiredMessage) {
+      setFormError(sessionExpiredMessage)
+      clearSessionExpiredMessage()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionExpiredMessage])
+
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-12">
       <div className="flex w-full max-w-sm flex-col gap-6">
         <PageHeader title="Log in" description="Sign in to your MedLens account." />
         <Card>
           <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
-            {formError && (
-              <p role="alert" className="text-sm text-red-600">
-                {formError}
-              </p>
-            )}
+            {formError && <FormError message={formError} />}
 
             <Input
               label="Email"

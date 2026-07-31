@@ -6,6 +6,12 @@ import type { AnalysisDetail } from '@/types/api'
 interface UseAnalysisPollingResult {
   analysis: AnalysisDetail | null
   error: string | null
+  // Re-runs the poll from scratch. A failure here means the status check
+  // itself couldn't be confirmed (e.g. a transient network error) - the
+  // analysis this is polling for may already exist and be fine, so this
+  // only restarts polling rather than creating anything new (contrast
+  // AnalysisProcessingPage's own retry, which calls submit() again).
+  retry: () => void
 }
 
 /**
@@ -28,6 +34,7 @@ export function useAnalysisPolling(
 ): UseAnalysisPollingResult {
   const [analysis, setAnalysis] = useState<AnalysisDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
     if (analysisId === null) {
@@ -44,6 +51,7 @@ export function useAnalysisPolling(
       try {
         const result = await getAnalysisDetail(patientId, analysisId as number)
         if (ignore) return
+        setError(null)
         setAnalysis(result)
 
         if (result.status === 'pending' || result.status === 'processing') {
@@ -61,7 +69,11 @@ export function useAnalysisPolling(
       ignore = true
       clearTimeout(timeoutId)
     }
-  }, [patientId, analysisId, intervalMs])
+  }, [patientId, analysisId, intervalMs, retryCount])
 
-  return { analysis, error }
+  function retry() {
+    setRetryCount((current) => current + 1)
+  }
+
+  return { analysis, error, retry }
 }

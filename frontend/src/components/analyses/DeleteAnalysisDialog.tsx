@@ -1,5 +1,6 @@
 import { useEffect, useRef, type MouseEvent } from 'react'
 import { Button } from '@/components/common/Button'
+import { FormError } from '@/components/common/FormError'
 
 interface DeleteAnalysisTarget {
   id: number
@@ -71,11 +72,7 @@ export function DeleteAnalysisDialog({
             This action permanently removes the analysis and its associated reconciliation findings.
             This cannot be undone.
           </p>
-          {error && (
-            <p role="alert" className="text-sm text-red-600">
-              {error}
-            </p>
-          )}
+          {error && <FormError message={error} />}
           <div className="flex flex-wrap justify-end gap-2">
             <button
               ref={cancelButtonRef}

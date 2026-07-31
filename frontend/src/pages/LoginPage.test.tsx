@@ -40,6 +40,8 @@ describe('LoginPage', () => {
       isLoading: false,
       login,
       logout: vi.fn(),
+      sessionExpiredMessage: null,
+      clearSessionExpiredMessage: vi.fn(),
     })
   })
 
@@ -105,6 +107,33 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText('Email')).not.toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByLabelText('Password')).not.toHaveAttribute('aria-invalid', 'true')
     expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('shows a session-expired message once, from a silent background logout, then clears it', async () => {
+    const clearSessionExpiredMessage = vi.fn()
+    mockedUseAuth.mockReturnValue({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+      login,
+      logout: vi.fn(),
+      sessionExpiredMessage: 'Your session has expired. Please log in again.',
+      clearSessionExpiredMessage,
+    })
+
+    renderLoginPage()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your session has expired. Please log in again.',
+    )
+    expect(clearSessionExpiredMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows no form-level error when there is no session-expired message', () => {
+    renderLoginPage()
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('disables the submit button and inputs while submitting', async () => {

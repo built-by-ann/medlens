@@ -50,6 +50,8 @@ describe('ProtectedRoute', () => {
       isLoading: true,
       login: vi.fn(),
       logout: vi.fn(),
+      sessionExpiredMessage: null,
+      clearSessionExpiredMessage: vi.fn(),
     })
 
     renderProtected()
@@ -67,6 +69,8 @@ describe('ProtectedRoute', () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      sessionExpiredMessage: null,
+      clearSessionExpiredMessage: vi.fn(),
     })
 
     renderProtected('/dashboard')
@@ -83,6 +87,8 @@ describe('ProtectedRoute', () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      sessionExpiredMessage: null,
+      clearSessionExpiredMessage: vi.fn(),
     })
 
     renderProtected()

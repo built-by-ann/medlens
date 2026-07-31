@@ -8,6 +8,7 @@ import { SummaryStat } from '@/components/common/SummaryStat'
 import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { AnalysisStatusBadge } from '@/components/analyses/AnalysisStatusBadge'
 import { MedicationDiscrepancyCard } from '@/components/analyses/MedicationDiscrepancyCard'
+import { AnalysisFailureNotice } from '@/components/analyses/AnalysisFailureNotice'
 import { DeleteAnalysisDialog } from '@/components/analyses/DeleteAnalysisDialog'
 import { usePatient } from '@/hooks/usePatient'
 import { useAnalysisDetail } from '@/hooks/useAnalysisDetail'
@@ -250,8 +251,8 @@ export function AnalysisDetailPage() {
       />
 
       {analysis.status === 'failed' && analysis.error_message && (
-        <Card role="alert" className="border-l-4 border-l-red-500">
-          <p className="text-sm text-red-600">{analysis.error_message}</p>
+        <Card className="border-l-4 border-l-red-500">
+          <AnalysisFailureNotice message={analysis.error_message} />
         </Card>
       )}
 
