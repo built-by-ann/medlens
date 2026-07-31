@@ -29,7 +29,7 @@ export function RecentDocumentCard({ document }: RecentDocumentCardProps) {
         aria-label={`${isExpanded ? 'Hide' : 'View'} ${document.title}`}
         className="flex w-full cursor-pointer flex-col gap-1 rounded-lg p-4 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
       >
-        <h4 className="text-sm font-semibold text-slate-900">{document.title}</h4>
+        <h4 className="w-full truncate text-sm font-semibold text-slate-900">{document.title}</h4>
         <p className="text-xs text-slate-500">
           {documentTypeLabel(document.document_type)} · {formatDate(document.created_at)}
         </p>

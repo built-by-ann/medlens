@@ -50,8 +50,8 @@ export function ClinicalDocumentCard({ document, onDelete }: ClinicalDocumentCar
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-semibold text-slate-900">{document.title}</h4>
+        <div className="min-w-0">
+          <h4 className="truncate text-sm font-semibold text-slate-900">{document.title}</h4>
           <p className="text-xs text-slate-500">
             {documentTypeLabel(document.document_type)} · {formatDate(document.created_at)}
             {document.file_type &&
@@ -60,7 +60,7 @@ export function ClinicalDocumentCard({ document, onDelete }: ClinicalDocumentCar
             {analysisCountLabel(document.analysis_count)}
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setIsExpanded((current) => !current)}

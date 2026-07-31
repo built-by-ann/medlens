@@ -184,8 +184,8 @@ export function CreateAnalysisPage() {
                             onChange={() => toggleExistingDocument(document.id)}
                             className="mt-1 h-4 w-4 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                           />
-                          <span className="flex flex-col gap-0.5">
-                            <span className="text-sm font-semibold text-slate-900">
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className="text-sm font-semibold break-words text-slate-900">
                               {document.title}
                             </span>{' '}
                             <span className="text-xs text-slate-500">
@@ -276,7 +276,7 @@ export function CreateAnalysisPage() {
                     key={document.id}
                     className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <span>
+                    <span className="min-w-0 break-words">
                       <span className="font-medium text-slate-900">{document.title}</span>{' '}
                       <span className="text-xs text-slate-500">
                         ({documentTypeLabel(document.document_type)}, already on file)

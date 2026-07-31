@@ -72,7 +72,7 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
         )}
 
         {analysis.status === 'failed' && analysis.error_message && (
-          <p className="text-sm text-red-600">{analysis.error_message}</p>
+          <p className="text-sm break-words text-red-600">{analysis.error_message}</p>
         )}
 
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -91,9 +91,9 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
       </Link>
 
       {onDelete && (
-        <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-6 py-3">
           {deleteError ? (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="min-w-0 break-words text-sm text-red-600">
               {deleteError}
             </p>
           ) : (
@@ -104,7 +104,7 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
             onClick={handleDelete}
             disabled={isDeleting}
             aria-label={`Delete analysis from ${createdAt ?? 'an unknown date'}`}
-            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isDeleting ? 'Removing...' : 'Delete'}
           </button>

@@ -28,8 +28,8 @@ export function MedicationDiscrepancyCard({ discrepancy }: MedicationDiscrepancy
   return (
     <Card className={cn('flex flex-col gap-3', SEVERITY_BORDER_STYLES[discrepancy.severity])}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h4 className="text-sm font-semibold text-slate-900">{medicationName}</h4>
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold break-words text-slate-900">{medicationName}</h4>
           <p className="text-xs text-slate-500">
             {discrepancyTypeLabel(discrepancy.discrepancy_type)}
           </p>
@@ -41,7 +41,7 @@ export function MedicationDiscrepancyCard({ discrepancy }: MedicationDiscrepancy
       </div>
 
       {discrepancy.ai_explanation && (
-        <p className="text-sm text-slate-700">{discrepancy.ai_explanation}</p>
+        <p className="text-sm break-words text-slate-700">{discrepancy.ai_explanation}</p>
       )}
 
       {(discrepancy.expected_value || discrepancy.observed_value) && (
@@ -56,7 +56,7 @@ export function MedicationDiscrepancyCard({ discrepancy }: MedicationDiscrepancy
       )}
 
       {discrepancy.recommendation && (
-        <p className="text-sm text-slate-600">
+        <p className="text-sm break-words text-slate-600">
           <span className="font-medium">Recommendation: </span>
           {discrepancy.recommendation}
         </p>
@@ -69,18 +69,18 @@ export function MedicationDiscrepancyCard({ discrepancy }: MedicationDiscrepancy
 
         {discrepancy.medication_mention ? (
           <div className="mt-2 flex flex-col gap-1 rounded-md bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs break-words text-slate-500">
               Source: {discrepancy.medication_mention.clinical_document.title} (
               {documentTypeLabel(discrepancy.medication_mention.clinical_document.document_type)})
             </p>
             {discrepancy.medication_mention.context_text && (
-              <p className="text-sm whitespace-pre-wrap text-slate-700">
+              <p className="text-sm break-words whitespace-pre-wrap text-slate-700">
                 &ldquo;{discrepancy.medication_mention.context_text}&rdquo;
               </p>
             )}
           </div>
         ) : discrepancy.medication ? (
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm break-words text-slate-600">
             Currently on the medication list: {discrepancy.medication.medication_name},{' '}
             {discrepancy.medication.dose}, {discrepancy.medication.route},{' '}
             {discrepancy.medication.frequency} ({discrepancy.medication.status}).

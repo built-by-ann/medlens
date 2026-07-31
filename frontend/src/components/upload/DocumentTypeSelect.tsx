@@ -22,7 +22,7 @@ export function DocumentTypeSelect({
         id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-md border border-slate-300 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
       >
         {DOCUMENT_TYPES.map((type) => (
           <option key={type.value} value={type.value}>

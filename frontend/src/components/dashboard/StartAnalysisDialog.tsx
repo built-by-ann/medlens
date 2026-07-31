@@ -57,7 +57,7 @@ export function StartAnalysisDialog({
       aria-labelledby="start-analysis-heading"
       onClose={onClose}
       onClick={handleBackdropClick}
-      className="fixed inset-0 m-auto h-fit max-h-[80vh] w-full max-w-md overflow-y-auto rounded-lg border border-slate-200 p-6 shadow-lg backdrop:bg-slate-900/40"
+      className="fixed inset-0 m-auto h-fit max-h-[80vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg border border-slate-200 p-6 shadow-lg backdrop:bg-slate-900/40"
     >
       {isOpen && (
         <div className="flex flex-col gap-4">

@@ -107,7 +107,7 @@ export function PatientOverviewPage() {
             title={`${patient.first_name} ${patient.last_name}`}
             description="Patient overview"
             actions={
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Link
                   to={patientEditPath(patient.id)}
                   className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
@@ -149,7 +149,7 @@ export function PatientOverviewPage() {
           </nav>
 
           <section aria-labelledby="documents-heading" className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="documents-heading" className="text-lg font-semibold text-slate-900">
                 Recent clinical documents
               </h2>
@@ -184,7 +184,7 @@ export function PatientOverviewPage() {
           </section>
 
           <section aria-labelledby="recent-analyses-heading" className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="recent-analyses-heading" className="text-lg font-semibold text-slate-900">
                 Recent analyses
               </h2>
@@ -217,7 +217,7 @@ export function PatientOverviewPage() {
           </section>
 
           <section aria-labelledby="medications-heading" className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="medications-heading" className="text-lg font-semibold text-slate-900">
                 Medications
               </h2>

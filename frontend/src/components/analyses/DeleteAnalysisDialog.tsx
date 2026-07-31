@@ -57,7 +57,7 @@ export function DeleteAnalysisDialog({
       aria-labelledby="delete-analysis-heading"
       onClose={onCancel}
       onClick={handleBackdropClick}
-      className="fixed inset-0 m-auto h-fit w-full max-w-sm rounded-lg border border-slate-200 p-6 shadow-lg backdrop:bg-slate-900/40"
+      className="fixed inset-0 m-auto h-fit w-[calc(100%-2rem)] max-w-sm rounded-lg border border-slate-200 p-6 shadow-lg backdrop:bg-slate-900/40"
     >
       {target && (
         <div className="flex flex-col gap-4">
@@ -76,7 +76,7 @@ export function DeleteAnalysisDialog({
               {error}
             </p>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <button
               ref={cancelButtonRef}
               type="button"
