@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
@@ -56,6 +56,7 @@ export function CreateAnalysisPage() {
     handleFilesSelected,
     handleRemoveFile,
     handleFileDocumentTypeChange,
+    handleFileTitleChange,
     handleAddNote,
     handleUpdateNote,
     handleRemoveNote,
@@ -235,19 +236,38 @@ export function CreateAnalysisPage() {
             {fileError}
           </p>
         )}
+        <UploadedFileList
+          files={files}
+          onRemove={handleRemoveFile}
+          onDocumentTypeChange={handleFileDocumentTypeChange}
+          onTitleChange={handleFileTitleChange}
+          existingDocumentTitles={documents.map((document) => document.title)}
+        />
         <ManualNoteEditor onAdd={handleAddNote} />
       </section>
 
       <section aria-labelledby="selected-documents-heading" className="flex flex-col gap-4">
-        <h2 id="selected-documents-heading" className="text-lg font-semibold text-slate-900">
+        <h2
+          id="selected-documents-heading"
+          aria-live="polite"
+          className="text-lg font-semibold text-slate-900"
+        >
           Selected Documents ({totalSelectedCount})
         </h2>
 
-        {totalSelectedCount === 0 ? (
+        {totalSelectedCount === 0 && (
           <p className="text-sm text-slate-500">
             No documents selected yet. Check an existing document above, or upload a new one.
           </p>
-        ) : (
+        )}
+
+        {totalSelectedCount > 0 && selectedExistingDocuments.length === 0 && notes.length === 0 && (
+          <p className="text-sm text-slate-500">
+            Uploaded files are listed above, in Upload Additional Documents.
+          </p>
+        )}
+
+        {(selectedExistingDocuments.length > 0 || notes.length > 0) && (
           <div className="flex flex-col gap-4">
             {selectedExistingDocuments.length > 0 && (
               <ul className="flex flex-col gap-2">
@@ -275,17 +295,16 @@ export function CreateAnalysisPage() {
               </ul>
             )}
 
-            <UploadedFileList
-              files={files}
-              onRemove={handleRemoveFile}
-              onDocumentTypeChange={handleFileDocumentTypeChange}
-            />
-
             {notes.length > 0 && (
               <ul className="flex flex-col gap-3">
-                {notes.map((note) => (
+                {notes.map((note, index) => (
                   <li key={note.id}>
-                    <NoteCard note={note} onUpdate={handleUpdateNote} onRemove={handleRemoveNote} />
+                    <NoteCard
+                      note={note}
+                      position={index + 1}
+                      onUpdate={handleUpdateNote}
+                      onRemove={handleRemoveNote}
+                    />
                   </li>
                 ))}
               </ul>
@@ -298,9 +317,9 @@ export function CreateAnalysisPage() {
         <Button onClick={handleCreateAnalysis} disabled={totalSelectedCount === 0}>
           Create Analysis
         </Button>
-        <p aria-live="polite" className="text-sm text-slate-600">
-          {totalSelectedCount} document{totalSelectedCount === 1 ? '' : 's'} selected
-        </p>
+        <Link to={patientDetailPath(patient.id)} className="text-sm text-red-600 hover:underline">
+          Cancel
+        </Link>
       </div>
     </div>
   )

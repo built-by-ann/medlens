@@ -16,7 +16,7 @@ export function NewPatientPage() {
     <div className="flex flex-col gap-6">
       <PageHeader title="New patient" description="Add a patient to start tracking their care." />
       <PatientForm submitLabel="Create patient" onSubmit={handleSubmit} />
-      <Link to={ROUTES.patients} className="self-start text-sm text-slate-600 hover:underline">
+      <Link to={ROUTES.patients} className="self-start text-sm text-red-600 hover:underline">
         Cancel
       </Link>
     </div>
