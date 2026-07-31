@@ -37,18 +37,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return
     }
 
+    // StrictMode double-invokes this effect in dev, firing two concurrent
+    // getCurrentUser() calls. Without this guard, a stale call's rejection
+    // (e.g. a transient blip) would clear the token even after the other,
+    // newer call already succeeded and restored the session - leaving
+    // `user` set (so the UI looks logged in) while apiClient's token is
+    // null (so every subsequent request 401s with no Authorization header
+    // at all). ignore makes only the effect run's own outcome apply.
+    let ignore = false
+
     setAuthToken(storedToken)
 
     getCurrentUser()
       .then((currentUser) => {
+        if (ignore) return
         setToken(storedToken)
         setUser(currentUser)
       })
       .catch(() => {
+        if (ignore) return
         clearStoredToken()
         setAuthToken(null)
       })
-      .finally(() => setIsLoading(false))
+      .finally(() => {
+        if (!ignore) setIsLoading(false)
+      })
+
+    return () => {
+      ignore = true
+    }
   }, [])
 
   // A 401 on a request that was sent with a token means the session itself

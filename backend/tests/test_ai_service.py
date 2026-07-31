@@ -104,6 +104,31 @@ def test_summarize_allows_optional_medication_fields_to_be_omitted():
     assert medication.frequency is None
     assert medication.status is None
     assert medication.notes is None
+    assert medication.source_note is None
+
+
+def test_summarize_parses_source_note_per_medication():
+    # Issue #152: the same medication can legitimately appear more than
+    # once, each tagged with a different source note, when it's mentioned
+    # in more than one of the selected documents.
+    response = json.dumps(
+        {
+            "medications": [
+                {"name": "Lisinopril", "dosage": "10 mg", "source_note": 1},
+                {"name": "Lisinopril", "dosage": "20 mg", "source_note": 2},
+            ],
+            "possible_inconsistencies": [],
+            "summary": "Summary.",
+        }
+    )
+    provider = FakeProvider(response_text=response)
+    service = AISummaryService(provider)
+
+    result = service.summarize(["Note one text.", "Note two text."])
+
+    first, second = result.clinical_summary.medications
+    assert first.source_note == 1
+    assert second.source_note == 2
 
 
 def test_summarize_builds_a_prompt_from_all_notes():

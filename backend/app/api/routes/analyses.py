@@ -25,6 +25,7 @@ from app.services.analysis_service import (
     list_recent_analyses_for_user,
     mark_analysis_failed,
     mark_analysis_processing,
+    ordered_clinical_documents,
 )
 
 router = APIRouter(prefix="/patients/{patient_id}/analyses", tags=["analyses"])
@@ -71,7 +72,12 @@ def summarize_clinical_documents(
     try:
         mark_analysis_processing(db, analysis)
 
-        clinical_notes = [document.raw_text for document in analysis.clinical_documents]
+        # ordered_clinical_documents fixes the "Note N" numbering the prompt
+        # uses (app/ai/prompts.py) to a reproducible order - the same order
+        # reconcile_ai_extracted_medications uses afterward to map each
+        # medication's reported source note back to a real document id
+        # (Issue #152).
+        clinical_notes = [document.raw_text for document in ordered_clinical_documents(analysis)]
         result = ai_summary_service.summarize(clinical_notes)
 
         persist_analysis_result(

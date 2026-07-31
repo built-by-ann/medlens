@@ -68,7 +68,7 @@ No changes are needed to `AISummaryService`, the prompt template, the API route,
 
 ## Prompt
 
-The summary prompt is centralized in `prompts.py` as `SUMMARY_PROMPT_TEMPLATE`, built by `build_summary_prompt(clinical_notes: list[str])`. The prompt instructs the model to return a single JSON object with three fields: `medications` (one entry per medication mentioned, with name, dosage, route, frequency, status, and notes), `possible_inconsistencies` (a list of plain-language descriptions of places where the notes disagree with each other, without attempting to resolve the disagreement), and `summary` (a short, clinically focused summary limited to medication-related information). The field names in the prompt match the `ClinicalSummary` schema exactly, so the shape the model is asked for and the shape that is validated are defined only once, in `schemas.py`.
+The summary prompt is centralized in `prompts.py` as `SUMMARY_PROMPT_TEMPLATE`, built by `build_summary_prompt(clinical_notes: list[str])`. Each note is numbered in the prompt ("Note 1:", "Note 2:", ...) in the order it is passed in. The prompt instructs the model to return a single JSON object with three fields: `medications` (one entry per medication *per note it is mentioned in* - the same medication mentioned in more than one note gets a separate entry for each, with name, dosage, route, frequency, status, notes, and `source_note`, the 1-indexed number of the note that entry came from), `possible_inconsistencies` (a list of plain-language descriptions of places where the notes disagree with each other, without attempting to resolve the disagreement), and `summary` (a short, clinically focused summary limited to medication-related information). The field names in the prompt match the `ClinicalSummary` schema exactly, so the shape the model is asked for and the shape that is validated are defined only once, in `schemas.py`. `source_note` is what lets each persisted `MedicationMention` be attached to its true source document instead of a placeholder (Issue #152; see `docs/architecture.md`'s Analysis Creation Pipeline).
 
 The provider also requests JSON output using Gemini's structured output support (`response_mime_type="application/json"` on `GenerateContentConfig`), so the response is constrained to well-formed JSON at the API level, not only by the wording of the prompt. This does not pin down the exact JSON shape at the SDK level (`response_schema` is not set); the shape is described in the prompt text and enforced afterward by `ClinicalSummary`, so the schema does not need to be defined twice.
 
@@ -86,6 +86,7 @@ Medication
     frequency: str | None
     status: str | None
     notes: str | None
+    source_note: int | None
 
 ClinicalSummary
     medications: list[Medication]

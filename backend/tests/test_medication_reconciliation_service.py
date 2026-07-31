@@ -16,10 +16,13 @@ from app.schemas.medication_discrepancy import (
     DiscrepancyType,
     MedicationDiscrepancyResponse,
 )
-from app.services.analysis_service import InvalidClinicalDocumentIdsError
+from app.ai.schemas import Medication as AIExtractedMedication
+from app.schemas.analysis import AnalysisCreate
+from app.services.analysis_service import InvalidClinicalDocumentIdsError, create_analysis
 from app.services.medication_reconciliation_service import (
     SEVERITY_BY_DISCREPANCY_TYPE,
     build_discrepancy_findings,
+    reconcile_ai_extracted_medications,
     run_medication_reconciliation,
 )
 
@@ -545,6 +548,154 @@ def test_multiple_discrepancy_types_in_a_single_run(db):
         findings_by_type[DiscrepancyType.MISSING_FROM_MEDICATION_LIST].severity
         == DiscrepancySeverity.HIGH
     )
+
+
+# --- Document provenance tests (reconcile_ai_extracted_medications, Issue #152) ---
+
+
+def _ai_medication(name="Lisinopril", source_note=None, **overrides):
+    payload = {"name": name, "source_note": source_note}
+    payload.update(overrides)
+
+    return AIExtractedMedication(**payload)
+
+
+def test_reconcile_ai_extracted_medications_attaches_mention_to_its_actual_source_document(db):
+    user = _create_user(db, email="provenancesingle@example.com")
+    patient = _create_patient(db, user)
+    document = _create_clinical_document(db, patient)
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
+
+    reconcile_ai_extracted_medications(db, analysis, [_ai_medication(source_note=1)])
+
+    mention = db.query(MedicationMention).filter(MedicationMention.medication_name == "Lisinopril").one()
+    assert mention.clinical_document_id == document.id
+
+
+def test_reconcile_ai_extracted_medications_attributes_each_medication_to_its_own_document(db):
+    # Two distinct medications, each mentioned in a different one of the two
+    # selected documents - the true-provenance case Issue #148's placeholder
+    # could never represent correctly.
+    user = _create_user(db, email="provenancemulti@example.com")
+    patient = _create_patient(db, user)
+    document_a = _create_clinical_document(db, patient, title="Visit Note")
+    document_b = _create_clinical_document(db, patient, title="Discharge Summary")
+    analysis = create_analysis(
+        db, patient, AnalysisCreate(clinical_document_ids=[document_a.id, document_b.id])
+    )
+
+    reconcile_ai_extracted_medications(
+        db,
+        analysis,
+        [
+            _ai_medication(name="Lisinopril", source_note=1),
+            _ai_medication(name="Metformin", source_note=2),
+        ],
+    )
+
+    lisinopril = db.query(MedicationMention).filter_by(medication_name="Lisinopril").one()
+    metformin = db.query(MedicationMention).filter_by(medication_name="Metformin").one()
+    assert lisinopril.clinical_document_id == document_a.id
+    assert metformin.clinical_document_id == document_b.id
+
+
+def test_reconcile_ai_extracted_medications_attributes_repeated_medication_to_each_document(db):
+    # The same medication mentioned in both selected documents becomes two
+    # MedicationMention rows, each attached to its own real source document -
+    # not collapsed onto a single document the way the old placeholder did.
+    user = _create_user(db, email="provenancerepeated@example.com")
+    patient = _create_patient(db, user)
+    document_a = _create_clinical_document(db, patient, title="Visit Note")
+    document_b = _create_clinical_document(db, patient, title="Follow-up Note")
+    analysis = create_analysis(
+        db, patient, AnalysisCreate(clinical_document_ids=[document_a.id, document_b.id])
+    )
+
+    reconcile_ai_extracted_medications(
+        db,
+        analysis,
+        [
+            _ai_medication(name="Lisinopril", dosage="10 mg", source_note=1),
+            _ai_medication(name="Lisinopril", dosage="20 mg", source_note=2),
+        ],
+    )
+
+    mentions = {
+        mention.dose: mention.clinical_document_id
+        for mention in db.query(MedicationMention).filter_by(medication_name="Lisinopril").all()
+    }
+    assert mentions == {"10 mg": document_a.id, "20 mg": document_b.id}
+
+
+def test_reconcile_ai_extracted_medications_falls_back_to_lowest_id_document_when_source_note_missing(
+    db,
+):
+    user = _create_user(db, email="provenancefallbackmissing@example.com")
+    patient = _create_patient(db, user)
+    document_a = _create_clinical_document(db, patient, title="Visit Note")
+    document_b = _create_clinical_document(db, patient, title="Discharge Summary")
+    analysis = create_analysis(
+        db, patient, AnalysisCreate(clinical_document_ids=[document_a.id, document_b.id])
+    )
+    lowest_id_document = min(document_a, document_b, key=lambda document: document.id)
+
+    reconcile_ai_extracted_medications(db, analysis, [_ai_medication(source_note=None)])
+
+    mention = db.query(MedicationMention).filter_by(medication_name="Lisinopril").one()
+    assert mention.clinical_document_id == lowest_id_document.id
+
+
+def test_reconcile_ai_extracted_medications_falls_back_to_lowest_id_document_when_source_note_out_of_range(
+    db,
+):
+    user = _create_user(db, email="provenancefallbackinvalid@example.com")
+    patient = _create_patient(db, user)
+    document_a = _create_clinical_document(db, patient, title="Visit Note")
+    document_b = _create_clinical_document(db, patient, title="Discharge Summary")
+    analysis = create_analysis(
+        db, patient, AnalysisCreate(clinical_document_ids=[document_a.id, document_b.id])
+    )
+    lowest_id_document = min(document_a, document_b, key=lambda document: document.id)
+
+    # There are only 2 selected documents - "Note 99" does not exist.
+    reconcile_ai_extracted_medications(db, analysis, [_ai_medication(source_note=99)])
+
+    mention = db.query(MedicationMention).filter_by(medication_name="Lisinopril").one()
+    assert mention.clinical_document_id == lowest_id_document.id
+
+
+def test_reconcile_ai_extracted_medications_still_runs_reconciliation_against_correctly_attributed_mentions(
+    db,
+):
+    # Confirms build_discrepancy_findings needed no change: it already
+    # groups mentions of the same medication name together regardless of
+    # which document each came from.
+    user = _create_user(db, email="provenancereconciles@example.com")
+    patient = _create_patient(db, user)
+    document_a = _create_clinical_document(db, patient, title="Visit Note")
+    document_b = _create_clinical_document(db, patient, title="Discharge Summary")
+    _create_medication(db, patient, medication_name="Lisinopril", dose="10 mg")
+    analysis = create_analysis(
+        db, patient, AnalysisCreate(clinical_document_ids=[document_a.id, document_b.id])
+    )
+
+    counts = reconcile_ai_extracted_medications(
+        db,
+        analysis,
+        [_ai_medication(name="Lisinopril", dosage="20 mg", source_note=2)],
+    )
+
+    assert counts["total"] == 1
+    assert counts["medium"] == 1
+
+    # create_medication_discrepancies deliberately doesn't commit (a real
+    # caller commits once everything for the analysis is staged - see
+    # persist_analysis_result); this test stands in for that caller.
+    db.commit()
+
+    discrepancy = db.query(MedicationDiscrepancy).filter_by(analysis_id=analysis.id).one()
+    mention = db.get(MedicationMention, discrepancy.medication_mention_id)
+    assert mention.clinical_document_id == document_b.id
 
 
 # --- Orchestration tests (run_medication_reconciliation) ---
