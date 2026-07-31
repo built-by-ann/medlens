@@ -4,9 +4,16 @@ import type { QueuedFile } from '@/hooks/useCreateAnalysis'
 import { isDuplicateFile } from '@/utils/queuedFiles'
 import {
   isSupportedFileType,
+  isCsv,
   SUPPORTED_FILE_EXTENSIONS,
   DEFAULT_DOCUMENT_TYPE,
 } from '@/api/clinicalDocuments'
+
+// A CSV queued here is overwhelmingly a medication list (that's the only
+// CSV format this app's medication import already understands), so this
+// saves the provider a manual dropdown change in the common case - still
+// freely overridable via DocumentTypeSelect like any other file.
+const DEFAULT_CSV_DOCUMENT_TYPE = 'medication_list'
 
 interface UseDocumentQueueResult {
   files: QueuedFile[]
@@ -60,7 +67,11 @@ export function useDocumentQueue(): UseDocumentQueueResult {
       ...current,
       ...supported
         .filter((file) => !isDuplicateFile(current, file))
-        .map((file) => ({ id: nextFileId.current++, file, documentType: DEFAULT_DOCUMENT_TYPE })),
+        .map((file) => ({
+          id: nextFileId.current++,
+          file,
+          documentType: isCsv(file) ? DEFAULT_CSV_DOCUMENT_TYPE : DEFAULT_DOCUMENT_TYPE,
+        })),
     ])
   }
 

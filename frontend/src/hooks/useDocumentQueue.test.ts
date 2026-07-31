@@ -29,6 +29,18 @@ describe('useDocumentQueue', () => {
     expect(result.current.fileError).toBeNull()
   })
 
+  it('queues a supported .csv file, defaulting its document type to Medication list', () => {
+    const { result } = renderHook(() => useDocumentQueue())
+
+    act(() => {
+      result.current.handleFilesSelected([makeFile('medications.csv', 5, 'text/csv')])
+    })
+
+    expect(result.current.files).toHaveLength(1)
+    expect(result.current.files[0]).toMatchObject({ documentType: 'medication_list' })
+    expect(result.current.fileError).toBeNull()
+  })
+
   it('rejects an unsupported file type and does not queue it', () => {
     const { result } = renderHook(() => useDocumentQueue())
 

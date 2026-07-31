@@ -58,6 +58,7 @@ export function EditPatientPage() {
           />
           <Link
             to={patientDetailPath(id)}
+            replace
             className="self-start text-sm text-red-600 hover:underline"
           >
             Cancel

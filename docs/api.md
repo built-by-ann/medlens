@@ -822,6 +822,34 @@ Possible error responses
 
 ---
 
+### POST /patients/{patient_id}/clinical-documents/upload-csv
+
+Purpose
+
+Creates a clinical document belonging to the given patient from an uploaded `.csv` file (Issue #164). The CSV's raw text is stored and treated exactly like an uploaded `.txt` file - it becomes ordinary evidence for AI extraction and medication reconciliation. This endpoint never parses the CSV into rows and never creates or modifies `Medication` records; that is a distinct feature (`POST /patients/{patient_id}/medications/import`, see above), unrelated to this one beyond both accepting a `.csv` file.
+
+Accepted file type
+
+`.csv` file extension or `text/csv` content type.
+
+Validation rules
+
+- The file must decode as valid UTF-8 text.
+- The decoded text must not be empty.
+- No column or row-level validation is performed - unlike `POST /patients/{patient_id}/medications/import`, arbitrary CSV content (or even non-CSV text with a `.csv` name) is accepted, since it is stored as evidence text, not parsed into structured medication rows.
+
+Success response
+
+`201 Created` - same shape as `POST /patients/{patient_id}/clinical-documents`, with `file_name` set to the uploaded file's name and `file_type` set to `"csv"`.
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
+- `422 Unprocessable Entity`: the file is not a `.csv`/`text/csv` file, is not valid UTF-8, or decodes to empty text.
+
+---
+
 ### GET /patients/{patient_id}/clinical-documents
 
 Purpose
@@ -1260,3 +1288,5 @@ Returned by `POST /patients/{patient_id}/analyses` when the configured AI provid
 This API currently supports authentication, application infrastructure, patient management, and patient-scoped clinical document management, medication list management, and AI-generated document summaries persisted as analyses, including listing, retrieval, and deletion of a patient's own analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/patients`, `/patients/{patient_id}/medications`, `/patients/{patient_id}/clinical-documents`, `/patients/{patient_id}/analyses`). Medication, ClinicalDocument, and Analysis are owned solely through `Patient` - `patient_id` is their only ownership column (Sprint 3.5, Issue #133 removed the transitional `user_id` these three tables carried during the migration; see `docs/data-model.md`), and the earlier flat `/medications`, `/clinical-documents`, `/ai/summarize`, and `/ai/analyses` routes no longer exist. `User` is used only for authentication and for owning `Patient` directly. Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.
 
 Issue #157 added the first exception to "every analysis is reached through its patient": `GET /analyses/recent`, a cross-patient feed for the Dashboard's Recent Analyses section, scoped to the current user (via the same `get_current_user` dependency every other endpoint uses) rather than nested under a single `patient_id`.
+
+Two unrelated endpoints both accept a `.csv` file, and are easy to confuse: `POST /patients/{patient_id}/medications/import` (Sprint 3.5) parses the CSV into rows and directly creates `Medication` records, while `POST /patients/{patient_id}/clinical-documents/upload-csv` (Issue #164) stores the CSV's raw text as an ordinary clinical document - evidence for AI extraction and reconciliation, never imported into the patient's medication list. Uploading the same CSV to both is a legitimate, deliberate action (e.g. importing a medication list *and* including it as analysis evidence), not a bug; the two pipelines never call into each other.

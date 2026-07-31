@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.models.patient import Patient
 from app.schemas.clinical_document import ClinicalDocumentCreate, ClinicalDocumentResponse
 from app.services.clinical_document_service import (
+    CSV_FILE_TYPE,
     PDF_FILE_TYPE,
     TXT_FILE_TYPE,
     create_clinical_document,
@@ -135,6 +136,61 @@ def upload_pdf_document(
         raw_text=raw_text,
         file_name=file.filename,
         file_type=PDF_FILE_TYPE,
+    )
+
+
+@router.post(
+    "/upload-csv",
+    response_model=ClinicalDocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def upload_csv_document(
+    document_type: str = Form(min_length=1),
+    title: str = Form(min_length=1),
+    file: UploadFile = File(...),
+    patient: Patient = Depends(get_owned_patient),
+    db: Session = Depends(get_db),
+) -> ClinicalDocumentResponse:
+    # Issue #164: a CSV uploaded here becomes an ordinary clinical document -
+    # evidence for AI extraction and reconciliation - not a medication
+    # import. Deliberately does not call parse_medication_csv /
+    # create_medications_from_rows (app/services/medication_import_service.py,
+    # the /patients/{id}/medications/import route in medications.py); the raw
+    # CSV text is stored and flows through the exact same pipeline as an
+    # uploaded .txt file, with nothing patient-medication-specific about it.
+    is_csv_extension = (file.filename or "").lower().endswith(".csv")
+    is_csv_content_type = file.content_type == "text/csv"
+
+    if not (is_csv_extension or is_csv_content_type):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Only .csv or text/csv files are supported",
+        )
+
+    contents = file.file.read()
+
+    try:
+        raw_text = contents.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="File must be valid UTF-8 encoded text",
+        )
+
+    if not raw_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Uploaded file is empty",
+        )
+
+    return create_clinical_document_from_file(
+        db,
+        patient,
+        document_type=document_type,
+        title=title,
+        raw_text=raw_text,
+        file_name=file.filename,
+        file_type=CSV_FILE_TYPE,
     )
 
 

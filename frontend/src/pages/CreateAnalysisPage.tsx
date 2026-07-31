@@ -317,7 +317,11 @@ export function CreateAnalysisPage() {
         <Button onClick={handleCreateAnalysis} disabled={totalSelectedCount === 0}>
           Create Analysis
         </Button>
-        <Link to={patientDetailPath(patient.id)} className="text-sm text-red-600 hover:underline">
+        <Link
+          to={patientDetailPath(patient.id)}
+          replace
+          className="text-sm text-red-600 hover:underline"
+        >
           Cancel
         </Link>
       </div>
