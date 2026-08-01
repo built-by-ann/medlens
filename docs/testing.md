@@ -27,6 +27,8 @@ pytest -v
 
 The local PostgreSQL container must be running (`docker compose up --build` from `infra/`), since tests connect to it over `localhost:5432`.
 
+`pytest.ini`'s `pythonpath = .` (Issue #54) is what makes `from app... import ...` resolvable inside `tests/conftest.py` for the plain `pytest` command above. Without it, `app` is only importable when pytest happens to be invoked as `python -m pytest` instead - `python -m` prepends the current directory to `sys.path` as a side effect of `-m` itself, which masks the gap during local ad hoc use but doesn't help GitHub Actions or any other caller of the plain `pytest` command this file documents. Discovered when `.github/workflows/backend.yml` ran `pytest -v` for the first time and failed with `ModuleNotFoundError: No module named 'app'` before this line existed.
+
 ---
 
 ## Linting and Formatting (Issue #52)
