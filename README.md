@@ -173,8 +173,9 @@ Planned: - OpenBioLLM - MedGemma
 
 - Docker
 - Docker Compose
+- GitHub Actions (frontend quality checks; backend workflow planned - see `docs/deployment.md`)
 
-Planned: - GitHub Actions - AWS EC2 - AWS S3
+Planned: - AWS EC2 - AWS S3
 
 ## Testing
 

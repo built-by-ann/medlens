@@ -1,0 +1,72 @@
+name: Frontend CI
+
+# Runs on pushes and PRs that touch the frontend (or this workflow file
+# itself), targeting the repo's two long-lived branches - matches how the
+# rest of this repo already branches (feature/* -> develop -> main).
+# Backend-only or docs-only changes don't trigger this at all.
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+
+jobs:
+  quality:
+    name: Lint, typecheck, format, test, build
+    runs-on: ubuntu-latest
+
+    # Every step below runs with frontend/ as its cwd, so commands read the
+    # same way they do when a developer runs them locally (see
+    # docs/frontend.md's "Quality pipeline" section) - no repeated `cd`.
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Matches this repo's local dev environment (no engines field or
+          # .nvmrc exists to read instead - Vite 8/ESLint 10/Vitest 4 all
+          # require at least Node 20.19, and Node 20 is what's actually
+          # been used to develop and verify this project).
+          node-version: "20"
+          # actions/setup-node's built-in npm cache, keyed off the lockfile
+          # hash - no separate cache action needed.
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      # A lockfile already exists and is committed, so `npm ci` (exact,
+      # reproducible install) is correct here, not `npm install`.
+      - name: Install dependencies
+        run: npm ci
+
+      # Every check below is exactly the package.json script a developer
+      # runs locally (see Issue #53 / docs/frontend.md) - never the
+      # underlying tool invoked directly - so there is exactly one place
+      # (package.json) that defines what each check does. A step's failure
+      # stops the job here by default, so lint/typecheck/format/test/build
+      # failures all fail this workflow.
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

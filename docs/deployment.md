@@ -115,14 +115,11 @@ Docker Compose will coordinate communication between services for both local dev
 
 ## Continuous Integration
 
-GitHub Actions will automatically verify code quality for every pull request.
+`.github/workflows/frontend.yml` (Issue #55) runs on every push and pull request to `main`/`develop` that touches the frontend: `npm run lint`, `npm run typecheck`, `npm run format:check`, `npm test`, and `npm run build`, in that order, on `ubuntu-latest` with Node 20. See `docs/frontend.md`'s "Continuous Integration" section for the full breakdown.
 
-Planned checks include:
+Still planned:
 
-- Backend unit tests
-- Frontend tests
-- TypeScript checks
-- Linting
+- Backend lint/test workflow (Issue #56) - `ruff check`, `ruff format --check`, and `pytest` (see `docs/testing.md`), mirroring the frontend workflow.
 - Docker image builds
 
 ---
