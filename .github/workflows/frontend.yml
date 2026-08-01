@@ -28,6 +28,17 @@ jobs:
       run:
         working-directory: frontend
 
+    # src/lib/env.ts throws at module-load time if VITE_API_BASE_URL isn't
+    # set - required so a provider always gets a clear error instead of a
+    # silently broken API client, but it means every test file that
+    # (transitively) imports the API client needs it defined too. Locally
+    # that comes from frontend/.env (gitignored, per .env.example); CI has
+    # no such file, so it's set here instead. Not a secret - tests never
+    # make a real network call, so any well-formed URL works, and this
+    # matches .env.example's own placeholder value.
+    env:
+      VITE_API_BASE_URL: http://localhost:8000
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
