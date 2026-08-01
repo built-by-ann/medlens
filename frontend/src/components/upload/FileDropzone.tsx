@@ -64,14 +64,14 @@ export function FileDropzone({ onFilesSelected, errorId }: FileDropzoneProps) {
       onDrop={handleDrop}
       className={cn(
         'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-10 text-center transition-colors',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600',
-        isDraggingOver ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-slate-400',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring',
+        isDraggingOver ? 'border-primary bg-info/10' : 'border-border hover:border-primary',
       )}
     >
-      <p className="text-sm font-medium text-slate-700">
+      <p className="text-sm font-medium text-foreground">
         Drag and drop files here, or click to browse
       </p>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted">
         Supported formats: {SUPPORTED_FILE_EXTENSIONS.join(', ')}
       </p>
       <input

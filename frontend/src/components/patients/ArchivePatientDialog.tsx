@@ -52,14 +52,14 @@ export function ArchivePatientDialog({
       aria-labelledby="archive-patient-heading"
       onClose={onCancel}
       onClick={handleBackdropClick}
-      className="fixed inset-0 m-auto h-fit w-[calc(100%-2rem)] max-w-sm rounded-lg border border-slate-200 p-6 shadow-lg backdrop:bg-slate-900/40"
+      className="fixed inset-0 m-auto h-fit w-[calc(100%-2rem)] max-w-sm rounded-lg border border-border bg-surface p-6 text-foreground shadow-lg backdrop:bg-black/40"
     >
       {patient && (
         <div className="flex flex-col gap-4">
-          <h2 id="archive-patient-heading" className="text-lg font-semibold text-slate-900">
+          <h2 id="archive-patient-heading" className="text-lg font-semibold text-foreground">
             Archive {patient.first_name} {patient.last_name}?
           </h2>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted">
             This removes {patient.first_name} {patient.last_name} from your active patient list.
             Their record is kept, and you can still open it directly whenever you need to.
           </p>
@@ -69,7 +69,7 @@ export function ArchivePatientDialog({
               type="button"
               onClick={onCancel}
               disabled={isSubmitting}
-              className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md px-4 py-2 text-sm font-medium text-muted hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               Cancel
             </button>
@@ -77,7 +77,7 @@ export function ArchivePatientDialog({
               type="button"
               onClick={onConfirm}
               disabled={isSubmitting}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
             >
               {isSubmitting ? 'Archiving...' : 'Archive patient'}
             </Button>

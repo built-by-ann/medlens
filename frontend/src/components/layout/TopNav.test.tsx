@@ -34,6 +34,7 @@ describe('TopNav', () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })
@@ -49,6 +50,24 @@ describe('TopNav', () => {
     expect(dashboardLink).not.toHaveAttribute('aria-current')
   })
 
+  it('shows a Settings link', () => {
+    mockedUseAuth.mockReturnValue({
+      user,
+      token: 'token',
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      setUser: vi.fn(),
+      sessionExpiredMessage: null,
+      clearSessionExpiredMessage: vi.fn(),
+    })
+
+    renderNav()
+
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
+  })
+
   it('shows a Log out button for an authenticated user, which calls logout when clicked', async () => {
     const logout = vi.fn()
     const testUser = userEvent.setup()
@@ -59,6 +78,7 @@ describe('TopNav', () => {
       isLoading: false,
       login: vi.fn(),
       logout,
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })
@@ -78,6 +98,7 @@ describe('TopNav', () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })

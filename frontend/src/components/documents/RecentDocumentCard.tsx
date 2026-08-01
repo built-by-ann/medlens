@@ -27,10 +27,10 @@ export function RecentDocumentCard({ document }: RecentDocumentCardProps) {
         aria-expanded={isExpanded}
         aria-controls={contentId}
         aria-label={`${isExpanded ? 'Hide' : 'View'} ${document.title}`}
-        className="flex w-full cursor-pointer flex-col gap-1 rounded-lg p-4 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        className="flex w-full cursor-pointer flex-col gap-1 rounded-lg p-4 text-left hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
       >
-        <h4 className="w-full truncate text-sm font-semibold text-slate-900">{document.title}</h4>
-        <p className="text-xs text-slate-500">
+        <h4 className="w-full truncate text-sm font-semibold text-foreground">{document.title}</h4>
+        <p className="text-xs text-muted">
           {documentTypeLabel(document.document_type)} · {formatDate(document.created_at)}
         </p>
       </button>
@@ -38,7 +38,7 @@ export function RecentDocumentCard({ document }: RecentDocumentCardProps) {
       {isExpanded && (
         <p
           id={contentId}
-          className="max-h-64 overflow-y-auto rounded-b-lg bg-slate-50 p-4 text-sm whitespace-pre-wrap text-slate-700"
+          className="max-h-64 overflow-y-auto rounded-b-lg bg-background p-4 text-sm whitespace-pre-wrap text-foreground"
         >
           {document.raw_text}
         </p>

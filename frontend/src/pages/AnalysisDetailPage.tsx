@@ -58,7 +58,7 @@ function countBySeverity(discrepancies: MedicationDiscrepancy[], severity: Discr
 
 function AiGeneratedBadge() {
   return (
-    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
       AI-generated
     </span>
   )
@@ -66,7 +66,7 @@ function AiGeneratedBadge() {
 
 function DeterministicBadge() {
   return (
-    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+    <span className="rounded-full bg-surface-hover px-2 py-0.5 text-xs font-medium text-foreground">
       Deterministic
     </span>
   )
@@ -78,10 +78,10 @@ function MedicationMentionItem({ mention }: { mention: AnalysisMedicationMention
     .join(' · ')
 
   return (
-    <li className="rounded-md bg-violet-50 p-3">
-      <p className="text-sm font-medium break-words text-slate-900">{mention.medication_name}</p>
-      {details && <p className="text-xs break-words text-slate-600">{details}</p>}
-      {mention.notes && <p className="mt-1 text-sm break-words text-slate-700">{mention.notes}</p>}
+    <li className="rounded-md bg-secondary/10 p-3">
+      <p className="text-sm font-medium break-words text-foreground">{mention.medication_name}</p>
+      {details && <p className="text-xs break-words text-muted">{details}</p>}
+      {mention.notes && <p className="mt-1 text-sm break-words text-foreground">{mention.notes}</p>}
     </li>
   )
 }
@@ -116,13 +116,13 @@ function FollowUpQuestionsChecklist({ items }: { items: AnalysisInconsistency[] 
               type="checkbox"
               checked={checked}
               onChange={() => toggle(item.id)}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-violet-600 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+              className="mt-0.5 h-4 w-4 rounded border-border text-secondary focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1"
             />
             <label
               htmlFor={inputId}
               className={cn(
-                'min-w-0 break-words text-sm text-slate-700',
-                checked && 'text-slate-400 line-through',
+                'min-w-0 break-words text-sm text-foreground',
+                checked && 'text-muted line-through',
               )}
             >
               {item.description}
@@ -242,7 +242,7 @@ export function AnalysisDetailPage() {
             <button
               type="button"
               onClick={openDeleteDialog}
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-danger hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             >
               Delete analysis
             </button>
@@ -251,7 +251,7 @@ export function AnalysisDetailPage() {
       />
 
       {analysis.status === 'failed' && analysis.error_message && (
-        <Card className="border-l-4 border-l-red-500">
+        <Card className="border-l-4 border-l-danger">
           <AnalysisFailureNotice message={analysis.error_message} />
         </Card>
       )}
@@ -269,7 +269,7 @@ export function AnalysisDetailPage() {
       */}
       <section aria-labelledby="ai-summary-heading" className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 id="ai-summary-heading" className="text-lg font-semibold text-slate-900">
+          <h2 id="ai-summary-heading" className="text-lg font-semibold text-foreground">
             AI Summary
           </h2>
           <AiGeneratedBadge />
@@ -277,11 +277,11 @@ export function AnalysisDetailPage() {
 
         <Card className="flex flex-col gap-4 border-l-4 border-l-violet-400">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">Summary</h3>
+            <h3 className="text-sm font-semibold text-foreground">Summary</h3>
             {analysis.summary ? (
-              <p className="mt-1 text-sm break-words text-slate-700">{analysis.summary}</p>
+              <p className="mt-1 text-sm break-words text-foreground">{analysis.summary}</p>
             ) : (
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-muted">
                 No AI summary is available for this analysis.
               </p>
             )}
@@ -289,7 +289,7 @@ export function AnalysisDetailPage() {
 
           {medicationMentions.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-900">Medications Mentioned</h3>
+              <h3 className="text-sm font-semibold text-foreground">Medications Mentioned</h3>
               <ul className="mt-2 flex flex-col gap-2">
                 {medicationMentions.map((mention) => (
                   <MedicationMentionItem key={mention.id} mention={mention} />
@@ -300,15 +300,15 @@ export function AnalysisDetailPage() {
 
           {followUpQuestions.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-900">Follow-up Questions</h3>
+              <h3 className="text-sm font-semibold text-foreground">Follow-up Questions</h3>
               <div className="mt-2">
                 <FollowUpQuestionsChecklist items={followUpQuestions} />
               </div>
             </div>
           )}
 
-          <div className="border-t border-slate-200 pt-4">
-            <h3 className="text-xs font-medium tracking-wide text-slate-500 uppercase">
+          <div className="border-t border-border pt-4">
+            <h3 className="text-xs font-medium tracking-wide text-muted uppercase">
               Summary Metadata
             </h3>
             <dl className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -325,7 +325,7 @@ export function AnalysisDetailPage() {
 
       <section aria-labelledby="findings-heading" className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 id="findings-heading" className="text-lg font-semibold text-slate-900">
+          <h2 id="findings-heading" className="text-lg font-semibold text-foreground">
             Medication Reconciliation Findings
           </h2>
           <DeterministicBadge />
@@ -342,10 +342,10 @@ export function AnalysisDetailPage() {
 
         {discrepancies.length === 0 ? (
           <Card role="status" className="flex flex-col items-center gap-2 py-10 text-center">
-            <p className="text-sm font-semibold text-green-700">
+            <p className="text-sm font-semibold text-success">
               No medication inconsistencies were detected.
             </p>
-            <p className="max-w-md text-sm text-slate-600">
+            <p className="max-w-md text-sm text-muted">
               Reconciliation compared the medications extracted from this analysis's documents
               against {patient.first_name}'s medication list and found nothing to flag.
             </p>
@@ -354,7 +354,7 @@ export function AnalysisDetailPage() {
           <div className="flex flex-col gap-6">
             {severityGroups.map((group) => (
               <div key={group.severity} className="flex flex-col gap-3">
-                <h3 className="text-sm font-semibold text-slate-900">
+                <h3 className="text-sm font-semibold text-foreground">
                   {discrepancySeverityLabel(group.severity)} ({group.items.length})
                 </h3>
                 <ul className="flex flex-col gap-4">

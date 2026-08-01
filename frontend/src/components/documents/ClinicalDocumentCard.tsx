@@ -52,8 +52,8 @@ export function ClinicalDocumentCard({ document, onDelete }: ClinicalDocumentCar
     <Card className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h4 className="truncate text-sm font-semibold text-slate-900">{document.title}</h4>
-          <p className="text-xs text-slate-500">
+          <h4 className="truncate text-sm font-semibold text-foreground">{document.title}</h4>
+          <p className="text-xs text-muted">
             {documentTypeLabel(document.document_type)} · {formatDate(document.created_at)}
             {document.file_type &&
               ` · ${FILE_TYPE_LABELS[document.file_type] ?? document.file_type}`}
@@ -67,7 +67,7 @@ export function ClinicalDocumentCard({ document, onDelete }: ClinicalDocumentCar
             onClick={() => setIsExpanded((current) => !current)}
             aria-expanded={isExpanded}
             aria-controls={contentId}
-            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-link hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
             {isExpanded ? 'Hide' : 'View'}
           </button>
@@ -76,7 +76,7 @@ export function ClinicalDocumentCard({ document, onDelete }: ClinicalDocumentCar
             onClick={handleDelete}
             disabled={isDeleting}
             aria-label={`Delete ${document.title}`}
-            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isDeleting ? 'Removing...' : 'Delete'}
           </button>
@@ -86,7 +86,7 @@ export function ClinicalDocumentCard({ document, onDelete }: ClinicalDocumentCar
       {isExpanded && (
         <p
           id={contentId}
-          className="max-h-64 overflow-y-auto rounded-md bg-slate-50 p-3 text-sm whitespace-pre-wrap text-slate-700"
+          className="max-h-64 overflow-y-auto rounded-md bg-background p-3 text-sm whitespace-pre-wrap text-foreground"
         >
           {document.raw_text}
         </p>

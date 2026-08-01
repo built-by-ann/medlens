@@ -6,8 +6,8 @@ interface SummaryStatProps {
 export function SummaryStat({ label, value }: SummaryStatProps) {
   return (
     <div className="flex flex-col gap-0.5">
-      <dt className="text-xs font-medium tracking-wide text-slate-500 uppercase">{label}</dt>
-      <dd className="text-sm font-semibold break-words text-slate-900">{value}</dd>
+      <dt className="text-xs font-medium tracking-wide text-muted uppercase">{label}</dt>
+      <dd className="text-sm font-semibold break-words text-foreground">{value}</dd>
     </div>
   )
 }

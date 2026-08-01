@@ -15,6 +15,23 @@ afterEach(() => {
 // documented jsdom limitation, not a gap in application code. Real browsers
 // already implement all of this natively; this polyfill only exists so
 // components built on the real <dialog> element are testable here.
+// jsdom does not implement window.matchMedia at all - this is, again, a
+// jsdom limitation rather than an application gap. Default to "no
+// preference matched" (light); ThemeProvider's system-preference tests
+// override this per test via vi.stubGlobal to simulate a dark OS setting.
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia
+}
+
 if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.showModal) {
   HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
     this.setAttribute('open', '')

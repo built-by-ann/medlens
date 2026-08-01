@@ -12,18 +12,18 @@ interface EmptyPatientStateProps {
  */
 export function EmptyPatientState({ hasActivePatients }: EmptyPatientStateProps) {
   if (hasActivePatients) {
-    return <p className="text-sm text-slate-500">No patients match your search.</p>
+    return <p className="text-sm text-muted">No patients match your search.</p>
   }
 
   return (
     <Card className="flex flex-col items-center gap-3 py-10 text-center">
-      <h3 className="text-sm font-semibold text-slate-900">No patients yet</h3>
-      <p className="max-w-md text-sm text-slate-600">
+      <h3 className="text-sm font-semibold text-foreground">No patients yet</h3>
+      <p className="max-w-md text-sm text-muted">
         Add your first patient to start tracking their medications, documents, and analyses.
       </p>
       <Link
         to={ROUTES.newPatient}
-        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
       >
         Add a patient
       </Link>

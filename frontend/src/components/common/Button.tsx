@@ -8,7 +8,7 @@ export function Button({ className, type = 'button', ...props }: ButtonProps) {
     <button
       type={type}
       className={cn(
-        'cursor-pointer rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700',
+        'cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover',
         'disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}

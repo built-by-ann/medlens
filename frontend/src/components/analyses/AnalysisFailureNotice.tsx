@@ -17,7 +17,7 @@ interface AnalysisFailureNoticeProps {
  */
 export function AnalysisFailureNotice({ message, className }: AnalysisFailureNoticeProps) {
   return (
-    <p role="alert" className={cn('text-sm break-words text-red-600', className)}>
+    <p role="alert" className={cn('text-sm break-words text-danger', className)}>
       <span className="font-medium">Analysis failed: </span>
       {message}
     </p>

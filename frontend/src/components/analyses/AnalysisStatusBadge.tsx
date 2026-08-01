@@ -5,10 +5,10 @@ import type { AnalysisStatus } from '@/types/api'
 // Status is always communicated via this visible text label, never by
 // badge color alone.
 const STATUS_BADGE_STYLES: Record<AnalysisStatus, string> = {
-  pending: 'bg-slate-100 text-slate-700',
-  processing: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700',
-  failed: 'bg-red-100 text-red-700',
+  pending: 'bg-surface-hover text-foreground',
+  processing: 'bg-info-badge text-badge-foreground',
+  completed: 'bg-success-badge text-badge-foreground',
+  failed: 'bg-danger-badge text-badge-foreground',
 }
 
 interface AnalysisStatusBadgeProps {

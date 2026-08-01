@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
 from app.models.user import User
-from app.schemas.user import UserCreate
+from app.schemas.user import UserCreate, UserUpdate
 
 
 class EmailAlreadyRegisteredError(Exception):
@@ -37,6 +37,29 @@ def create_user(db: Session, user_in: UserCreate) -> User:
     )
 
     db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+
+def update_user(db: Session, user: User, user_in: UserUpdate) -> User:
+    """Applies only the fields the caller actually set (see UserUpdate) -
+    model_fields_set is what distinguishes "email not provided" from "email
+    explicitly set to its current value", so a partial update never
+    clobbers the other field back to None.
+    """
+    updates = user_in.model_dump(exclude_unset=True)
+
+    if "email" in updates and updates["email"] != user.email:
+        if get_user_by_email(db, updates["email"]):
+            raise EmailAlreadyRegisteredError(updates["email"])
+
+        user.email = updates["email"]
+
+    if "name" in updates:
+        user.name = updates["name"]
+
     db.commit()
     db.refresh(user)
 

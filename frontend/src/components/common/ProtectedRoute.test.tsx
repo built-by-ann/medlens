@@ -50,6 +50,7 @@ describe('ProtectedRoute', () => {
       isLoading: true,
       login: vi.fn(),
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })
@@ -69,6 +70,7 @@ describe('ProtectedRoute', () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })
@@ -87,6 +89,7 @@ describe('ProtectedRoute', () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })

@@ -79,7 +79,7 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
           onChange={(event) => setDraftTitle(event.target.value)}
         />
         <div className="flex flex-col gap-1">
-          <label htmlFor={`note-text-${note.id}`} className="text-sm font-medium text-slate-700">
+          <label htmlFor={`note-text-${note.id}`} className="text-sm font-medium text-foreground">
             Note text
           </label>
           <textarea
@@ -89,8 +89,8 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
             rows={6}
             aria-invalid={showTextError ? true : undefined}
             aria-describedby={showTextError ? textErrorId : undefined}
-            className={`w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
-              showTextError ? 'border-red-500' : 'border-slate-300'
+            className={`w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring ${
+              showTextError ? 'border-danger' : 'border-border'
             }`}
           />
           {showTextError && <FormError id={textErrorId} message="Note text is required." />}
@@ -105,7 +105,7 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
           <button
             type="button"
             onClick={() => setIsEditing(false)}
-            className="cursor-pointer rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="cursor-pointer rounded-md px-4 py-2 text-sm font-medium text-muted hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
             Cancel
           </button>
@@ -118,14 +118,14 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
     <Card className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h4 className="truncate text-sm font-semibold text-slate-900">{displayTitle}</h4>
-          <p className="text-xs text-slate-500">{documentTypeLabel(note.documentType)}</p>
+          <h4 className="truncate text-sm font-semibold text-foreground">{displayTitle}</h4>
+          <p className="text-xs text-muted">{documentTypeLabel(note.documentType)}</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <button
             type="button"
             onClick={startEditing}
-            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-link hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
             Edit
           </button>
@@ -133,13 +133,13 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
             type="button"
             onClick={() => onRemove(note.id)}
             aria-label={`Remove ${displayTitle}`}
-            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
             Remove
           </button>
         </div>
       </div>
-      <p className="line-clamp-3 text-sm text-slate-600">{note.rawText}</p>
+      <p className="line-clamp-3 text-sm text-muted">{note.rawText}</p>
     </Card>
   )
 }

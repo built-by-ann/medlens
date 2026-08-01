@@ -19,7 +19,7 @@ export function NewPatientPage() {
       <Link
         to={ROUTES.patients}
         replace
-        className="self-start text-sm text-red-600 hover:underline"
+        className="self-start text-sm text-danger hover:underline"
       >
         Cancel
       </Link>

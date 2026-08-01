@@ -60,17 +60,17 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
             ? `View analysis for ${patientName} from ${createdAt ?? 'an unknown date'}, status: ${statusLabel}`
             : `View analysis from ${createdAt ?? 'an unknown date'}, status: ${statusLabel}`
         }
-        className="flex flex-col gap-3 rounded-t-lg p-6 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        className="flex flex-col gap-3 rounded-t-lg p-6 hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
       >
-        {patientName && <span className="text-sm font-semibold text-slate-900">{patientName}</span>}
+        {patientName && <span className="text-sm font-semibold text-foreground">{patientName}</span>}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <AnalysisStatusBadge status={analysis.status} />
-          {createdAt && <span className="text-xs text-slate-500">{createdAt}</span>}
+          {createdAt && <span className="text-xs text-muted">{createdAt}</span>}
         </div>
 
         {analysis.summary && (
-          <p className="line-clamp-2 text-sm text-slate-700">{analysis.summary}</p>
+          <p className="line-clamp-2 text-sm text-foreground">{analysis.summary}</p>
         )}
 
         {analysis.status === 'failed' && analysis.error_message && (
@@ -85,7 +85,7 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
         </dl>
 
         {analysis.provider && (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-muted">
             {analysis.provider}
             {analysis.model_name ? ` · ${analysis.model_name}` : ''}
           </p>
@@ -93,7 +93,7 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
       </Link>
 
       {onDelete && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-6 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-3">
           {deleteError ? (
             <FormError message={deleteError} className="min-w-0 break-words" />
           ) : (
@@ -104,7 +104,7 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
             onClick={handleDelete}
             disabled={isDeleting}
             aria-label={`Delete analysis from ${createdAt ?? 'an unknown date'}`}
-            className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isDeleting ? 'Removing...' : 'Delete'}
           </button>

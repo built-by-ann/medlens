@@ -58,7 +58,7 @@ export function PatientFields({
         />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${idPrefix}-notes`} className="text-sm font-medium text-slate-700">
+        <label htmlFor={`${idPrefix}-notes`} className="text-sm font-medium text-foreground">
           Notes (optional)
         </label>
         <textarea
@@ -67,7 +67,7 @@ export function PatientFields({
           onChange={(event) => onChange('notes', event.target.value)}
           disabled={disabled}
           rows={3}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
         />
       </div>
     </>

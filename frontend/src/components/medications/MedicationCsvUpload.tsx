@@ -139,8 +139,8 @@ export function MedicationCsvUpload({ onImport }: MedicationCsvUploadProps) {
   return (
     <Card className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-semibold text-slate-900">Import medications from CSV</h3>
-        <p id={descriptionId} className="text-sm text-slate-600">
+        <h3 className="text-sm font-semibold text-foreground">Import medications from CSV</h3>
+        <p id={descriptionId} className="text-sm text-muted">
           The file needs a header row with <code>medication_name</code>, <code>dose</code>,{' '}
           <code>route</code>, <code>frequency</code>, <code>status</code>, and <code>source</code>.
           An optional <code>notes</code> column is also supported.
@@ -148,7 +148,7 @@ export function MedicationCsvUpload({ onImport }: MedicationCsvUploadProps) {
         <button
           type="button"
           onClick={downloadSampleMedicationCsv}
-          className="self-start text-sm text-blue-600 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          className="self-start text-sm text-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
         >
           Download a sample CSV
         </button>
@@ -171,18 +171,18 @@ export function MedicationCsvUpload({ onImport }: MedicationCsvUploadProps) {
           onDrop={handleDrop}
           className={cn(
             'flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors',
-            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600',
-            isImporting ? 'cursor-not-allowed border-slate-200 opacity-50' : 'cursor-pointer',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring',
+            isImporting ? 'cursor-not-allowed border-border opacity-50' : 'cursor-pointer',
             !isImporting &&
               (isDraggingOver
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-slate-300 hover:border-slate-400'),
+                ? 'border-primary bg-info/10'
+                : 'border-border hover:border-primary'),
           )}
         >
-          <p className="text-sm font-medium text-slate-700">
+          <p className="text-sm font-medium text-foreground">
             Drag and drop a CSV file here, or click to browse
           </p>
-          <p className="text-xs text-slate-500">Supported format: .csv</p>
+          <p className="text-xs text-muted">Supported format: .csv</p>
           <input
             ref={fileInputRef}
             id={inputId}
@@ -197,14 +197,14 @@ export function MedicationCsvUpload({ onImport }: MedicationCsvUploadProps) {
           />
         </div>
         {fileError && (
-          <p id={fileErrorId} role="alert" className="text-sm text-red-600">
+          <p id={fileErrorId} role="alert" className="text-sm text-danger">
             {fileError}
           </p>
         )}
       </div>
 
       {selectedFile && (
-        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
+        <div className="flex flex-wrap items-center gap-3 text-sm text-foreground">
           <span>
             Selected file: <strong>{selectedFile.name}</strong>
           </span>
@@ -212,7 +212,7 @@ export function MedicationCsvUpload({ onImport }: MedicationCsvUploadProps) {
             type="button"
             onClick={clearSelectedFile}
             disabled={isImporting}
-            className="text-red-600 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             Remove file
           </button>
@@ -220,16 +220,16 @@ export function MedicationCsvUpload({ onImport }: MedicationCsvUploadProps) {
       )}
 
       {isImporting && (
-        <p role="status" className="text-sm text-slate-500">
+        <p role="status" className="text-sm text-muted">
           Importing {selectedFile?.name}...
         </p>
       )}
 
       {outcome?.type === 'error' && (
-        <div role="alert" className="flex flex-col gap-2 text-sm text-red-600">
+        <div role="alert" className="flex flex-col gap-2 text-sm text-danger">
           <p>{outcome.message}</p>
           {outcome.rowErrors && outcome.rowErrors.length > 0 && (
-            <ul className="flex flex-col gap-1 border-l-2 border-red-200 pl-3">
+            <ul className="flex flex-col gap-1 border-l-2 border-danger/30 pl-3">
               {outcome.rowErrors.map((rowError) => (
                 <li key={rowError.row}>
                   Row {rowError.row}:{' '}
@@ -244,7 +244,7 @@ export function MedicationCsvUpload({ onImport }: MedicationCsvUploadProps) {
       )}
 
       {outcome?.type === 'success' && (
-        <p role="status" className="text-sm text-green-700">
+        <p role="status" className="text-sm text-success">
           Imported {outcome.summary.medications_created} of {outcome.summary.rows_processed} row
           {outcome.summary.rows_processed === 1 ? '' : 's'}
           {outcome.summary.blank_rows_ignored > 0

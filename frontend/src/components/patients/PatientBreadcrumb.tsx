@@ -28,23 +28,23 @@ export function PatientBreadcrumb({ patient, trail = [] }: PatientBreadcrumbProp
 
   return (
     <nav aria-label="Breadcrumb">
-      <ol className="flex flex-wrap items-center gap-1 text-sm text-slate-500">
+      <ol className="flex flex-wrap items-center gap-1 text-sm text-muted">
         {crumbs.map((crumb, index) => {
           const isCurrent = index === crumbs.length - 1
 
           return (
             <li key={`${crumb.label}-${index}`} className="flex items-center gap-1">
               {index > 0 && (
-                <span aria-hidden="true" className="text-slate-300">
+                <span aria-hidden="true" className="text-muted">
                   /
                 </span>
               )}
               {isCurrent || !crumb.to ? (
-                <span aria-current={isCurrent ? 'page' : undefined} className="text-slate-700">
+                <span aria-current={isCurrent ? 'page' : undefined} className="text-foreground">
                   {crumb.label}
                 </span>
               ) : (
-                <Link to={crumb.to} className="hover:text-slate-700 hover:underline">
+                <Link to={crumb.to} className="hover:text-foreground hover:underline">
                   {crumb.label}
                 </Link>
               )}

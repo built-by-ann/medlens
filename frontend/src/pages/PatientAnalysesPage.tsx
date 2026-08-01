@@ -65,14 +65,14 @@ export function PatientAnalysesPage() {
       {flashMessage && (
         <div
           role="status"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-success/30 bg-success/10 px-4 py-3 text-sm text-success"
         >
           <span className="min-w-0 break-words">{flashMessage}</span>
           <button
             type="button"
             onClick={() => setFlashMessage(null)}
             aria-label="Dismiss notification"
-            className="shrink-0 rounded-md px-1 text-green-700 hover:text-green-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="shrink-0 rounded-md px-1 text-success hover:text-success focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
             ✕
           </button>
@@ -104,7 +104,7 @@ export function PatientAnalysesPage() {
             actions={
               <Link
                 to={createAnalysisPath(patient.id)}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
               >
                 + Start analysis
               </Link>

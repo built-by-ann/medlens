@@ -110,14 +110,14 @@ export function PatientOverviewPage() {
               <div className="flex flex-wrap gap-2">
                 <Link
                   to={patientEditPath(patient.id)}
-                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
                 >
                   Edit
                 </Link>
                 <button
                   type="button"
                   onClick={() => setIsConfirmingArchive(true)}
-                  className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                  className="rounded-md border border-danger px-4 py-2 text-sm font-medium text-danger hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
                 >
                   Archive
                 </button>
@@ -130,19 +130,19 @@ export function PatientOverviewPage() {
           <nav aria-label="Quick actions" className="flex flex-wrap gap-2">
             <Link
               to={createAnalysisPath(patient.id)}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             >
               Create Analysis
             </Link>
             <Link
               to={patientUploadPath(patient.id)}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             >
               Upload document
             </Link>
             <Link
               to={patientMedicationsPath(patient.id)}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             >
               Manage medications
             </Link>
@@ -150,14 +150,14 @@ export function PatientOverviewPage() {
 
           <section aria-labelledby="documents-heading" className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="documents-heading" className="text-lg font-semibold text-slate-900">
+              <h2 id="documents-heading" className="text-lg font-semibold text-foreground">
                 Recent clinical documents
               </h2>
               {documents.length > 0 && (
                 <Link
                   to={patientDocumentsPath(patient.id)}
                   aria-label="View all clinical documents"
-                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
                 >
                   View All
                 </Link>
@@ -185,13 +185,13 @@ export function PatientOverviewPage() {
 
           <section aria-labelledby="recent-analyses-heading" className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="recent-analyses-heading" className="text-lg font-semibold text-slate-900">
+              <h2 id="recent-analyses-heading" className="text-lg font-semibold text-foreground">
                 Recent analyses
               </h2>
               <Link
                 to={patientAnalysesPath(patient.id)}
                 aria-label="View all analyses"
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
               >
                 View All
               </Link>
@@ -218,13 +218,13 @@ export function PatientOverviewPage() {
 
           <section aria-labelledby="medications-heading" className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="medications-heading" className="text-lg font-semibold text-slate-900">
+              <h2 id="medications-heading" className="text-lg font-semibold text-foreground">
                 Medications
               </h2>
               <Link
                 to={patientMedicationsPath(patient.id)}
                 aria-label="View all medications"
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
               >
                 View All
               </Link>

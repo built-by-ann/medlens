@@ -39,6 +39,7 @@ describe('PublicOnlyRoute', () => {
       isLoading: true,
       login: vi.fn(),
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })
@@ -58,6 +59,7 @@ describe('PublicOnlyRoute', () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })
@@ -76,6 +78,7 @@ describe('PublicOnlyRoute', () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })

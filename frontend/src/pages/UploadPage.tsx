@@ -95,7 +95,7 @@ export function UploadPage() {
       />
 
       <section aria-labelledby="file-upload-heading" className="flex flex-col gap-4">
-        <h2 id="file-upload-heading" className="text-lg font-semibold text-slate-900">
+        <h2 id="file-upload-heading" className="text-lg font-semibold text-foreground">
           Upload files
         </h2>
         <FileDropzone
@@ -112,7 +112,7 @@ export function UploadPage() {
       </section>
 
       <section aria-labelledby="manual-entry-heading" className="flex flex-col gap-4">
-        <h2 id="manual-entry-heading" className="text-lg font-semibold text-slate-900">
+        <h2 id="manual-entry-heading" className="text-lg font-semibold text-foreground">
           Paste note text
         </h2>
         {notes.length > 0 && (
@@ -143,7 +143,7 @@ export function UploadPage() {
           type="button"
           onClick={() => void handleSave()}
           disabled={isSaving}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSaving ? 'Saving...' : 'Save documents'}
         </button>
