@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getAnalysisDetail } from '@/api/analyses'
 import type { ApiError } from '@/api/client'
-import type { AnalysisDetail } from '@/types/api'
+import type { AnalysisDetail, MedicationDiscrepancy } from '@/types/api'
 
 interface UseAnalysisDetailResult {
   analysis: AnalysisDetail | null
   isLoading: boolean
   error: string | null
   retry: () => void
+  // Splices one resolved discrepancy back into analysis.medication_discrepancies
+  // in place - mirrors usePatientMedications' editMedication (update local
+  // state directly on success, no refetch) rather than re-fetching the
+  // whole analysis just to pick up one row's new resolution fields.
+  replaceDiscrepancy: (updated: MedicationDiscrepancy) => void
 }
 
 /**
@@ -51,5 +56,18 @@ export function useAnalysisDetail(patientId: number, analysisId: number): UseAna
     setRetryCount((count) => count + 1)
   }, [])
 
-  return { analysis, isLoading, error, retry }
+  const replaceDiscrepancy = useCallback((updated: MedicationDiscrepancy) => {
+    setAnalysis((current) => {
+      if (!current) return current
+
+      return {
+        ...current,
+        medication_discrepancies: current.medication_discrepancies.map((discrepancy) =>
+          discrepancy.id === updated.id ? updated : discrepancy,
+        ),
+      }
+    })
+  }, [])
+
+  return { analysis, isLoading, error, retry, replaceDiscrepancy }
 }

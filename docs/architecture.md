@@ -197,6 +197,29 @@ Everything reconciliation stages (the bridged `MedicationMention` rows, the `Med
 
 `GET /patients/{patient_id}/analyses/{analysis_id}` now also returns `medication_discrepancies` (see `docs/api.md`), which `AnalysisDetailPage` renders directly - real findings, not a placeholder, once reconciliation has actually run for that analysis.
 
+### Discrepancy Resolution Workflow
+
+The reconciliation engine only *detects* discrepancies; closing the loop - a provider actually reviewing, accepting, or dismissing each one - is a distinct capability layered on top of the same `MedicationDiscrepancy` rows, not a second pipeline. `POST /patients/{patient_id}/analyses/{analysis_id}/discrepancies/{discrepancy_id}/resolve` (see `docs/api.md`) is the single entry point:
+
+```text
+Discrepancy (open)
+        ↓
+Validate action against discrepancy_type   resolve_discrepancy()
+        ↓
+add_medication / update_medication          create_medication() / update_medication()
+   (or: dismiss - no Medication touched)     (medication_service.py, unchanged)
+        ↓
+Record audit trail on the discrepancy       resolution_action, resolved_by, resolved_at, note
+        ↓
+resolution_status → resolved / dismissed
+```
+
+`resolve_discrepancy` (`app/services/medication_discrepancy_service.py`) is additive to the existing reconciliation service, not a parallel workflow, and deliberately never builds or mutates a `Medication` row itself: `add_medication` calls the same `create_medication` the medication-management routes already use, and `update_medication` calls the same `update_medication` - the one place either operation is implemented, reused by both a provider's direct edit on `PatientMedicationsPage` and a discrepancy resolution. `dismiss` never calls either. Which `action` a discrepancy accepts is enforced against its `discrepancy_type` (a `missing_from_medication_list` finding can only `add_medication` or `dismiss`; every other type can only `update_medication` or `dismiss`) - see `docs/data-model.md`'s `MedicationDiscrepancy` entity for the full mapping and the `ResolutionAction` enum's deliberately minimal shape.
+
+Resolution is one-way: `resolution_status` moves from `open` directly to `resolved` (accepted) or `dismissed`, and a second resolve attempt on the same discrepancy is rejected with `409 Conflict` rather than allowed to overwrite the first. Nothing about the original finding is ever altered by resolving it - `title`, `ai_explanation`, `expected_value`, `observed_value`, and every other reconciliation-computed field stay exactly as the engine produced them, with the resolution recorded in four additional, previously-null columns (`resolution_action`, `resolved_by_user_id`, `resolved_at`, `resolution_note`) instead of overwriting or replacing the finding. This is what keeps the analysis "a permanent, complete record": resolving a finding is something that happens *to* it, not a rewrite of it.
+
+`open_findings` (`docs/api.md`'s `AnalysisSummaryResponse`/`RecentAnalysisResponse`) is the one place resolution feeds back into analysis-level summary data - a live count of this analysis's still-`open` discrepancies, computed per-request rather than stored, since a discrepancy can be resolved well after the analysis itself completed and a stored count would go stale the moment that happened. `total_findings` and the three static severity counts are deliberately left untouched by resolution - they describe what the reconciliation engine originally found, `open_findings` describes how much of that still needs review.
+
 ---
 
 ## Data Model

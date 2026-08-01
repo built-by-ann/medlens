@@ -1004,6 +1004,7 @@ Success response
     "high_severity_findings": 0,
     "medium_severity_findings": 1,
     "low_severity_findings": 0,
+    "open_findings": 1,
     "provider": "gemini",
     "model_name": "gemini-2.0-flash"
   }
@@ -1011,6 +1012,8 @@ Success response
 ```
 
 An empty list is returned if the patient has no analyses yet; this is a normal, successful response, not an error. Ordering is by `id` descending, not `created_at`, since rows created together can share an identical `created_at` (Postgres's `now()` is constant within a transaction). Unlike `GET /patients/{patient_id}/analyses/{analysis_id}`, list rows never include `medication_mentions` or `possible_inconsistencies`; fetch the detail endpoint for that.
+
+`open_findings` (added alongside the resolve endpoint above) is the count of this analysis's `medication_discrepancies` whose `resolution_status` is still `"open"` - computed live on every request, unlike `total_findings` and the three severity counts, which are fixed at analysis-completion time and never change afterward. A discrepancy resolved or dismissed after the analysis completed lowers `open_findings` without changing `total_findings`, so this field - not the static counts - is what Patient Overview and the Dashboard use to show how much of an analysis's findings still need review.
 
 Possible error responses
 
@@ -1156,6 +1159,99 @@ Possible error responses
 
 ---
 
+### POST /patients/{patient_id}/analyses/{analysis_id}/discrepancies/{discrepancy_id}/resolve
+
+Purpose
+
+Records a provider's resolution of one medication discrepancy - accepting it (creating or updating the patient's medication list accordingly) or dismissing it - and persists a full audit trail on the discrepancy itself. See `docs/architecture.md`'s Reconciliation Engine section and `docs/data-model.md`'s `MedicationDiscrepancy` entity for how this fits into the wider reconciliation workflow.
+
+Authorization
+
+Resolves `patient_id` through the same shared `get_owned_patient` dependency as every other patient-nested route. `analysis_id` must belong to this patient, and `discrepancy_id` must belong to this analysis - each is checked with its own scoped lookup and returns `404` independently, the same "can't distinguish nonexistent from not-yours" pattern used throughout this API.
+
+Request body
+
+```json
+{
+  "action": "update_medication",
+  "dose": "20 mg",
+  "note": "Confirmed with patient by phone."
+}
+```
+
+- `action` is required: one of `add_medication`, `update_medication`, `dismiss`.
+- `medication_name`, `dose`, `route`, `frequency`, `status` are optional and only relevant for `add_medication`/`update_medication` - each, if present, must be non-empty.
+- `note` is an optional, freeform provider rationale, stored regardless of `action`.
+- Extra fields are rejected (`extra="forbid"`).
+
+Which `action` is valid depends on the discrepancy's own `discrepancy_type`:
+
+| `discrepancy_type` | Valid `action` values | Notes |
+|---|---|---|
+| `missing_from_medication_list` | `add_medication`, `dismiss` | `add_medication` requires `medication_name`, `dose`, `route`, `frequency`, and `status` all present - it creates a new `Medication` (`source: "reconciliation"`) and links it to the discrepancy. |
+| `dose_conflict`, `route_conflict`, `frequency_conflict`, `discontinued_status_conflict`, `status_conflict`, `unsupported_medication_list_entry` | `update_medication`, `dismiss` | `update_medication` requires at least one of `medication_name`/`dose`/`route`/`frequency`/`status`; only the fields present are changed on the existing linked `Medication`. There is no dedicated "mark discontinued" or "mark active" action - both are `update_medication` with `status` set to the desired value; the UI supplies that value, not the API. |
+
+`dismiss` is valid for every discrepancy type and never creates or modifies a `Medication` row.
+
+Success response
+
+`200 OK` - the full `MedicationDiscrepancyDetailResponse` shape (see `GET /patients/{patient_id}/analyses/{analysis_id}` above), reflecting the new resolution state:
+
+```json
+{
+  "id": 5,
+  "analysis_id": 7,
+  "medication_id": 12,
+  "medication_mention_id": 3,
+  "discrepancy_type": "missing_from_medication_list",
+  "severity": "high",
+  "title": "Lisinopril not found in medication list",
+  "ai_explanation": "Lisinopril is mentioned in the selected clinical documents but does not appear in the current medication list.",
+  "recommendation": null,
+  "expected_value": null,
+  "observed_value": "Lisinopril",
+  "resolution_status": "resolved",
+  "resolution_action": "add_medication",
+  "resolved_at": "2026-07-13T09:15:00.000000Z",
+  "resolution_note": "Confirmed with patient by phone.",
+  "created_at": "2026-07-12T19:59:16.000000Z",
+  "updated_at": "2026-07-13T09:15:00.000000Z",
+  "medication": { "...": "the newly created or updated Medication" },
+  "medication_mention": { "...": "unchanged, same as before resolving" },
+  "resolved_by": {
+    "id": 1,
+    "name": "Jane Doe",
+    "email": "jane@example.com"
+  }
+}
+```
+
+`resolution_status` becomes `"resolved"` for `add_medication`/`update_medication`, or `"dismissed"` for `dismiss` - the same `ResolutionStatus` enum `docs/data-model.md` already documents, reused unchanged rather than introducing a parallel status. `resolution_action`, `resolved_at`, `resolution_note`, and `resolved_by` are the audit trail added by this endpoint; all four are `null`/absent until a discrepancy is resolved, and none of the fields the original reconciliation run computed (`title`, `ai_explanation`, `expected_value`, `observed_value`, ...) are ever changed by resolving - the finding itself remains a permanent, unaltered record.
+
+Possible error responses
+
+- `400 Bad Request`: `action` doesn't make sense for this discrepancy's `discrepancy_type` (see table above), required fields are missing for the chosen action, or (defensively) the linked medication no longer belongs to this patient.
+
+  ```json
+  {
+    "detail": "add_medication is only valid for a medication missing from the list"
+  }
+  ```
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user, `analysis_id` does not exist or does not belong to this patient, or `discrepancy_id` does not exist or does not belong to this analysis.
+- `409 Conflict`: this discrepancy has already been resolved or dismissed. Resolving is one-way - there is no "re-open" or "undo" action.
+
+  ```json
+  {
+    "detail": "Discrepancy 5 has already been resolved"
+  }
+  ```
+
+- `422 Unprocessable Entity`: `action` is missing or not a recognized value, an included field is empty, or an extra field is present.
+
+---
+
 ### GET /analyses/recent
 
 Purpose
@@ -1185,6 +1281,7 @@ Success response
     "high_severity_findings": 0,
     "medium_severity_findings": 1,
     "low_severity_findings": 0,
+    "open_findings": 1,
     "provider": "gemini",
     "model_name": "gemini-2.0-flash",
     "patient": {
@@ -1285,7 +1382,7 @@ Returned by `POST /patients/{patient_id}/analyses` when the configured AI provid
 
 ## Notes
 
-This API currently supports authentication, application infrastructure, patient management, and patient-scoped clinical document management, medication list management, and AI-generated document summaries persisted as analyses, including listing, retrieval, and deletion of a patient's own analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/patients`, `/patients/{patient_id}/medications`, `/patients/{patient_id}/clinical-documents`, `/patients/{patient_id}/analyses`). Medication, ClinicalDocument, and Analysis are owned solely through `Patient` - `patient_id` is their only ownership column (Sprint 3.5, Issue #133 removed the transitional `user_id` these three tables carried during the migration; see `docs/data-model.md`), and the earlier flat `/medications`, `/clinical-documents`, `/ai/summarize`, and `/ai/analyses` routes no longer exist. `User` is used only for authentication and for owning `Patient` directly. Medication reconciliation exists as internal backend logic but has no API endpoint yet; discrepancy detection results are not yet exposed through this API and will be introduced in a future sprint.
+This API currently supports authentication, application infrastructure, patient management, and patient-scoped clinical document management, medication list management, and AI-generated document summaries persisted as analyses, including listing, retrieval, and deletion of a patient's own analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/patients`, `/patients/{patient_id}/medications`, `/patients/{patient_id}/clinical-documents`, `/patients/{patient_id}/analyses`). Medication, ClinicalDocument, and Analysis are owned solely through `Patient` - `patient_id` is their only ownership column (Sprint 3.5, Issue #133 removed the transitional `user_id` these three tables carried during the migration; see `docs/data-model.md`), and the earlier flat `/medications`, `/clinical-documents`, `/ai/summarize`, and `/ai/analyses` routes no longer exist. `User` is used only for authentication and for owning `Patient` directly. Medication reconciliation runs automatically as part of `POST /patients/{patient_id}/analyses` (Issue #148) and its findings are exposed via `medication_discrepancies` on `GET /patients/{patient_id}/analyses/{analysis_id}`; a provider resolves or dismisses each finding via `POST .../discrepancies/{discrepancy_id}/resolve`, which is also the only endpoint that lets resolving a discrepancy create or update a `Medication` row on the provider's behalf.
 
 Issue #157 added the first exception to "every analysis is reached through its patient": `GET /analyses/recent`, a cross-patient feed for the Dashboard's Recent Analyses section, scoped to the current user (via the same `get_current_user` dependency every other endpoint uses) rather than nested under a single `patient_id`.
 

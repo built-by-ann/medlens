@@ -1,11 +1,14 @@
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
+import { Input } from '@/components/common/Input'
 import { MedicationForm } from '@/components/medications/MedicationForm'
 import { MedicationList } from '@/components/medications/MedicationList'
 import { EmptyMedicationState } from '@/components/medications/EmptyMedicationState'
 import { MedicationCsvUpload } from '@/components/medications/MedicationCsvUpload'
+import { filterMedications } from '@/components/medications/filterMedications'
 import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { usePatient } from '@/hooks/usePatient'
 import { usePatientMedications } from '@/hooks/usePatientMedications'
@@ -14,6 +17,7 @@ import { patientDetailPath } from '@/routes/paths'
 export function PatientMedicationsPage() {
   const { patientId } = useParams<{ patientId: string }>()
   const id = Number(patientId)
+  const [medicationsQuery, setMedicationsQuery] = useState('')
 
   const {
     patient,
@@ -31,6 +35,8 @@ export function PatientMedicationsPage() {
     removeMedication,
     importMedicationsCsv,
   } = usePatientMedications(id)
+
+  const filteredMedications = filterMedications(medications, medicationsQuery)
 
   return (
     <div className="flex flex-col gap-8">
@@ -78,11 +84,26 @@ export function PatientMedicationsPage() {
             )}
 
             {!areMedicationsLoading && !medicationsError && medications.length > 0 && (
-              <MedicationList
-                medications={medications}
-                onEdit={editMedication}
-                onDelete={removeMedication}
-              />
+              <>
+                <Input
+                  type="search"
+                  label="Search medications"
+                  value={medicationsQuery}
+                  onChange={(event) => setMedicationsQuery(event.target.value)}
+                  placeholder="Search by name, dose, route, frequency, or status"
+                  className="sm:max-w-xs"
+                />
+
+                {filteredMedications.length === 0 ? (
+                  <p className="text-sm text-muted">No medications match your search.</p>
+                ) : (
+                  <MedicationList
+                    medications={filteredMedications}
+                    onEdit={editMedication}
+                    onDelete={removeMedication}
+                  />
+                )}
+              </>
             )}
           </section>
 

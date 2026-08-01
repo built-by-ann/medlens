@@ -539,6 +539,10 @@ recommendation
 expected_value
 observed_value
 resolution_status
+resolution_action
+resolved_by_user_id
+resolved_at
+resolution_note
 created_at
 updated_at
 ```
@@ -612,12 +616,30 @@ resolved
 dismissed
 ```
 
+`reviewed` is defined but not currently set by anything - a discrepancy transitions directly from `open` to `resolved` or `dismissed` via the resolve endpoint below (Issue: Complete Medication Reconciliation Workflow). There is no "re-open" action: once a discrepancy leaves `open`, `POST .../discrepancies/{discrepancy_id}/resolve` rejects a second attempt with `409 Conflict` (see docs/api.md) rather than allowing it to be resolved again or reverted.
+
+```text
+resolution_action
+resolved_by_user_id
+resolved_at
+resolution_note
+```
+
+Added by the discrepancy resolution workflow (Issue: Complete Medication Reconciliation Workflow) to record a full audit trail directly on the discrepancy, rather than a separate history table - see Design Decisions. All four are set together, only by `resolve_discrepancy` (`app/services/medication_discrepancy_service.py`), and stay `null` for as long as `resolution_status` is `open`.
+
+`resolution_action` is one of `add_medication`, `update_medication`, `dismiss` (`ResolutionAction`, `app/schemas/medication_discrepancy.py`) - the actual operation a provider performed, distinct from and more specific than `resolution_status`. Deliberately only three values rather than one per UI action ("Mark Discontinued," "Mark Active," "Edit Manually," and "Update Medication" are all `update_medication`, differing only in which field values the request supplies) - see Design Decisions.
+
+`resolved_by_user_id` references `users.id`, `ON DELETE SET NULL` and indexed - the same nullable-on-delete pattern already used for `medication_id`/`medication_mention_id` on this table, so a discrepancy's resolution audit trail survives the resolving user's account being deleted, just with that one piece of attribution now missing. `resolved_by` (the relationship) has no reverse `back_populates` on `User`, since nothing needs to list "every discrepancy this user has resolved" today.
+
+`resolved_at` is a timezone-aware timestamp, set once and never updated afterward (resolving is one-way). `resolution_note` is optional freeform text - a provider's rationale, independent of any medication field.
+
 ### Relationships
 
 ```text
 MedicationDiscrepancy belongs to Analysis
 MedicationDiscrepancy references Medication
 MedicationDiscrepancy references MedicationMention
+MedicationDiscrepancy references User (resolved_by)
 ```
 
 ---
@@ -815,6 +837,16 @@ Issue #148's `reconcile_ai_extracted_medications` attached every AI-extracted me
 `_resolve_source_document_id` falls back to the lowest-id selected document only when `source_note` is missing or out of range for the selected documents - the same value Issue #148 always used, now scoped to just that malformed-response case. `build_discrepancy_findings` and every `_find_*` helper needed no change: they already group `MedicationMention` rows by normalized medication name regardless of how many there are or which document each is attached to, so one medication mentioned in several documents becoming several correctly-attributed mentions was already the natively-supported shape.
 
 Historical analyses created before this issue keep whatever (possibly inexact) `clinical_document_id` their mentions were given at creation time. This is not retroactively corrected and no migration attempts to re-derive it: the original note text isn't stored per mention, so which document a historical mention actually came from can't be recovered after the fact. Only analyses created from this point forward get true provenance.
+
+---
+
+### Discrepancy resolution audit trail as columns on MedicationDiscrepancy, not a separate history table
+
+The reconciliation workflow issue asked for a complete audit trail (who resolved a discrepancy, when, what action, and an optional note) that never loses the original finding data. Rather than introduce a new `ResolutionHistory`/`AuditLog` model (both still listed under Future Extensions below, for a genuinely separate concept - a general-purpose change log across many resource types), four nullable columns were added directly to `MedicationDiscrepancy`: `resolution_action`, `resolved_by_user_id`, `resolved_at`, `resolution_note`. A discrepancy is resolved exactly once (there is no re-open/undo action - see `resolution_status` above), so there is only ever one resolution event per row to record; a separate one-to-many history table would model a "many resolutions over time" scenario that can't actually happen here. This keeps the audit trail queryable in the same request that already loads the discrepancy (no join, no N+1), and keeps every original reconciliation-run field (`title`, `ai_explanation`, `expected_value`, `observed_value`, ...) on the same row, untouched by resolution - satisfying "the discrepancy... must remain a permanent, complete record" directly, rather than needing to reconstruct it by joining against a history table.
+
+`ResolutionAction` deliberately has only three values (`add_medication`, `update_medication`, `dismiss`), not one per UI-level action. The issue's own discrepancy-type examples name distinct actions per type ("Mark Discontinued," "Mark Active," "Update Medication," "Edit Manually") but every one of those, once a `Medication` already exists to modify, is the same operation: apply whichever fields the request supplies to that `Medication`. "Mark Discontinued" is `update_medication` with `status: "discontinued"`; "Edit Manually" is `update_medication` with provider-typed values instead of AI-suggested ones. The backend has no way to distinguish those two requests, nor any reason to - keeping the enum minimal avoids one API-level enum value per frontend button, consistent with `docs/api.md`'s existing "reuse existing services, keep reconciliation logic centralized" direction for this workflow, and pushes "which value to suggest for this button" entirely to the frontend, which already has the discrepancy's own evidence (`medication`, `medication_mention`) to derive a suggestion from.
+
+The `resolve_discrepancy` service function (`app/services/medication_discrepancy_service.py`) is additive to the existing reconciliation architecture, not a parallel workflow: it calls the same `create_medication`/`update_medication` functions `app/services/medication_service.py` already exposed to the medication-management routes, so there is exactly one place `Medication` rows are ever created or mutated, regardless of whether the request came from `PatientMedicationsPage`'s own form or from resolving a discrepancy.
 
 ---
 

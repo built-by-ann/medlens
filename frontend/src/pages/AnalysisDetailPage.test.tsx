@@ -4,10 +4,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AnalysisDetailPage } from '@/pages/AnalysisDetailPage'
 import { getPatient } from '@/api/patients'
-import { deleteAnalysis, getAnalysisDetail } from '@/api/analyses'
+import { deleteAnalysis, getAnalysisDetail, resolveDiscrepancy } from '@/api/analyses'
 import type {
   AnalysisDetail,
-  AnalysisInconsistency,
   AnalysisMedicationMention,
   MedicationDiscrepancy,
   Patient,
@@ -29,6 +28,7 @@ vi.mock('@/api/analyses', async (importOriginal) => {
     ...actual,
     getAnalysisDetail: vi.fn(),
     deleteAnalysis: vi.fn(),
+    resolveDiscrepancy: vi.fn(),
   }
 })
 
@@ -46,6 +46,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
 const mockedGetPatient = vi.mocked(getPatient)
 const mockedGetAnalysisDetail = vi.mocked(getAnalysisDetail)
 const mockedDeleteAnalysis = vi.mocked(deleteAnalysis)
+const mockedResolveDiscrepancy = vi.mocked(resolveDiscrepancy)
 
 const patient: Patient = {
   id: 7,
@@ -93,14 +94,6 @@ function makeMedicationMention(
   }
 }
 
-function makeInconsistency(overrides: Partial<AnalysisInconsistency> = {}): AnalysisInconsistency {
-  return {
-    id: 1,
-    description: 'Confirm whether the patient is still taking Lisinopril.',
-    ...overrides,
-  }
-}
-
 function makeDiscrepancy(overrides: Partial<MedicationDiscrepancy> = {}): MedicationDiscrepancy {
   return {
     id: 1,
@@ -116,6 +109,10 @@ function makeDiscrepancy(overrides: Partial<MedicationDiscrepancy> = {}): Medica
     expected_value: null,
     observed_value: 'Lisinopril',
     resolution_status: 'open',
+    resolution_action: null,
+    resolved_at: null,
+    resolution_note: null,
+    resolved_by: null,
     created_at: '2026-01-01T12:01:00Z',
     updated_at: null,
     medication: null,
@@ -191,6 +188,7 @@ describe('AnalysisDetailPage', () => {
     mockedGetPatient.mockReset()
     mockedGetAnalysisDetail.mockReset()
     mockedDeleteAnalysis.mockReset()
+    mockedResolveDiscrepancy.mockReset()
     mockNavigate.mockReset()
     mockedGetPatient.mockResolvedValue(patient)
     mockedGetAnalysisDetail.mockResolvedValue(completedAnalysis)
@@ -444,35 +442,6 @@ describe('AnalysisDetailPage', () => {
     expect(screen.queryByRole('heading', { name: 'Medications Mentioned' })).not.toBeInTheDocument()
   })
 
-  it('shows follow-up questions as a checklist that can be toggled', async () => {
-    const user = userEvent.setup()
-    mockedGetAnalysisDetail.mockResolvedValue({
-      ...completedAnalysis,
-      possible_inconsistencies: [
-        makeInconsistency({
-          id: 8,
-          description: 'Confirm current Warfarin dose with the patient.',
-        }),
-      ],
-    })
-    renderPage()
-
-    const checkbox = await screen.findByRole('checkbox', {
-      name: 'Confirm current Warfarin dose with the patient.',
-    })
-    expect(checkbox).not.toBeChecked()
-
-    await user.click(checkbox)
-    expect(checkbox).toBeChecked()
-  })
-
-  it('omits the Follow-up Questions section entirely when there are none', async () => {
-    renderPage()
-
-    await screen.findByRole('heading', { name: 'AI Summary' })
-    expect(screen.queryByRole('heading', { name: 'Follow-up Questions' })).not.toBeInTheDocument()
-  })
-
   it('shows summary metadata including provider, model, and document count', async () => {
     renderPage()
 
@@ -608,5 +577,167 @@ describe('AnalysisDetailPage', () => {
     renderPage()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Patient not found')
+  })
+
+  describe('resolving a discrepancy', () => {
+    beforeEach(() => {
+      mockedGetAnalysisDetail.mockResolvedValue({
+        ...completedAnalysis,
+        medication_discrepancies: [withMentionEvidence],
+      })
+    })
+
+    it('opens the resolve dialog naming the chosen action and medication', async () => {
+      const user = userEvent.setup()
+      renderPage()
+
+      await user.click(await screen.findByRole('button', { name: /Add Medication/ }))
+
+      expect(screen.getByRole('dialog', { name: 'Add Medication: Lisinopril' })).toBeInTheDocument()
+    })
+
+    it('accepting a medication addition calls the API, applies the update, and shows success feedback', async () => {
+      const user = userEvent.setup()
+      const resolved = {
+        ...withMentionEvidence,
+        resolution_status: 'resolved' as const,
+        resolution_action: 'add_medication' as const,
+        resolved_at: '2026-01-02T09:00:00Z',
+        medication_id: 55,
+      }
+      mockedResolveDiscrepancy.mockResolvedValue(resolved)
+      renderPage()
+
+      await user.click(await screen.findByRole('button', { name: /Add Medication/ }))
+      const dialog = screen.getByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+      await waitFor(() =>
+        expect(mockedResolveDiscrepancy).toHaveBeenCalledWith(7, 42, withMentionEvidence.id, {
+          action: 'add_medication',
+          medication_name: 'Lisinopril',
+          dose: '10 mg',
+          route: 'oral',
+          frequency: 'once daily',
+          status: 'active',
+        }),
+      )
+
+      // The dialog closes, a status announcement appears, and the card no
+      // longer offers actions for an already-resolved discrepancy.
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Updated the medication list for Lisinopril.',
+      )
+      expect(screen.queryByRole('button', { name: /Add Medication/ })).not.toBeInTheDocument()
+    })
+
+    it('dismissing a discrepancy shows dismissal-specific success feedback', async () => {
+      const user = userEvent.setup()
+      mockedResolveDiscrepancy.mockResolvedValue({
+        ...withMentionEvidence,
+        resolution_status: 'dismissed',
+        resolution_action: 'dismiss',
+        resolved_at: '2026-01-02T09:00:00Z',
+      })
+      renderPage()
+
+      await user.click(await screen.findByRole('button', { name: /^Dismiss/ }))
+      const dialog = screen.getByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Dismissed the finding for Lisinopril.',
+      )
+    })
+
+    it('shows an error inside the dialog and leaves the discrepancy open when resolution fails', async () => {
+      const user = userEvent.setup()
+      mockedResolveDiscrepancy.mockRejectedValue({
+        status: 409,
+        message: 'Discrepancy has already been resolved',
+      })
+      renderPage()
+
+      await user.click(await screen.findByRole('button', { name: /^Dismiss/ }))
+      const dialog = screen.getByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+        'Discrepancy has already been resolved',
+      )
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      // Still open - the action buttons are still there to retry.
+      expect(screen.getByRole('button', { name: /^Dismiss/ })).toBeInTheDocument()
+    })
+
+    it('closes the dialog without resolving when Cancel is clicked', async () => {
+      const user = userEvent.setup()
+      renderPage()
+
+      await user.click(await screen.findByRole('button', { name: /^Dismiss/ }))
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(mockedResolveDiscrepancy).not.toHaveBeenCalled()
+    })
+
+    it('resolving one discrepancy leaves a second, unrelated discrepancy untouched', async () => {
+      const user = userEvent.setup()
+      const doseConflict = makeDiscrepancy({
+        id: 2,
+        discrepancy_type: 'dose_conflict',
+        medication_id: 5,
+        medication: {
+          id: 5,
+          patient_id: 7,
+          medication_name: 'Metformin',
+          dose: '250 mg',
+          route: 'oral',
+          frequency: 'twice daily',
+          status: 'active',
+          source: 'patient_reported',
+          notes: null,
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: null,
+        },
+        medication_mention_id: 10,
+        medication_mention: {
+          id: 10,
+          medication_name: 'Metformin',
+          dose: '500 mg',
+          route: 'oral',
+          frequency: 'twice daily',
+          status: 'active',
+          context_text: null,
+          clinical_document: { id: 3, title: 'Visit Note', document_type: 'visit_note' },
+        },
+      })
+      mockedGetAnalysisDetail.mockResolvedValue({
+        ...completedAnalysis,
+        medication_discrepancies: [withMentionEvidence, doseConflict],
+      })
+      mockedResolveDiscrepancy.mockResolvedValue({
+        ...withMentionEvidence,
+        resolution_status: 'dismissed',
+        resolution_action: 'dismiss',
+        resolved_at: '2026-01-02T09:00:00Z',
+      })
+      renderPage()
+
+      await user.click(await screen.findByRole('button', { name: 'Dismiss: Lisinopril' }))
+      const dialog = screen.getByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('button', { name: 'Dismiss: Lisinopril' }),
+        ).not.toBeInTheDocument(),
+      )
+      // Metformin's dose_conflict was never touched - still open, still actionable.
+      expect(
+        screen.getByRole('button', { name: /Update Medication: Metformin/ }),
+      ).toBeInTheDocument()
+    })
   })
 })

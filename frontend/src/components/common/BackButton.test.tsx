@@ -30,16 +30,16 @@ describe('BackButton', () => {
     expect(arrow).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('returns to the previous page when it was reached via in-app navigation', async () => {
+  it('navigates to the given route, even when a different page is next in browser history', async () => {
     const user = userEvent.setup()
     renderBackButton(['/previous', '/current'])
 
     await user.click(screen.getByRole('button', { name: 'Back to Jane Doe' }))
 
-    expect(await screen.findByText('Previous page')).toBeInTheDocument()
+    expect(await screen.findByText('Fallback page')).toBeInTheDocument()
   })
 
-  it('falls back to the given route when there is no in-app history to return to', async () => {
+  it('navigates to the given route when there is no in-app history to return to', async () => {
     const user = userEvent.setup()
     renderBackButton(['/current'])
 

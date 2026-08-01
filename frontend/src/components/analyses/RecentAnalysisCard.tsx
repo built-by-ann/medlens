@@ -82,7 +82,7 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <SummaryStat label="Documents" value={analysis.document_count} />
           <SummaryStat label="Findings" value={analysis.total_findings} />
-          <SummaryStat label="High severity" value={analysis.high_severity_findings} />
+          <SummaryStat label="Open" value={analysis.open_findings} />
           {completedAt && <SummaryStat label="Completed" value={completedAt} />}
         </dl>
 

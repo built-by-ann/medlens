@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAnalysisDetail } from '@/hooks/useAnalysisDetail'
 import { getAnalysisDetail } from '@/api/analyses'
-import type { AnalysisDetail } from '@/types/api'
+import type { AnalysisDetail, MedicationDiscrepancy } from '@/types/api'
 
 vi.mock('@/api/analyses', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/analyses')>()
@@ -101,5 +101,92 @@ describe('useAnalysisDetail', () => {
     await waitFor(() => expect(result.current.analysis?.id).toBe(8))
     expect(mockedGetAnalysisDetail).toHaveBeenNthCalledWith(1, 42, 7)
     expect(mockedGetAnalysisDetail).toHaveBeenNthCalledWith(2, 42, 8)
+  })
+
+  describe('replaceDiscrepancy', () => {
+    function makeDiscrepancy(
+      overrides: Partial<MedicationDiscrepancy> = {},
+    ): MedicationDiscrepancy {
+      return {
+        id: 1,
+        analysis_id: 7,
+        medication_id: null,
+        medication_mention_id: 9,
+        discrepancy_type: 'missing_from_medication_list',
+        severity: 'high',
+        title: 'Lisinopril not found in medication list',
+        ai_explanation: null,
+        recommendation: null,
+        expected_value: null,
+        observed_value: 'Lisinopril',
+        resolution_status: 'open',
+        resolution_action: null,
+        resolved_at: null,
+        resolution_note: null,
+        resolved_by: null,
+        created_at: '2026-01-01T12:01:00Z',
+        updated_at: null,
+        medication: null,
+        medication_mention: null,
+        ...overrides,
+      }
+    }
+
+    it('splices the updated discrepancy into medication_discrepancies in place', async () => {
+      const original = makeDiscrepancy()
+      mockedGetAnalysisDetail.mockResolvedValue({
+        ...sampleAnalysis,
+        medication_discrepancies: [original],
+      })
+
+      const { result } = renderHook(() => useAnalysisDetail(42, 7))
+      await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+      const resolved = makeDiscrepancy({
+        resolution_status: 'resolved',
+        resolution_action: 'add_medication',
+        resolved_at: '2026-01-02T09:00:00Z',
+        medication_id: 55,
+      })
+
+      act(() => {
+        result.current.replaceDiscrepancy(resolved)
+      })
+
+      expect(result.current.analysis?.medication_discrepancies).toEqual([resolved])
+    })
+
+    it('only replaces the matching discrepancy, leaving others untouched', async () => {
+      const first = makeDiscrepancy({ id: 1 })
+      const second = makeDiscrepancy({ id: 2, discrepancy_type: 'dose_conflict' })
+      mockedGetAnalysisDetail.mockResolvedValue({
+        ...sampleAnalysis,
+        medication_discrepancies: [first, second],
+      })
+
+      const { result } = renderHook(() => useAnalysisDetail(42, 7))
+      await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+      const resolvedSecond = makeDiscrepancy({ id: 2, resolution_status: 'dismissed' })
+
+      act(() => {
+        result.current.replaceDiscrepancy(resolvedSecond)
+      })
+
+      expect(result.current.analysis?.medication_discrepancies).toEqual([first, resolvedSecond])
+    })
+
+    it('does nothing if the analysis has not loaded yet', () => {
+      mockedGetAnalysisDetail.mockReturnValue(new Promise(() => {}))
+
+      const { result } = renderHook(() => useAnalysisDetail(42, 7))
+
+      expect(() => {
+        act(() => {
+          result.current.replaceDiscrepancy(makeDiscrepancy())
+        })
+      }).not.toThrow()
+      expect(result.current.analysis).toBeNull()
+    })
   })
 })
