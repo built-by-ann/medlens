@@ -276,14 +276,14 @@ git clone https://github.com/built-by-ann/medlens.git
 cd medlens
 ```
 
-Start the backend:
+Start the backend and database:
 
 ``` bash
 cd infra
 docker compose up --build
 ```
 
-Run the frontend:
+This also builds and starts a `frontend` container (a production build served by nginx, at http://localhost:8080) for validating that image - see `docs/deployment.md`'s "Docker Image Builds" section. For active frontend development, run it directly instead, which hot-reloads:
 
 ``` bash
 cd frontend

@@ -73,6 +73,8 @@ No `noqa` comments were added or needed beyond the one already in `alembic/env.p
 
 A red check on a PR always reproduces locally with the exact command named in that step's log - `ruff format --check .`, `ruff check .`, or `pytest -v` - run from `backend/` with the local Postgres running (`docker compose up --build` from `infra/`, per "Running Tests" above).
 
+**`docker build` is the workflow's final step (Issue #56).** After `pytest -v` passes, the job runs `docker build -t medlens-backend:ci .` from `backend/` - proving the production image (`backend/Dockerfile`) still builds on every push and PR, not just whenever someone happens to build it by hand before a deploy. This is deliberately the last step of the *same* `quality` job, not a second job or a second workflow file - Issue #56 asked for Docker validation to extend the existing pipeline, not duplicate it. The build needs no environment variables and never runs the resulting image (`Settings()`'s required `DATABASE_URL`/`JWT_SECRET_KEY` are only read when a container actually starts, which `docker build` doesn't do) - it only proves the image is buildable, the same narrow scope the local verification in `docs/deployment.md`'s Docker Image Builds section uses. See that section for the Dockerfile itself (multi-stage, non-root, `.dockerignore`) and `docs/design-decisions.md` (Decision 18) for why.
+
 ---
 
 ## Test Database
