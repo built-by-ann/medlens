@@ -44,7 +44,7 @@ ruff format .                         # format
 ruff format --check .                 # format, but only report - CI will use this form
 ```
 
-These are the exact commands a future GitHub Actions workflow will call (that workflow is Issue #52's own explicit scope boundary, not built here) - passing all four locally is the same bar CI will hold a branch to.
+These are the exact commands CI runs (see "Continuous Integration" below) - passing all four locally is the same bar CI holds a branch to.
 
 **Tool choice**: a single tool, Ruff, covers linting, import sorting, and formatting - there was no previous Black/isort/flake8 setup to reconcile or migrate off of; this is the project's first backend lint/format configuration. Using one tool instead of three avoids the class of bugs where a formatter and a linter disagree about the "correct" style and fight each other on every commit.
 
@@ -58,6 +58,18 @@ These are the exact commands a future GitHub Actions workflow will call (that wo
 **`B008`** (function call in default argument) is *not* ignored, but is narrowed: FastAPI's dependency injection is `Depends(...)`/`Query(...)`/`File(...)`/`Form(...)` used as a parameter default - that's the framework's documented API, not the mutable-default-argument bug `B008` exists to catch. `[tool.ruff.lint.flake8-bugbear] extend-immutable-calls` allowlists exactly those FastAPI callables, so `B008` stays active for everything else (a plain `def f(x=some_call())` elsewhere in the codebase would still be flagged).
 
 No `noqa` comments were added or needed beyond the one already in `alembic/env.py` (`import app.models  # noqa: F401`, a deliberate side-effect import that registers every model on `Base.metadata` before Alembic reads it - see the comment above it).
+
+---
+
+## Continuous Integration (Issue #54)
+
+`.github/workflows/backend.yml` runs on every push and pull request to `main` or `develop` that touches `backend/**` (or the workflow file itself) - a frontend-only or docs-only change doesn't trigger it. It's a single `ubuntu-latest` job that checks out the repo, starts a `postgres:16` service container (same image and credentials as `infra/docker-compose.yml`'s local dev Postgres, reachable at `localhost:5432` exactly like `docs/testing.md`'s "Running Tests" section already describes), sets up Python 3.12 with `actions/setup-python`'s built-in pip cache (keyed off `backend/requirements.txt` and `backend/requirements-dev.txt`), runs `pip install -r requirements-dev.txt`, and then runs `ruff format --check .`, `ruff check .`, and `pytest -v` in that order - the same commands documented above, never invoked differently. Any one of those three failing fails the whole workflow (a step failure stops the job by default - no special configuration needed for that). There's no matrix or parallel job - a single Python version and a single job is enough for an application, not a published library supporting a range of runtimes.
+
+`DATABASE_URL` and `JWT_SECRET_KEY` are set directly in the workflow's `env:` block, since `app/core/config.py`'s `Settings()` reads them eagerly at import time and there's no `.env` file in CI (it's gitignored). Neither is a real secret in this context - the Postgres database and the whole VM are discarded when the job ends, and `JWT_SECRET_KEY` only needs to be *some* string for token signing to work inside that one run.
+
+**`GEMINI_API_KEY` is deliberately never set.** `test_summarize_uses_real_gemini_provider_by_default_when_key_missing` (`tests/test_analyses.py`) asserts a 503 when the key is missing - the one environmental flake mentioned throughout this project's history, which only ever failed on a local machine that happened to already have a real key exported in its shell. GitHub Actions never injects a secret into a job unless a workflow step explicitly references it via `secrets.<name>`; this workflow does not reference `secrets.GEMINI_API_KEY` (or any secret) anywhere, so the variable is simply absent in the job's environment - exactly the condition the test expects - with no extra handling, workaround, or weakening of the test required. (Secrets are also never exposed to `pull_request` runs from forked repositories at all, which would be a second, independent reason this stays safe if the project ever accepted outside contributions - but the first reason alone is sufficient here.)
+
+A red check on a PR always reproduces locally with the exact command named in that step's log - `ruff format --check .`, `ruff check .`, or `pytest -v` - run from `backend/` with the local Postgres running (`docker compose up --build` from `infra/`, per "Running Tests" above).
 
 ---
 

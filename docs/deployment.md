@@ -115,11 +115,11 @@ Docker Compose will coordinate communication between services for both local dev
 
 ## Continuous Integration
 
-`.github/workflows/frontend.yml` (Issue #55) runs on every push and pull request to `main`/`develop` that touches the frontend: `npm run lint`, `npm run typecheck`, `npm run format:check`, `npm test`, and `npm run build`, in that order, on `ubuntu-latest` with Node 20. See `docs/frontend.md`'s "Continuous Integration" section for the full breakdown.
+- `.github/workflows/frontend.yml` (Issue #55) runs on every push and pull request to `main`/`develop` that touches the frontend: `npm run lint`, `npm run typecheck`, `npm run format:check`, `npm test`, and `npm run build`, in that order, on `ubuntu-latest` with Node 20. See `docs/frontend.md`'s "Continuous Integration" section for the full breakdown.
+- `.github/workflows/backend.yml` (Issue #54) runs the same way for the backend: `ruff format --check .`, `ruff check .`, and `pytest -v`, against a `postgres:16` service container, on `ubuntu-latest` with Python 3.12. See `docs/testing.md`'s "Continuous Integration" section for the full breakdown, including why `GEMINI_API_KEY` is deliberately left unset.
 
 Still planned:
 
-- Backend lint/test workflow (Issue #56) - `ruff check`, `ruff format --check`, and `pytest` (see `docs/testing.md`), mirroring the frontend workflow.
 - Docker image builds
 
 ---

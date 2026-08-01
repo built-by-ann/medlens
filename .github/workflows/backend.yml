@@ -1,0 +1,114 @@
+name: Backend CI
+
+# Runs on pushes and PRs that touch the backend (or this workflow file
+# itself), targeting the repo's two long-lived branches - matches how the
+# rest of this repo already branches (feature/* -> develop -> main) and
+# mirrors frontend.yml's own trigger shape. Frontend-only or docs-only
+# changes don't trigger this at all.
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+
+jobs:
+  quality:
+    name: Format, lint, test
+    runs-on: ubuntu-latest
+
+    # The test suite (tests/conftest.py) runs against a real Postgres
+    # database, not a mock - see docs/testing.md. This service container
+    # gives it one, reachable at localhost:5432 exactly like the local dev
+    # Postgres from infra/docker-compose.yml (same image, same credentials,
+    # for one less thing to keep in sync).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: medlens_user
+          POSTGRES_PASSWORD: medlens_password
+          POSTGRES_DB: medlens_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # Every step below runs with backend/ as its cwd, so commands read the
+    # same way they do when a developer runs them locally (see
+    # docs/testing.md's "Linting and Formatting" and "Running Tests"
+    # sections) - no repeated `cd`.
+    defaults:
+      run:
+        working-directory: backend
+
+    # app/core/config.py's Settings() reads these eagerly at import time,
+    # so they have to exist as real process env vars before pytest (or
+    # even ruff, which also imports app/ to lint it) starts - a .env file
+    # would work locally but isn't present in CI (it's gitignored).
+    # JWT_SECRET_KEY only needs to be *some* string here; nothing in this
+    # job depends on it being kept secret, since the whole database and
+    # process are thrown away when the job ends.
+    env:
+      DATABASE_URL: postgresql://medlens_user:medlens_password@localhost:5432/medlens_db
+      JWT_SECRET_KEY: ci-test-secret-key-not-used-anywhere-real
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # Matches the Dockerfile's runtime (python:3.12-slim) and
+          # pyproject.toml's `target-version = "py312"` (Issue #52) - the
+          # project's one established production/lint target, not
+          # whatever Python happens to be newest.
+          python-version: "3.12"
+          # actions/setup-python's built-in pip cache, keyed off both
+          # dependency files (requirements-dev.txt pulls in requirements.txt
+          # itself, but listing both means the cache still busts correctly
+          # if only requirements.txt changes).
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      # Installs both backend/requirements.txt and requirements-dev.txt
+      # (which are ruff/pytest/httpx/reportlab) - requirements-dev.txt
+      # already `-r requirements.txt`s the base file, so this one command
+      # is the complete install; a separate `pip install -r requirements.txt`
+      # step first would just be redundant.
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      # The exact three commands documented in docs/testing.md - never
+      # invoked differently here than a developer would run them locally.
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Lint
+        run: ruff check .
+
+      # test_summarize_uses_real_gemini_provider_by_default_when_key_missing
+      # (tests/test_analyses.py) asserts a 503 when GEMINI_API_KEY is
+      # missing - it only fails on a machine that happens to have a real
+      # key set in its environment already. This job's env block above
+      # never references `secrets.GEMINI_API_KEY` (or any secret at all),
+      # so the variable is simply unset here, exactly like a machine that's
+      # never configured it - the condition this test expects. GitHub
+      # Actions never injects a secret into a job unless a step explicitly
+      # asks for it via `secrets.<name>`, and even then, secrets aren't
+      # exposed to `pull_request` runs at all when the PR comes from a
+      # fork - so this test is deterministic here with no extra handling,
+      # and nothing about the test itself needed to change or weaken.
+      - name: Test
+        run: pytest -v
