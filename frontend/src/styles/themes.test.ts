@@ -55,7 +55,13 @@ describe('themes.css', () => {
 
   it('gives every badge token (success/warning/danger/info-badge, badge-foreground) the exact same value in every theme', () => {
     const blocks = parseThemeBlocks()
-    const badgeTokens = ['success-badge', 'warning-badge', 'danger-badge', 'info-badge', 'badge-foreground']
+    const badgeTokens = [
+      'success-badge',
+      'warning-badge',
+      'danger-badge',
+      'info-badge',
+      'badge-foreground',
+    ]
 
     const valueSets = new Set(
       blocks.map((block) => badgeTokens.map((token) => readToken(block.body, token)).join('|')),
@@ -71,7 +77,9 @@ describe('themes.css', () => {
     const byMode = new Map<string, Set<string>>()
 
     for (const block of blocks) {
-      const mode = block.label.includes('-') ? block.label.split('-').slice(1).join('-') : block.label
+      const mode = block.label.includes('-')
+        ? block.label.split('-').slice(1).join('-')
+        : block.label
       const values = statusTokens.map((token) => readToken(block.body, token)).join('|')
       const set = byMode.get(mode) ?? new Set<string>()
       set.add(values)
@@ -81,7 +89,9 @@ describe('themes.css', () => {
     expect(byMode.size).toBeGreaterThan(0)
 
     for (const [mode, valueSets] of byMode) {
-      expect(valueSets.size, `mode "${mode}" has inconsistent status colors across palettes`).toBe(1)
+      expect(valueSets.size, `mode "${mode}" has inconsistent status colors across palettes`).toBe(
+        1,
+      )
     }
   })
 })

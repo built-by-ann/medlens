@@ -212,9 +212,7 @@ export function AnalysisProcessingPage() {
             <dl className="mt-4 grid grid-cols-2 gap-4">
               {createdAt && <SummaryStat label="Created" value={createdAt} />}
               <div className="flex flex-col gap-0.5">
-                <dt className="text-xs font-medium tracking-wide text-muted uppercase">
-                  Status
-                </dt>
+                <dt className="text-xs font-medium tracking-wide text-muted uppercase">Status</dt>
                 <dd>
                   <AnalysisStatusBadge status={analysis.status} />
                 </dd>
