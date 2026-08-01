@@ -48,8 +48,8 @@ export function HomePage() {
           MedLens
         </h1>
         <p className="max-w-2xl text-lg text-muted">
-          AI-powered medication reconciliation for clinical documentation. Upload notes, and
-          MedLens finds where they disagree - with the evidence to back it up.
+          AI-powered medication reconciliation for clinical documentation. Upload notes, and MedLens
+          finds where they disagree - with the evidence to back it up.
         </p>
         <div className="flex flex-wrap gap-3 pt-2">
           <Link
