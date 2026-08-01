@@ -91,9 +91,7 @@ def _find_missing_from_medication_list(medications_by_name, mentions_by_name):
                 medication_id=None,
                 medication_mention_id=representative.id,
                 discrepancy_type=DiscrepancyType.MISSING_FROM_MEDICATION_LIST,
-                severity=SEVERITY_BY_DISCREPANCY_TYPE[
-                    DiscrepancyType.MISSING_FROM_MEDICATION_LIST
-                ],
+                severity=SEVERITY_BY_DISCREPANCY_TYPE[DiscrepancyType.MISSING_FROM_MEDICATION_LIST],
                 title=f"{representative.medication_name} not found in medication list",
                 ai_explanation=(
                     f"{representative.medication_name} is mentioned in the selected clinical "

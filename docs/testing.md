@@ -29,6 +29,38 @@ The local PostgreSQL container must be running (`docker compose up --build` from
 
 ---
 
+## Linting and Formatting (Issue #52)
+
+The backend has no `Makefile`/`uv`/`poetry` task runner - just `pip` and `requirements*.txt` - so the commands below are the recommended way to run the quality pipeline directly, the same way `pytest -v` already is above.
+
+```bash
+cd backend
+source .venv/bin/activate
+pip install -r requirements-dev.txt   # installs ruff alongside pytest/httpx/reportlab
+
+ruff check .                          # lint
+ruff check . --fix                    # lint, auto-fixing what's safely fixable
+ruff format .                         # format
+ruff format --check .                 # format, but only report - CI will use this form
+```
+
+These are the exact commands a future GitHub Actions workflow will call (that workflow is Issue #52's own explicit scope boundary, not built here) - passing all four locally is the same bar CI will hold a branch to.
+
+**Tool choice**: a single tool, Ruff, covers linting, import sorting, and formatting - there was no previous Black/isort/flake8 setup to reconcile or migrate off of; this is the project's first backend lint/format configuration. Using one tool instead of three avoids the class of bugs where a formatter and a linter disagree about the "correct" style and fight each other on every commit.
+
+**Configuration** lives in `backend/pyproject.toml` (the project has no other use for that file yet - no `[build-system]`/`[project]` table, just `[tool.ruff]`). Enabled rule sets: pycodestyle (`E`/`W`), Pyflakes (`F`), isort (`I`), pyupgrade (`UP`), flake8-bugbear (`B`), flake8-comprehensions (`C4`), flake8-simplify (`SIM`), and Ruff's own additional rules (`RUF`). Line length is 100, matching the frontend's Prettier `printWidth` (`frontend/.prettierrc.json`) so both halves of the project agree on one convention.
+
+**Intentionally ignored rules** (each documented again, in more detail, directly above its entry in `pyproject.toml`):
+
+- **`E501`** (line too long) - the formatter already wraps every line of code it can; what's left is either a long string that can't be safely rewrapped without changing its meaning (the natural-language AI prompt text in `app/ai/prompts.py`) or a long URL in a comment. Ruff's own docs recommend disabling `E501` for exactly this reason when its formatter is in use.
+- **`UP042`** (`class Foo(str, Enum)` → `class Foo(StrEnum)`) - every API schema enum (`AnalysisStatus`, `DiscrepancyType`, `DiscrepancySeverity`, `ResolutionStatus`) uses the `str, Enum` mixin today. `enum.StrEnum` isn't a guaranteed drop-in replacement - it changes how members format via `str()`/f-strings, which could silently alter API response bodies or log output. Issue #52 is lint/format only ("do not change application behavior"), so this stays off; it's a candidate for its own deliberate, tested issue later, not a side effect of this one.
+
+**`B008`** (function call in default argument) is *not* ignored, but is narrowed: FastAPI's dependency injection is `Depends(...)`/`Query(...)`/`File(...)`/`Form(...)` used as a parameter default - that's the framework's documented API, not the mutable-default-argument bug `B008` exists to catch. `[tool.ruff.lint.flake8-bugbear] extend-immutable-calls` allowlists exactly those FastAPI callables, so `B008` stays active for everything else (a plain `def f(x=some_call())` elsewhere in the codebase would still be flagged).
+
+No `noqa` comments were added or needed beyond the one already in `alembic/env.py` (`import app.models  # noqa: F401`, a deliberate side-effect import that registers every model on `Base.metadata` before Alembic reads it - see the comment above it).
+
+---
+
 ## Test Database
 
 Tests never run against `medlens_db`, the development database.

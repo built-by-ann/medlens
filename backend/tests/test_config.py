@@ -4,9 +4,7 @@ from app.core.config import Settings
 def test_settings_loads_expected_environment_values(monkeypatch):
     monkeypatch.setenv("APP_NAME", "Test App")
     monkeypatch.setenv("APP_ENV", "test")
-    monkeypatch.setenv(
-        "DATABASE_URL", "postgresql://test_user:test_pass@localhost:5432/test_db"
-    )
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test_user:test_pass@localhost:5432/test_db")
     monkeypatch.setenv("JWT_SECRET_KEY", "unit-test-secret")
     monkeypatch.setenv("JWT_ALGORITHM", "HS256")
     monkeypatch.setenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "45")

@@ -178,9 +178,7 @@ def test_create_medication_discrepancy_allows_each_severity(db, severity):
 
 
 @pytest.mark.parametrize("resolution_status", list(ResolutionStatus))
-def test_create_medication_discrepancy_allows_each_resolution_status(
-    db, resolution_status
-):
+def test_create_medication_discrepancy_allows_each_resolution_status(db, resolution_status):
     user = _create_user(db, email=f"resolution.{resolution_status.value}@example.com")
     analysis = _create_analysis(db, user)
 

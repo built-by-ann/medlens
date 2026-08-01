@@ -67,7 +67,7 @@ def summarize_clinical_documents(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=NOT_FOUND_DETAIL,
-        )
+        ) from None
 
     try:
         mark_analysis_processing(db, analysis)
@@ -95,7 +95,7 @@ def summarize_clinical_documents(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=message,
-        )
+        ) from error
 
     return ClinicalNoteSummaryResponse(
         analysis_id=analysis.id,

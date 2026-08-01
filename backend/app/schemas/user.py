@@ -14,9 +14,7 @@ class UserCreate(BaseModel):
     @classmethod
     def validate_password(cls, value: str) -> str:
         if len(value) < MIN_PASSWORD_LENGTH:
-            raise ValueError(
-                f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
-            )
+            raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters long")
 
         return value
 

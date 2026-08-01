@@ -26,7 +26,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> UserResponse
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A user with this email is already registered",
-        )
+        ) from None
 
 
 @router.post("/login", response_model=Token)

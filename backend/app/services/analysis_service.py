@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session, selectinload
 
@@ -74,7 +74,7 @@ def ordered_clinical_documents(analysis: Analysis) -> list[ClinicalDocument]:
 
 def mark_analysis_processing(db: Session, analysis: Analysis) -> Analysis:
     analysis.status = "processing"
-    analysis.started_at = datetime.now(timezone.utc)
+    analysis.started_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(analysis)
@@ -86,7 +86,7 @@ def mark_analysis_completed(
     db: Session, analysis: Analysis, summary_in: AnalysisCompletedSummary
 ) -> Analysis:
     analysis.status = "completed"
-    analysis.completed_at = datetime.now(timezone.utc)
+    analysis.completed_at = datetime.now(UTC)
     analysis.error_message = None
 
     analysis.summary = summary_in.summary
@@ -191,7 +191,7 @@ def delete_analysis(db: Session, patient_id: int, analysis_id: int) -> bool:
 
 def mark_analysis_failed(db: Session, analysis: Analysis, error_message: str) -> Analysis:
     analysis.status = "failed"
-    analysis.completed_at = datetime.now(timezone.utc)
+    analysis.completed_at = datetime.now(UTC)
     analysis.error_message = error_message
 
     analysis.total_findings = 0

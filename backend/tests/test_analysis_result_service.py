@@ -255,9 +255,7 @@ def test_persist_analysis_result_rolls_back_when_completion_fails(db, monkeypatc
     def _boom(*args, **kwargs):
         raise RuntimeError("simulated failure during completion")
 
-    monkeypatch.setattr(
-        "app.services.analysis_result_service.mark_analysis_completed", _boom
-    )
+    monkeypatch.setattr("app.services.analysis_result_service.mark_analysis_completed", _boom)
 
     with pytest.raises(RuntimeError):
         persist_analysis_result(
@@ -304,7 +302,9 @@ def test_persist_analysis_result_creates_no_discrepancy_when_ai_medication_match
 
     assert updated.total_findings == 0
 
-    mention = db.query(MedicationMention).filter(MedicationMention.medication_name == "Lisinopril").one()
+    mention = (
+        db.query(MedicationMention).filter(MedicationMention.medication_name == "Lisinopril").one()
+    )
     assert mention.clinical_document_id in {document.id for document in analysis.clinical_documents}
     assert mention.dose == "10 mg"
     assert mention.route == "oral"

@@ -65,9 +65,7 @@ def test_summarize_returns_parsed_clinical_summary():
     assert medication.frequency == "once daily"
     assert medication.status == "active"
     assert medication.notes is None
-    assert result.clinical_summary.possible_inconsistencies == [
-        "Dose differs between two notes."
-    ]
+    assert result.clinical_summary.possible_inconsistencies == ["Dose differs between two notes."]
     assert result.clinical_summary.summary == "Patient is on Lisinopril 10 mg once daily."
 
 

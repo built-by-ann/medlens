@@ -69,7 +69,7 @@ def import_medications(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File must be valid UTF-8 encoded text",
-        )
+        ) from None
 
     try:
         result = parse_medication_csv(decoded_text)
@@ -77,7 +77,7 @@ def import_medications(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(error),
-        )
+        ) from None
     except CsvValidationError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -85,7 +85,7 @@ def import_medications(
                 "message": "CSV import failed validation. No medications were created.",
                 "row_errors": error.row_errors,
             },
-        )
+        ) from None
 
     medications_created = create_medications_from_rows(db, patient, result.medications)
 
