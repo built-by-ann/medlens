@@ -302,6 +302,41 @@ python -m pytest -v
 
 ------------------------------------------------------------------------
 
+# Deployment
+
+MedLens deploys to a single AWS EC2 instance running the same three Docker containers (`frontend`, `backend`, `postgres`) as local development, coordinated by the same `infra/docker-compose.yml` - no separate production-only configuration, no reverse proxy, no container orchestration platform.
+
+``` text
+Internet
+    │
+    ├── :8080 ─▶ frontend container (nginx, static build)
+    └── :8000 ─▶ backend container (uvicorn)
+                      │
+                      ▼
+              postgres container
+           (127.0.0.1 only - never
+            reachable from outside)
+```
+
+Short version, on a fresh Ubuntu EC2 instance:
+
+``` bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER    # log out and back in after this line
+
+git clone https://github.com/built-by-ann/medlens.git
+cd medlens/infra
+cp .env.example .env
+nano .env   # set JWT_SECRET_KEY, POSTGRES_PASSWORD, VITE_API_BASE_URL, APP_ENV=production, CORS_ALLOWED_ORIGINS
+
+docker compose build
+docker compose up -d
+```
+
+**See `docs/deployment.md`'s "AWS EC2 Deployment" section for the complete runbook** - launching and sizing the instance, security group configuration, every environment variable and where it's used, updating a running deployment, rollback, viewing logs, troubleshooting, and the full list of what's intentionally deferred (HTTPS, a custom domain, a reverse proxy, automated deployment, monitoring, and backups - all explicitly out of scope for now, not overlooked).
+
+------------------------------------------------------------------------
+
 # Project Status
 
 ## Completed
@@ -316,6 +351,8 @@ python -m pytest -v
 - Reconciliation engine
 - Analysis lifecycle
 - Comprehensive backend test suite
+- CI/CD (frontend/backend quality checks plus Docker image build validation, on every push and PR)
+- Cloud deployment (single AWS EC2 instance via Docker Compose - see Deployment above)
 
 ## In Progress
 
@@ -327,9 +364,9 @@ python -m pytest -v
 ## Planned
 
 - Additional LLM providers
-- Cloud deployment
-- CI/CD
 - Production monitoring
+- HTTPS, a custom domain, and a reverse proxy
+- Automated (CI-triggered) deployment
 
 ------------------------------------------------------------------------
 

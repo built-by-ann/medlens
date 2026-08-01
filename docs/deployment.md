@@ -2,41 +2,23 @@
 
 ## Overview
 
-MedLens is designed to be deployed as a Dockerized full-stack web application on AWS. The deployment architecture emphasizes reproducibility, scalability, and production-style engineering practices while remaining simple enough for a single-developer project.
+MedLens is deployed as a Dockerized full-stack web application on AWS. The deployment emphasizes reproducibility and simplicity appropriate to a single-developer project over scalability - one EC2 instance, running the same three containers (`frontend`, `backend`, `postgres`) locally validated in Issue #56, coordinated by the same Docker Compose file used for local development.
 
-The application will initially be deployed to a single AWS EC2 instance using Docker Compose, with optional future improvements such as managed databases, reverse proxies, and container orchestration.
+Issue #56 validated that the production images build, both locally and in CI. Issue #57 (this document's "AWS EC2 Deployment" section, below) is what actually runs them on a real EC2 instance. HTTPS, a custom domain, a reverse proxy, managed databases, and container orchestration (ECS/EKS/Kubernetes) are all explicitly deferred - see that section's Production Readiness subsection for the full list and why each is deferred rather than overlooked.
 
 ---
 
 ## Deployment Architecture
 
-The planned production environment consists of:
+The current production environment consists of:
 
-- React frontend
+- React frontend (served as a static build by nginx - see Docker Strategy below)
 - FastAPI backend
 - PostgreSQL database
-- Docker containers
-- AWS EC2
-- AWS S3 (for uploaded files)
+- Docker containers, coordinated by Docker Compose
+- A single AWS EC2 instance
 
-```text
-                 Internet
-                     │
-                     ▼
-              AWS EC2 Instance
-                     │
-        ┌────────────┼────────────┐
-        ▼            ▼            ▼
-    Frontend     FastAPI      PostgreSQL
-    Container    Container     Container
-                     │
-                     ▼
-                Gemini API
-
-(Optional)
-
-FastAPI ─────────────► AWS S3
-```
+See the "AWS EC2 Deployment" section below for the full architecture diagram, the deployment runbook, and why there's no reverse proxy or S3 integration - neither exists in this application today (uploaded documents are stored as extracted text in Postgres, never as files on disk or in object storage - see `docs/data-model.md`), so nothing here depends on either.
 
 ---
 
@@ -69,21 +51,23 @@ docker compose up --build
 
 ## Production Environment
 
-The initial production deployment will include:
+The current production deployment (see "AWS EC2 Deployment" below for the full runbook) includes:
 
-- Dockerized frontend
-- Dockerized backend
-- PostgreSQL
-- Environment variables
-- Persistent database storage
-- Structured application logs
+- Dockerized frontend (nginx serving a static build) and backend, each with a Docker-level health check and `restart: unless-stopped`
+- PostgreSQL, with its data on a named Docker volume that survives container restarts and `docker compose down` (without `-v`)
+- Configuration and secrets via environment variables (`infra/.env`, gitignored - never a value hardcoded in a tracked file)
+- Database migrations applied automatically on every backend container start
+- Application logs via `docker compose logs` (plain container stdout/stderr - no structured/shipped logging yet, see Production Readiness below)
 
-Future versions may include:
+Deferred to a future iteration, in explicit scope per Issue #57's own instructions - see "AWS EC2 Deployment" below's Production Readiness subsection for the full reasoning behind each:
 
-- Nginx reverse proxy
-- HTTPS
-- Load balancing
+- Nginx (or similar) reverse proxy in front of both application containers
+- HTTPS / TLS
+- DNS / a custom domain
+- Load balancing / multiple instances
 - Managed PostgreSQL (AWS RDS)
+- Automated (CI-triggered) deployment
+- Monitoring, alerting, and backups
 
 ---
 
@@ -171,12 +155,15 @@ A clean rebuild (`docker build --no-cache`) was verified to succeed for both ima
 | Variable | Where it's needed | Required | Notes |
 |---|---|---|---|
 | `VITE_API_BASE_URL` | Frontend **image build** (`docker build --build-arg`) | No - defaults to `http://localhost:8000` | Vite inlines `import.meta.env.VITE_API_BASE_URL` into the built JS bundle at build time, not at container start - unlike a typical server-side app, this can't be changed by restarting the container with a different environment variable. A real deployment overrides it: `docker build --build-arg VITE_API_BASE_URL=https://api.example.com .` |
-| `DATABASE_URL` | Backend **container runtime** | Yes | `infra/docker-compose.yml` sets it to the `postgres` service's in-network address. |
-| `JWT_SECRET_KEY` | Backend **container runtime** | Yes | `infra/docker-compose.yml` sets a placeholder value - see "What was missing before this issue" above. A real deployment must override this with a real secret, e.g. via a platform's own secret store, not a value committed anywhere. |
+| `DATABASE_URL` | Backend **container runtime** | Yes | `infra/docker-compose.yml` builds this from `POSTGRES_PASSWORD` below and the `postgres` service's in-network address - set `POSTGRES_PASSWORD`, not `DATABASE_URL` itself, when using Compose. |
+| `JWT_SECRET_KEY` | Backend **container runtime** | Yes | `infra/docker-compose.yml` defaults to a placeholder value - see "What was missing before this issue" above. **Issue #57's AWS EC2 Deployment section below covers overriding this (and every variable in this table) via `infra/.env` for a real deployment** - never edit `docker-compose.yml` itself to set a real secret. |
 | `GEMINI_API_KEY` | Backend **container runtime** | No | AI features return a `503` with a clear error when unset (see `docs/api.md`) rather than the container failing to start. |
-| `CORS_ALLOWED_ORIGINS` | Backend **container runtime** | No | Defaults to empty; see `.env.example`. |
+| `CORS_ALLOWED_ORIGINS` | Backend **container runtime** | No, but required in practice once `APP_ENV=production` | Defaults to empty; see `.env.example`. Comma-separated frontend origin(s), e.g. `http://<ec2-public-ip>:8080`. |
+| `APP_ENV` (Issue #57) | Backend **container runtime** | No - defaults to `development` | `development` auto-allows any `localhost`/`127.0.0.1` origin for CORS in addition to `CORS_ALLOWED_ORIGINS` (see `app/main.py`) - correct for local Docker use, wrong for a real deployment, which should set this to `production`. |
+| `POSTGRES_PASSWORD` (Issue #57) | Backend + `postgres` **container runtime** | No - defaults to `medlens_password` | `infra/docker-compose.yml` references this one variable in both the `postgres` service's own credentials and the backend's `DATABASE_URL`, so they can't drift out of sync. Change it before any real deployment. |
+| `FRONTEND_PORT` / `BACKEND_PORT` (Issue #57) | Host, at `docker compose up` time | No - default to `8080`/`8000` | Which host ports Compose publishes the containers on - not read by the application itself. Set `FRONTEND_PORT=80` for a deployment reachable at `http://<ec2-public-ip>/` with no port suffix. |
 
-The distinction in the first row - a frontend *build* argument versus a backend *runtime* environment variable - is the one genuinely non-obvious piece of configuration this issue's Dockerfiles have to get right, and is why `frontend/Dockerfile`'s `ARG`/`ENV` pair and `frontend.yml`'s `--build-arg` flag exist at all (see `docs/frontend.md`'s Continuous Integration section).
+The distinction in the first row - a frontend *build* argument versus every other variable being a *runtime* one - is the one genuinely non-obvious piece of configuration to get right, and is why `frontend/Dockerfile`'s `ARG`/`ENV` pair and `frontend.yml`'s `--build-arg` flag exist at all (see `docs/frontend.md`'s Continuous Integration section).
 
 ### Verifying CI without pushing a commit
 
@@ -188,51 +175,275 @@ See `docs/design-decisions.md` (Decision 18) for the full reasoning behind each 
 
 ---
 
+## AWS EC2 Deployment (Issue #57)
+
+Where Issue #56 stopped at "the images build," this issue is "the images run, in production, on a real EC2 instance, using Docker Compose" - reusing exactly those images and `infra/docker-compose.yml`, not a redesign. Deliberately out of scope, per the issue itself, and covered instead under Production Readiness below as intentionally deferred work: DNS, HTTPS/TLS, a reverse proxy, ECS/EKS/Kubernetes, and automated (CI-triggered) deployment. This is a single EC2 instance, reached directly by IP and port, updated by hand over SSH.
+
+### Deployment architecture
+
+```text
+                        Internet
+                            │
+              ┌─────────────┼─────────────┐
+              │ security group             │
+              │ 22 (SSH)   8080  8000      │
+              └─────┬────────┬───────┬─────┘
+                    ▼        ▼       ▼
+              ┌─────────────────────────────────┐
+              │         EC2 instance             │
+              │                                   │
+              │  frontend container (nginx) :8080 │
+              │  backend container (uvicorn) :8000│
+              │  postgres container :5432          │
+              │    (127.0.0.1 only - not exposed  │
+              │     through the security group)   │
+              │                                   │
+              │  docker compose (infra/)          │
+              └───────────────┬───────────────────┘
+                              ▼
+                         Gemini API
+```
+
+No reverse proxy sits in front of the two application containers - the frontend and backend are each reached directly on their own published port, exactly as `infra/docker-compose.yml` already publishes them for local use (see Local Development above). This is the same architecture, unchanged, just running on an EC2 instance instead of a laptop.
+
+### Prerequisites
+
+- An AWS account with permission to launch an EC2 instance and edit its security group.
+- An SSH key pair (create one in the EC2 console, or import an existing public key) - needed to reach the instance at all.
+- A Gemini API key, if AI features should work (optional - see the Environment Variables table above).
+
+### Step 1: Launch an EC2 instance
+
+1. EC2 console → **Launch instance**.
+2. **AMI**: Ubuntu Server 22.04 LTS (or 24.04 LTS) - these instructions assume Ubuntu's `apt`-based install; Amazon Linux 2023 works too but uses `dnf` and a different Docker install path.
+3. **Instance type**: `t3.small` (2 GiB RAM) is the practical minimum - building the frontend image (`npm ci && vite build`, see `docs/deployment.md`'s Docker Image Builds section) is memory-hungry enough that `t3.micro`'s 1 GiB can OOM mid-build. `t3.medium` gives more headroom if the free tier doesn't matter.
+4. **Key pair**: select the one from Prerequisites.
+5. **Storage**: the default 8 GiB gp3 root volume is tight once Docker's image layers and build cache accumulate - 20 GiB avoids babysitting disk space.
+6. **Security group**: create a new one now; configure it in the next step before launching, not after.
+
+### Step 2: Configure the security group
+
+See Security below for the reasoning; the rules themselves:
+
+| Type | Port | Source | Purpose |
+|---|---|---|---|
+| SSH | 22 | Your own IP only (`My IP` in the console) | Administration. Never `0.0.0.0/0` - an SSH port open to the entire internet is scanned and attacked continuously. |
+| Custom TCP | 8080 (or `FRONTEND_PORT`, see below) | `0.0.0.0/0` | The web app itself. |
+| Custom TCP | 8000 (or `BACKEND_PORT`) | `0.0.0.0/0` | The API - the browser calls this directly (see Deployment Architecture above; there's no reverse proxy to hide it behind). |
+
+**5432 (Postgres) is deliberately absent from this table** - `infra/docker-compose.yml` binds it to `127.0.0.1` only (see Docker Strategy above), so it isn't reachable from outside the instance even if a security group rule mistakenly allowed it. Nothing to configure here; this is enforced at the Docker level, not the AWS level, on purpose - see Security below.
+
+### Step 3: Install Docker and Docker Compose
+
+SSH in, then run Docker's official convenience script (installs the Docker Engine, CLI, and the `docker compose` plugin together - this is genuinely the `docker compose` used throughout this document, not the older standalone `docker-compose` Python tool):
+
+```bash
+ssh -i /path/to/your-key.pem ubuntu@<ec2-public-ip>
+
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+```
+
+Log out and back in (`exit`, then SSH in again) for the group change to take effect - without it, every `docker` command below needs `sudo` in front of it. Confirm both are present:
+
+```bash
+docker --version
+docker compose version
+```
+
+### Step 4: Clone the repository
+
+```bash
+sudo apt-get update && sudo apt-get install -y git
+git clone https://github.com/built-by-ann/medlens.git
+cd medlens/infra
+```
+
+### Step 5: Configure environment variables
+
+```bash
+cp .env.example .env
+nano .env      # or vim, or any editor
+```
+
+Fill in, at minimum, `JWT_SECRET_KEY` and `POSTGRES_PASSWORD` (both required for a real deployment - see Security below), and `VITE_API_BASE_URL` (set it to `http://<ec2-public-ip>:8000`, using this instance's actual public IP - the frontend image bakes this in at build time in the next step, so it must be correct *before* building, not after). Set `APP_ENV=production` and `CORS_ALLOWED_ORIGINS=http://<ec2-public-ip>:8080` (or whatever `FRONTEND_PORT` is set to) so the deployed frontend's origin is actually allowed to call the API. `infra/.env` is gitignored - it never gets committed, by this repository's own `.gitignore`, regardless of what's in it.
+
+### Step 6: Build the images
+
+```bash
+docker compose build
+```
+
+This is the exact `docker build` already validated in CI (Issue #56) for each image, run here against `infra/.env`'s real values instead of CI's/local dev's placeholders - `VITE_API_BASE_URL` is what actually gets baked into the frontend bundle this time.
+
+### Step 7: Start the application
+
+```bash
+docker compose up -d
+```
+
+`-d` (detached) so the application keeps running after the SSH session ends - without it, closing the terminal stops every container. `restart: unless-stopped` on all three services (see Production Configuration below) means they also come back automatically if the instance itself reboots, with no manual step needed.
+
+### Verifying the deployment
+
+```bash
+# From the instance itself:
+docker compose ps                     # all three services should show "healthy" within ~30s
+curl http://localhost:8000/health     # {"status":"ok","database":"connected"}
+
+# From your own machine:
+curl http://<ec2-public-ip>:8000/health
+```
+
+Then open `http://<ec2-public-ip>:8080` in a browser - the app should load, and registering an account should succeed (this exercises the database end to end, proving migrations actually ran - see Production Configuration below for why that specifically used to be broken).
+
+### Updating the application
+
+```bash
+cd ~/medlens
+git pull
+cd infra
+docker compose build
+docker compose up -d
+```
+
+`docker compose up -d` after a rebuild only recreates containers whose image actually changed - if just the backend changed, the frontend and postgres containers aren't touched (and keep running, with no downtime for them). Migrations run automatically as each backend container starts (see Production Configuration below), so a schema change ships as part of this same `git pull` + rebuild, with no separate migration step to remember.
+
+### Rollback procedure
+
+There's no automated rollback (out of scope - see Production Readiness below), but the manual version is a normal `git` operation followed by the same update steps:
+
+```bash
+cd ~/medlens
+git log --oneline -10       # find the last known-good commit
+git checkout <commit-sha>   # or: git checkout <previous-tag>
+cd infra
+docker compose build
+docker compose up -d
+```
+
+**A rollback that crosses a database migration is the one case this doesn't handle for you.** Rolling the application code back to before a migration was added does not reverse that migration - the schema stays at whatever it was upgraded to. This is a real limitation, not an oversight: `alembic downgrade` exists and can reverse a specific migration by hand if truly needed, but running it against a production database is exactly risky enough that it shouldn't happen as an unattended part of a generic rollback command. If a deployed migration needs to be reversed, do it deliberately, one migration at a time, and back up the volume first (see Production Readiness below).
+
+### Viewing logs
+
+```bash
+docker compose logs                    # every service, most recent first
+docker compose logs -f                 # follow in real time (Ctrl+C to stop)
+docker compose logs backend            # one service only
+docker compose logs --tail 100 backend # last 100 lines, then exit
+```
+
+### Stopping and restarting services
+
+```bash
+docker compose stop                # stop containers, keep them (and the network/volume) around
+docker compose start               # start them again, unchanged
+docker compose restart             # stop + start in one step
+docker compose restart backend     # just one service
+
+docker compose down                # stop AND remove containers + network (the postgres volume survives)
+docker compose down -v             # also remove the postgres volume - genuinely destroys all data, only for
+                                    # a real reset, e.g. rebuilding the whole environment from scratch
+```
+
+### Troubleshooting
+
+- **A container shows `unhealthy` or keeps restarting.** `docker compose ps` shows which one; `docker compose logs <service>` almost always explains why. A backend stuck unhealthy immediately after a fresh `docker compose up` is most often `postgres` not being reachable yet - `depends_on: condition: service_healthy` (see Production Configuration below) should prevent this by making backend wait, but if `postgres` itself never reports healthy, check its own logs first.
+- **`docker compose build` fails partway through, out of memory.** Most common on `t3.micro` - the frontend build (`npm ci && vite build`) is the usual culprit. Either resize the instance (Step 1) or add swap: `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`.
+- **The frontend loads but every request fails with a CORS error in the browser console.** `CORS_ALLOWED_ORIGINS` doesn't include the frontend's real origin, or `APP_ENV` is still `development` was assumed instead of set - see Step 5 and `app/main.py`'s `configure_cors`. Fix `infra/.env`, then `docker compose up -d` (no rebuild needed - these are runtime environment variables, not baked in).
+- **The frontend loads but API calls go to the wrong place / `localhost`.** `VITE_API_BASE_URL` was wrong (or left at its default) when the frontend image was built. Fix `infra/.env` and **rebuild** (`docker compose build frontend`) - restarting the container alone does nothing, since this value is baked into the JS bundle at build time (see Environment Variables above).
+- **`docker: permission denied` on every command.** The `usermod -aG docker` group change from Step 3 needs a fresh login to take effect - log out and back in (or run `newgrp docker` in the current shell as a one-session workaround).
+- **Registering a user (or any database write) fails with a 500.** Almost certainly a missed migration - check `docker compose logs backend` for `alembic` output near the top of the log; a real error there (not just the normal "Running upgrade..." lines) means the schema didn't apply. This should be automatic on every backend start (see Production Configuration below), so a persistent failure here is worth investigating directly rather than working around.
+
+### Production Configuration Changes (Issue #57)
+
+Auditing the setup this issue inherited from Issue #56 against a real deployment (not just "does `docker build` succeed") found three gaps that would have made a genuine EC2 deployment either broken or insecure. Fixing them is the entire change to `infra/docker-compose.yml`, `backend/Dockerfile`, and `backend/alembic/env.py`:
+
+- **Nothing ever ran database migrations.** `alembic.ini`'s `sqlalchemy.url` is a hardcoded `localhost:5432` connection string, correct only when `alembic` runs directly on a developer's host. Verifying this issue's deployment against a genuinely fresh database (see Manual Verification in the final report) hit `relation "users" does not exist` on the very first `/auth/register` call - the schema was simply never created. Fixed two ways together: `backend/alembic/env.py` now prefers `DATABASE_URL` from the environment over `alembic.ini`'s static value (so migrations resolve the right host whether run inside a container or on a developer's machine), and `backend/Dockerfile`'s `CMD` now runs `alembic upgrade head` before starting `uvicorn` on every container start - a no-op against an already-current database, so this is safe on every restart, not just the first one. See `docs/design-decisions.md` (Decision 19).
+- **`JWT_SECRET_KEY` (and every other backend secret) was a value hardcoded directly in `docker-compose.yml`.** Fine for local development and CI (Issue #56's own reasoning - nothing there is a real secret), but a literal value committed in a tracked YAML file is by definition not something a real deployment can keep secret. `infra/docker-compose.yml` now reads `JWT_SECRET_KEY`, `POSTGRES_PASSWORD`, `GEMINI_API_KEY`, `APP_ENV`, and `CORS_ALLOWED_ORIGINS` via `${VAR:-default}` substitution from `infra/.env` (new, gitignored, git-ignored the same way `backend/.env`/`frontend/.env` already are - see Security below), each still defaulting to the exact placeholder Issue #56 used, so local development and CI need no changes at all.
+- **Postgres's port was published to every network interface.** `- "5432:5432"` in Docker Compose binds to `0.0.0.0` by default - reachable from outside the host if a security group ever allowed it, which is one misconfiguration away from a public database. Changed to `- "127.0.0.1:5432:5432"` - still reachable from the host itself (`psql -h localhost`, an SSH tunnel), never from outside it, regardless of the security group. See Security below.
+
+Also added, for the reliability this issue's own task list asks for: `restart: unless-stopped` on all three services (so a container that crashes, or an instance that reboots, recovers without a manual `docker compose up`), and Docker-level `healthcheck`s for all three (`postgres`: `pg_isready`; `backend`: an HTTP check that parses `/health`'s response body rather than trusting its always-200 status code, since the endpoint itself can report `"database": "disconnected"` with a 200 - see `docs/api.md`; `frontend`: a plain `wget --spider` against nginx). `backend` now declares `depends_on: postgres: condition: service_healthy` instead of the previous unconditional `depends_on: - postgres`, which only ever waited for the postgres *container* to start, not for Postgres itself to be ready to accept connections - closing exactly the transient "database disconnected" race Issue #56's own final report flagged as a known limitation.
+
+### Security
+
+- **Containers run as non-root where applicable.** The backend runs as a dedicated `appuser` (Issue #56, `backend/Dockerfile`) - verified again for this issue (`docker exec <container> whoami` → `appuser`). The frontend's `nginx:alpine` runtime uses the standard nginx image as-is: its master process binds port 80 as root (required to bind a port below 1024) and hands actual request handling off to worker processes running as the unprivileged `nginx` user, nginx's own well-established privilege-separation model - not something this project's Dockerfile needs to (or should) override. `postgres:16` is the stock upstream image, whose own entrypoint already drops to a non-root `postgres` user.
+- **Secrets are never committed.** `infra/.env` (real values) is covered by the repository's existing blanket `.env` rule in `.gitignore` (confirmed with `git check-ignore -v infra/.env`) - the same rule that already covers `backend/.env`/`frontend/.env`. Only `infra/.env.example` (placeholders, no real values - the same pattern as `backend/.env.example`/`frontend/.env.example`) is tracked.
+- **`.env` usage is documented** in Step 5 above and inline in `infra/.env.example` itself - every variable there has a comment explaining what it's for and, where it matters, whether changing it requires a rebuild (`VITE_API_BASE_URL`) or just a restart (everything else).
+- **Security group configuration** is Step 2 above; summarized:
+
+  | Port | Exposed to | Why |
+  |---|---|---|
+  | 22 (SSH) | Your IP only | Administration access. |
+  | 8080 (frontend, or `FRONTEND_PORT`) | Everyone | The application. |
+  | 8000 (backend, or `BACKEND_PORT`) | Everyone | The API - called directly by the browser, since there's no reverse proxy in front of it (see Deployment Architecture above). |
+  | 5432 (Postgres) | **Nobody** | Bound to `127.0.0.1` inside `docker-compose.yml` itself (see Production Configuration Changes above) - there is no security group rule that could expose it even by mistake, since the port is never listening on a network interface a security group rule could apply to in the first place. |
+
+### Production Readiness
+
+**Reproducibility**: verified directly, not assumed - a fresh copy of this repository (simulating a clean `git clone`, no local Docker cache or state reused) built and ran successfully with zero configuration (every default in `infra/docker-compose.yml` kicking in), and separately with a real `infra/.env` overriding every secret, matching exactly what Step 5 above asks a real deployment to do. See Manual Verification in the final report for the full sequence.
+
+**Reliability**: `restart: unless-stopped` and the three healthchecks (Production Configuration Changes above) mean the stack recovers from a container crash or an instance reboot without a human running a command - genuinely the most common single-instance failure mode, and now handled. What's *not* handled, deliberately: the instance itself going down (there is exactly one of it - no failover, no multi-AZ, nothing this issue's "single EC2 instance" scope would allow anyway) and application-level errors that don't crash the process (the healthcheck only catches "is `/health` reporting ok," not "is every feature working").
+
+**Ease of maintenance**: the entire update procedure is `git pull && docker compose build && docker compose up -d` (Updating the application, above) - three commands, no new tooling to learn beyond what Docker Image Builds (Issue #56) already established. Logs, restarts, and rollback are all plain `docker compose`/`git` commands, deliberately not wrapped in a custom script - one more file to maintain and keep correct, for a sequence that's already short enough to document directly.
+
+**Deferred limitations** - explicitly out of scope for this issue, per its own notes, not overlooked:
+
+| Deferred | Why it matters eventually | What exists today instead |
+|---|---|---|
+| HTTPS / TLS | Traffic (including login credentials and JWTs) travels in plaintext | None - synthetic data only (see `docs/design-decisions.md` Decision 8), so the practical exposure is low for this project specifically, but this would be a hard blocker for any real deployment handling real data |
+| DNS / custom domain | The app is only reachable by raw IP, which changes if the instance is ever replaced | None |
+| Reverse proxy | Currently two ports to expose and remember instead of one; also a prerequisite for HTTPS (e.g. Caddy/nginx with Let's Encrypt) | None - see Deployment Architecture above |
+| Automated deployment | "Deploy" (Continuous Deployment's step 7) is a manual SSH session today, not triggered by merging to `main` | The manual procedure in Updating the application, above |
+| Monitoring / alerting | Nothing pages anyone if a container is unhealthy for an extended period | `docker compose ps`/`GET /health`, checked by hand |
+| Backups | `docker compose down -v` (or any volume loss) is unrecoverable data loss | The named volume persists across container/instance restarts (verified - see Manual Verification), but nothing protects against genuine volume loss |
+| Managed database (RDS) | A single Postgres container has no automated failover or point-in-time recovery | The `postgres` container + named volume, as deployed |
+| Kubernetes / ECS / EKS | Out of scope for this issue by explicit instruction, and unnecessary at this project's actual scale (one instance, one of each container) | Docker Compose, as it already was |
+
+---
+
 ## Continuous Deployment
 
 The planned deployment workflow is:
 
 1. Push changes to a feature branch.
 2. Open a pull request.
-3. Run automated tests.
+3. Run automated tests (Issues #54/#55).
 4. Merge into `develop`.
 5. Merge release into `main`.
-6. Build Docker images.
-7. Deploy the latest version to AWS EC2.
+6. Build Docker images (Issue #56, in CI - proves they build, doesn't deploy them).
+7. Deploy the latest version to AWS EC2 (Issue #57, above - currently a manual `git pull` + rebuild over SSH, not yet triggered automatically by step 4/5. See Production Readiness below for what an automated version of this step would need.).
 
 ---
 
 ## Monitoring
 
-The deployed application will include basic observability features such as:
-
-- Health endpoint
-- Request logging
-- Error logging
-- Processing time metrics
-- Database connectivity checks
+What exists today: `GET /health` (checked manually - see Verifying the deployment above), Docker-level `healthcheck`s for all three containers (`docker compose ps` shows current status), and plain container logs (`docker compose logs`). No structured/shipped logging, request tracing, or processing-time metrics exist yet - see "AWS EC2 Deployment"'s Production Readiness subsection above for why this is an explicitly deferred limitation rather than an oversight.
 
 Future improvements may include:
 
 - AWS CloudWatch
 - Sentry
 - Performance dashboards
+- Structured (JSON) application logs, shipped somewhere queryable
 
 ---
 
 ## Future Improvements
 
-Potential production improvements include:
+Potential production improvements include, roughly in the order they'd likely matter (see "AWS EC2 Deployment"'s Production Readiness subsection above for the full reasoning behind each):
 
-- AWS RDS
+- HTTPS / TLS and a reverse proxy
+- A custom domain
+- Automated (CI-triggered) deployment
+- Backups
+- Monitoring / alerting
+- AWS RDS (managed PostgreSQL)
 - Redis
 - Celery background workers
-- Nginx reverse proxy
-- HTTPS certificates
-- Kubernetes
-- Auto-scaling
-- Blue-green deployments
-- Custom domain
+- Load balancing / auto-scaling / blue-green deployments
+- Kubernetes (only if the project ever genuinely outgrows a single instance - not a goal in itself)
 
 ---
 
@@ -252,4 +463,4 @@ The deployment strategy is intended to demonstrate production engineering practi
 
 ## Status
 
-This document outlines the intended deployment strategy and will evolve as deployment infrastructure is implemented throughout the project.
+Docker image builds (Issue #56) and the AWS EC2 deployment itself (Issue #57) are both implemented, as documented above. This document will continue to evolve as the deferred items listed under Production Readiness (above) are picked up.

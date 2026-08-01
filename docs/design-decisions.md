@@ -413,6 +413,34 @@ Cons
 
 ---
 
+# Decision 19: Automatic Migrations on Backend Startup, Not a Separate Migration Step
+
+**Decision**
+
+`backend/Dockerfile`'s `CMD` runs `alembic upgrade head` before starting `uvicorn`, on every container start - not just the first one, and not as a separate script, job, or manual step a deployer has to remember. `backend/alembic/env.py` was changed to read `DATABASE_URL` from the environment when present, overriding `alembic.ini`'s hardcoded `localhost:5432` default.
+
+**Reasoning**
+
+Deploying to a real EC2 instance for Issue #57 surfaced a gap Issue #56's own build-only validation couldn't have caught: nothing anywhere ran migrations against a genuinely fresh database. Verifying the deployment against a clean Postgres volume hit `relation "users" does not exist` on the first registration attempt - `alembic.ini`'s static `sqlalchemy.url` (correct only when `alembic` runs directly on a developer's host, where the local dev Postgres really is at `localhost:5432`) meant even running `alembic upgrade head` by hand inside the container would have failed to connect at all, since Postgres is a separate container reachable by its Compose service name, not `localhost`.
+
+Running migrations automatically as part of container startup, rather than as a manual step in the deployment runbook, was chosen because a manual step is a manual step someone eventually forgets - and for a single-instance deployment with no concurrent backend replicas, there's no race condition to worry about from running `alembic upgrade head` on every start (a second, third, or hundredth run against an already-current schema is a documented no-op). This is different advice than a multi-replica deployment would need, where multiple containers racing to run migrations simultaneously on startup is a real hazard - but this project is explicitly one EC2 instance, one backend container, by this same issue's own scope.
+
+**Trade-offs**
+
+Pros
+
+- A fresh deployment (or a fresh database volume) works correctly on the very first `docker compose up`, with no separate step to document, remember, or forget
+- A schema change ships as part of the same `git pull && docker compose build && docker compose up -d` as any other code change (see `docs/deployment.md`'s Updating the application) - no second command sequence for migrations specifically
+- `alembic/env.py`'s `DATABASE_URL` override is backward compatible - a developer running `alembic upgrade head` directly from their host, with no `DATABASE_URL` exported, still gets `alembic.ini`'s original default, unchanged
+
+Cons
+
+- A failed migration now blocks the entire container from starting (it fails before `uvicorn` ever runs), rather than surfacing as a distinguishable error from a running application - correct for a broken schema (the app shouldn't serve traffic against one), but means `docker compose logs backend` is the only way to see what happened, not a live error response
+- This approach doesn't extend safely to a multi-replica deployment without additional coordination (a leader-election or a dedicated one-off migration job) - acceptable today given this project's explicit single-instance scope, but a real limitation if that scope ever changes
+- No automatic rollback of a migration on deployment rollback (see `docs/deployment.md`'s Rollback procedure) - reversing a specific migration remains a deliberate, manual `alembic downgrade`, never bundled into the generic rollback steps
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:
