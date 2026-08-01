@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 
+from app.ai.schemas import Medication as AIExtractedMedication
 from app.core.security import hash_password
 from app.models.analysis import Analysis
 from app.models.clinical_document import ClinicalDocument
@@ -10,14 +11,12 @@ from app.models.medication_discrepancy import MedicationDiscrepancy
 from app.models.medication_mention import MedicationMention
 from app.models.patient import Patient
 from app.models.user import User
-from app.schemas.analysis import AnalysisDetailResponse, AnalysisStatus
+from app.schemas.analysis import AnalysisCreate, AnalysisDetailResponse, AnalysisStatus
 from app.schemas.medication_discrepancy import (
     DiscrepancySeverity,
     DiscrepancyType,
     MedicationDiscrepancyResponse,
 )
-from app.ai.schemas import Medication as AIExtractedMedication
-from app.schemas.analysis import AnalysisCreate
 from app.services.analysis_service import InvalidClinicalDocumentIdsError, create_analysis
 from app.services.medication_reconciliation_service import (
     SEVERITY_BY_DISCREPANCY_TYPE,
@@ -138,9 +137,7 @@ def test_discontinued_status_conflict_finding(db):
     medication = _create_medication(db, patient, status="active")
     mention = _create_mention(db, document, status="discontinued")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert len(findings) == 1
     finding = findings[0]
@@ -159,9 +156,7 @@ def test_dose_conflict_finding(db):
     medication = _create_medication(db, patient, dose="10 mg")
     mention = _create_mention(db, document, dose="20 mg")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert len(findings) == 1
     finding = findings[0]
@@ -180,9 +175,7 @@ def test_route_conflict_finding(db):
     medication = _create_medication(db, patient, route="oral")
     mention = _create_mention(db, document, route="intravenous")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert len(findings) == 1
     assert findings[0].discrepancy_type == DiscrepancyType.ROUTE_CONFLICT
@@ -196,9 +189,7 @@ def test_frequency_conflict_finding(db):
     medication = _create_medication(db, patient, frequency="once daily")
     mention = _create_mention(db, document, frequency="twice daily")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert len(findings) == 1
     assert findings[0].discrepancy_type == DiscrepancyType.FREQUENCY_CONFLICT
@@ -212,9 +203,7 @@ def test_general_status_conflict_finding(db):
     medication = _create_medication(db, patient, status="discontinued")
     mention = _create_mention(db, document, status="active")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert len(findings) == 1
     assert findings[0].discrepancy_type == DiscrepancyType.STATUS_CONFLICT
@@ -228,9 +217,7 @@ def test_general_status_conflict_for_non_discontinued_mismatch(db):
     medication = _create_medication(db, patient, status="active")
     mention = _create_mention(db, document, status="started")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert len(findings) == 1
     assert findings[0].discrepancy_type == DiscrepancyType.STATUS_CONFLICT
@@ -270,9 +257,7 @@ def test_no_conflict_when_mention_lacks_comparable_field(db):
     medication = _create_medication(db, patient, dose="10 mg")
     mention = _create_mention(db, document, dose=None)
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert findings == []
 
@@ -300,9 +285,7 @@ def test_no_findings_for_equivalent_values_after_normalization(db):
         status="active",
     )
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert findings == []
 
@@ -389,12 +372,16 @@ def test_severity_mapping_is_centralized_and_conservative():
         == DiscrepancySeverity.HIGH
     )
     assert SEVERITY_BY_DISCREPANCY_TYPE[DiscrepancyType.DOSE_CONFLICT] == DiscrepancySeverity.MEDIUM
-    assert SEVERITY_BY_DISCREPANCY_TYPE[DiscrepancyType.ROUTE_CONFLICT] == DiscrepancySeverity.MEDIUM
+    assert (
+        SEVERITY_BY_DISCREPANCY_TYPE[DiscrepancyType.ROUTE_CONFLICT] == DiscrepancySeverity.MEDIUM
+    )
     assert (
         SEVERITY_BY_DISCREPANCY_TYPE[DiscrepancyType.FREQUENCY_CONFLICT]
         == DiscrepancySeverity.MEDIUM
     )
-    assert SEVERITY_BY_DISCREPANCY_TYPE[DiscrepancyType.STATUS_CONFLICT] == DiscrepancySeverity.MEDIUM
+    assert (
+        SEVERITY_BY_DISCREPANCY_TYPE[DiscrepancyType.STATUS_CONFLICT] == DiscrepancySeverity.MEDIUM
+    )
     assert (
         SEVERITY_BY_DISCREPANCY_TYPE[DiscrepancyType.UNSUPPORTED_MEDICATION_LIST_ENTRY]
         == DiscrepancySeverity.LOW
@@ -408,9 +395,7 @@ def test_no_discrepancies_when_names_and_fields_match_exactly(db):
     medication = _create_medication(db, patient)
     mention = _create_mention(db, document)
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=True
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=True)
 
     assert findings == []
 
@@ -422,9 +407,7 @@ def test_case_insensitive_name_matching_links_to_same_medication(db):
     medication = _create_medication(db, patient, medication_name="LISINOPRIL", dose="10 mg")
     mention = _create_mention(db, document, medication_name="lisinopril", dose="20 mg")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     # A single dose conflict, rather than a missing-from-list finding plus an
     # unsupported-entry finding, proves the two names were matched as the
@@ -441,9 +424,7 @@ def test_status_match_active_produces_no_finding(db):
     medication = _create_medication(db, patient, status="active")
     mention = _create_mention(db, document, status="active")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert findings == []
 
@@ -455,9 +436,7 @@ def test_status_match_discontinued_produces_no_finding(db):
     medication = _create_medication(db, patient, status="discontinued")
     mention = _create_mention(db, document, status="discontinued")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert findings == []
 
@@ -469,9 +448,7 @@ def test_unrecognized_status_value_matches_itself_without_a_finding(db):
     medication = _create_medication(db, patient, status="on hold")
     mention = _create_mention(db, document, status="on hold")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert findings == []
 
@@ -483,9 +460,7 @@ def test_unrecognized_status_mismatch_produces_general_conflict_not_discontinued
     medication = _create_medication(db, patient, status="on hold")
     mention = _create_mention(db, document, status="active")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert len(findings) == 1
     assert findings[0].discrepancy_type == DiscrepancyType.STATUS_CONFLICT
@@ -504,9 +479,7 @@ def test_dose_present_only_on_mention_produces_no_finding(db):
     medication = _create_medication(db, patient, dose="")
     mention = _create_mention(db, document, dose="10 mg")
 
-    findings = build_discrepancy_findings(
-        [medication], [mention], check_unsupported_entries=False
-    )
+    findings = build_discrepancy_findings([medication], [mention], check_unsupported_entries=False)
 
     assert findings == []
 
@@ -568,7 +541,9 @@ def test_reconcile_ai_extracted_medications_attaches_mention_to_its_actual_sourc
 
     reconcile_ai_extracted_medications(db, analysis, [_ai_medication(source_note=1)])
 
-    mention = db.query(MedicationMention).filter(MedicationMention.medication_name == "Lisinopril").one()
+    mention = (
+        db.query(MedicationMention).filter(MedicationMention.medication_name == "Lisinopril").one()
+    )
     assert mention.clinical_document_id == document.id
 
 
@@ -809,7 +784,9 @@ def test_run_medication_reconciliation_marks_failed_on_unexpected_error(db, monk
     analysis = run_medication_reconciliation(db, patient, [document.id])
 
     assert analysis.status == "failed"
-    assert analysis.error_message == "Reconciliation failed due to an internal error (RuntimeError)."
+    assert (
+        analysis.error_message == "Reconciliation failed due to an internal error (RuntimeError)."
+    )
     assert "hunter2" not in analysis.error_message
     assert analysis.total_findings == 0
     assert analysis.high_severity_findings == 0

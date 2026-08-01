@@ -7,7 +7,6 @@ from app.models.analysis import Analysis
 from app.models.analysis_inconsistency import AnalysisInconsistency
 from app.models.analysis_medication_mention import AnalysisMedicationMention
 from app.models.clinical_document import ClinicalDocument
-from app.models.medication import Medication
 from app.models.medication_discrepancy import MedicationDiscrepancy
 from app.models.medication_mention import MedicationMention
 
@@ -282,9 +281,7 @@ def test_summarize_combines_multiple_documents(client):
             captured_prompts.append(prompt)
             return VALID_RESPONSE
 
-    app.dependency_overrides[get_ai_summary_service] = _override_ai_service(
-        _CapturingProvider()
-    )
+    app.dependency_overrides[get_ai_summary_service] = _override_ai_service(_CapturingProvider())
     try:
         response = client.post(
             f"/patients/{patient['id']}/analyses",
@@ -378,9 +375,7 @@ def test_summarize_rejects_document_owned_by_another_user(client, db):
     assert db.query(Analysis).count() == 0
 
 
-def test_summarize_rejects_document_belonging_to_a_different_patient_of_the_same_user(
-    client, db
-):
+def test_summarize_rejects_document_belonging_to_a_different_patient_of_the_same_user(client, db):
     token = _register_and_login(client, "aisummarycrosspatient@example.com")
     patient_a = _create_patient(client, token, first_name="A").json()
     patient_b = _create_patient(client, token, first_name="B").json()
@@ -617,9 +612,7 @@ def test_get_analysis_detail_returns_items_in_deterministic_order(client):
         "Third inconsistency.",
     ]
 
-    inconsistency_ids = [
-        inconsistency["id"] for inconsistency in body["possible_inconsistencies"]
-    ]
+    inconsistency_ids = [inconsistency["id"] for inconsistency in body["possible_inconsistencies"]]
     assert inconsistency_ids == sorted(inconsistency_ids)
 
 

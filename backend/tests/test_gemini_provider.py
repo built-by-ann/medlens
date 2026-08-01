@@ -61,7 +61,7 @@ def test_generate_summary_returns_text_on_success(monkeypatch):
 
     assert result == "Concise medication summary."
     assert len(fake_models.calls) == 1
-    model, contents, config = fake_models.calls[0]
+    model, contents, _config = fake_models.calls[0]
     assert model == "gemini-test"
     assert contents == "some prompt"
 
@@ -82,9 +82,7 @@ def test_generate_summary_requests_json_response_mime_type(monkeypatch):
 
 
 def test_generate_summary_wraps_api_error(monkeypatch):
-    fake_models = FakeModels(
-        error=genai_errors.ClientError(400, {"message": "bad request"}, None)
-    )
+    fake_models = FakeModels(error=genai_errors.ClientError(400, {"message": "bad request"}, None))
     monkeypatch.setattr(
         "app.ai.providers.gemini_provider.genai.Client",
         lambda **kwargs: FakeClient(fake_models),

@@ -27,4 +27,4 @@ def update_current_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A user with this email is already registered",
-        )
+        ) from None

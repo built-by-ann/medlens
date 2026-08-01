@@ -17,9 +17,7 @@ from app.services.clinical_document_service import (
     get_clinical_documents_for_patient,
 )
 
-router = APIRouter(
-    prefix="/patients/{patient_id}/clinical-documents", tags=["clinical-documents"]
-)
+router = APIRouter(prefix="/patients/{patient_id}/clinical-documents", tags=["clinical-documents"])
 
 NOT_FOUND_DETAIL = "Clinical document not found"
 
@@ -66,7 +64,7 @@ def upload_txt_document(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File must be valid UTF-8 encoded text",
-        )
+        ) from None
 
     if not raw_text:
         raise HTTPException(
@@ -120,7 +118,7 @@ def upload_pdf_document(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File must be a valid PDF",
-        )
+        ) from None
 
     if not raw_text:
         raise HTTPException(
@@ -175,7 +173,7 @@ def upload_csv_document(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File must be valid UTF-8 encoded text",
-        )
+        ) from None
 
     if not raw_text:
         raise HTTPException(

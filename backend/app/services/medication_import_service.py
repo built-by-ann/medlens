@@ -41,21 +41,17 @@ def parse_medication_csv(decoded_text: str) -> MedicationCsvImportResult:
         fieldnames = reader.fieldnames
         raw_rows = list(reader)
     except csv.Error:
-        raise CsvFormatError("Could not parse CSV file")
+        raise CsvFormatError("Could not parse CSV file") from None
 
     if not fieldnames:
         raise CsvFormatError("Uploaded file is empty")
 
     normalized_fieldnames = {(name or "").strip().lower() for name in fieldnames}
 
-    missing_columns = [
-        column for column in REQUIRED_COLUMNS if column not in normalized_fieldnames
-    ]
+    missing_columns = [column for column in REQUIRED_COLUMNS if column not in normalized_fieldnames]
 
     if missing_columns:
-        raise CsvFormatError(
-            "CSV is missing required column(s): " + ", ".join(missing_columns)
-        )
+        raise CsvFormatError("CSV is missing required column(s): " + ", ".join(missing_columns))
 
     header_lookup = {(name or "").strip().lower(): name for name in fieldnames}
 

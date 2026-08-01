@@ -145,8 +145,12 @@ def test_list_medications_returns_only_the_given_patients_medications(client):
     _create_medication(client, token, patient_a["id"], medication_name="Med A2")
     _create_medication(client, token, patient_b["id"], medication_name="Med B1")
 
-    response_a = client.get(f"/patients/{patient_a['id']}/medications", headers=_auth_headers(token))
-    response_b = client.get(f"/patients/{patient_b['id']}/medications", headers=_auth_headers(token))
+    response_a = client.get(
+        f"/patients/{patient_a['id']}/medications", headers=_auth_headers(token)
+    )
+    response_b = client.get(
+        f"/patients/{patient_b['id']}/medications", headers=_auth_headers(token)
+    )
 
     assert response_a.status_code == 200
     assert response_b.status_code == 200
@@ -379,7 +383,9 @@ def test_delete_medication_requires_authentication(client):
     assert response.status_code == 401
 
 
-def _upload_csv(client, token, patient_id, content, filename="medications.csv", content_type="text/csv"):
+def _upload_csv(
+    client, token, patient_id, content, filename="medications.csv", content_type="text/csv"
+):
     encoded = content.encode("utf-8") if isinstance(content, str) else content
 
     return client.post(
@@ -423,7 +429,9 @@ def test_import_csv_succeeds_with_notes_column_omitted(client):
     assert response.status_code == 201
     assert response.json()["medications_created"] == 1
 
-    list_response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token))
+    list_response = client.get(
+        f"/patients/{patient['id']}/medications", headers=_auth_headers(token)
+    )
     assert list_response.json()[0]["notes"] is None
 
 
@@ -552,7 +560,9 @@ def test_import_csv_trims_whitespace_from_headers_and_values(client):
     assert response.status_code == 201
     assert response.json()["medications_created"] == 1
 
-    list_response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token))
+    list_response = client.get(
+        f"/patients/{patient['id']}/medications", headers=_auth_headers(token)
+    )
     medication = list_response.json()[0]
     assert medication["medication_name"] == "Lisinopril"
     assert medication["dose"] == "10 mg"
@@ -610,7 +620,9 @@ def test_import_csv_creates_no_medications_when_any_row_invalid(client):
 
     assert response.status_code == 422
 
-    list_response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token))
+    list_response = client.get(
+        f"/patients/{patient['id']}/medications", headers=_auth_headers(token)
+    )
     assert list_response.json() == []
 
 
@@ -625,7 +637,9 @@ def test_import_csv_assigns_medications_to_the_target_patient(client):
 
     _upload_csv(client, token, patient["id"], csv_content)
 
-    list_response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token))
+    list_response = client.get(
+        f"/patients/{patient['id']}/medications", headers=_auth_headers(token)
+    )
     medications = list_response.json()
 
     assert len(medications) == 1
@@ -644,7 +658,9 @@ def test_import_csv_does_not_leak_into_another_patients_list(client):
 
     _upload_csv(client, token, patient_b["id"], csv_content)
 
-    list_response_a = client.get(f"/patients/{patient_a['id']}/medications", headers=_auth_headers(token))
+    list_response_a = client.get(
+        f"/patients/{patient_a['id']}/medications", headers=_auth_headers(token)
+    )
     assert list_response_a.json() == []
 
 
@@ -659,7 +675,9 @@ def test_imported_medications_appear_through_list_endpoint(client):
 
     _upload_csv(client, token, patient["id"], csv_content)
 
-    list_response = client.get(f"/patients/{patient['id']}/medications", headers=_auth_headers(token))
+    list_response = client.get(
+        f"/patients/{patient['id']}/medications", headers=_auth_headers(token)
+    )
     assert list_response.status_code == 200
 
     medications = list_response.json()

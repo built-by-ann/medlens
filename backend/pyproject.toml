@@ -1,0 +1,71 @@
+[tool.ruff]
+# Matches the Dockerfile's runtime (python:3.12-slim), not whatever
+# interpreter happens to be active locally.
+target-version = "py312"
+# Matches the frontend's Prettier printWidth (see frontend/.prettierrc.json)
+# so the two halves of the project agree on a line-length convention.
+line-length = 100
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # Pyflakes
+  "I",   # isort - import sorting, replacing a separate isort install
+  "UP",  # pyupgrade - modern syntax (this codebase already writes `int | None`, not `Optional[int]`)
+  "B",   # flake8-bugbear - common bug patterns (mutable default args, etc.)
+  "C4",  # flake8-comprehensions
+  "SIM", # flake8-simplify
+  "RUF", # Ruff-specific rules
+]
+ignore = [
+  # E501 (line too long): the formatter (below) already wraps every line of
+  # actual code it can; what's left after that is either a long string that
+  # can't be safely rewrapped without changing its meaning (e.g. the
+  # natural-language AI prompt text in app/ai/prompts.py) or a long URL in a
+  # comment. Ruff's own docs recommend disabling E501 for exactly this
+  # reason when the formatter is in use - see
+  # https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules.
+  "E501",
+  # UP042 (replace `class Foo(str, Enum)` with `class Foo(StrEnum)`): every
+  # API schema enum in this codebase (AnalysisStatus, DiscrepancyType,
+  # DiscrepancySeverity, ResolutionStatus, ...) uses the `str, Enum` mixin.
+  # `enum.StrEnum` (3.11+) is not a drop-in replacement - it changes
+  # `str()`/f-string formatting of members in ways that can silently alter
+  # API responses and log output. This issue's brief is lint/format only
+  # ("do not change application behavior"), so this rule stays off rather
+  # than risk that; revisit as a deliberate, tested change in its own
+  # issue if ever wanted.
+  "UP042",
+]
+
+[tool.ruff.lint.isort]
+# app/ is the source root (no src/ layout), so isort needs to be told that
+# explicitly - otherwise it can't distinguish "app.foo" first-party imports
+# from third-party ones by path alone.
+known-first-party = ["app"]
+
+[tool.ruff.lint.flake8-bugbear]
+# B008 (function call in default argument) is a real footgun in general -
+# but FastAPI's dependency injection *is* `Depends(...)`/`Query(...)`/etc.
+# used as a parameter default; that's the framework's own documented API,
+# not the mutable-default-argument bug the rule exists to catch. Allowlisting
+# these specific callables keeps B008 active for everything else (a plain
+# `def f(x=some_call()):` elsewhere would still be flagged) instead of
+# disabling the rule project-wide.
+extend-immutable-calls = [
+  "fastapi.Depends",
+  "fastapi.Query",
+  "fastapi.Path",
+  "fastapi.Body",
+  "fastapi.Header",
+  "fastapi.Cookie",
+  "fastapi.File",
+  "fastapi.Form",
+]
+
+[tool.ruff.format]
+# Defaults (double quotes, trailing commas, etc.) - no project-specific
+# reason to deviate from them, and matching the default is one less thing
+# to document or maintain.

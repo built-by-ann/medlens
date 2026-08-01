@@ -30,9 +30,7 @@ def _ensure_test_database_exists() -> None:
 
     try:
         with conn.cursor() as cursor:
-            cursor.execute(
-                "SELECT 1 FROM pg_database WHERE datname = %s", (_test_db_name,)
-            )
+            cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (_test_db_name,))
 
             if cursor.fetchone() is None:
                 cursor.execute(f'CREATE DATABASE "{_test_db_name}"')
