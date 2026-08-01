@@ -174,9 +174,7 @@ export function MedicationCsvUpload({ onImport }: MedicationCsvUploadProps) {
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring',
             isImporting ? 'cursor-not-allowed border-border opacity-50' : 'cursor-pointer',
             !isImporting &&
-              (isDraggingOver
-                ? 'border-primary bg-info/10'
-                : 'border-border hover:border-primary'),
+              (isDraggingOver ? 'border-primary bg-info/10' : 'border-border hover:border-primary'),
           )}
         >
           <p className="text-sm font-medium text-foreground">

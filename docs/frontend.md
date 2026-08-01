@@ -663,11 +663,36 @@ Other scripts:
 ```bash
 npm run build         # tsc -b && vite build
 npm run lint           # eslint .
+npm run lint:fix       # eslint . --fix
+npm run typecheck      # tsc -b (project-references build, no emit - see below)
 npm run format         # prettier --write .
 npm run format:check   # prettier --check .
 npm run test           # vitest run
 npm run preview        # preview a production build
 ```
+
+### Quality pipeline (Issue #53): linting, type checking, formatting
+
+Before opening a PR, run:
+
+```bash
+cd frontend
+npm run lint            # ESLint - react-hooks, react-refresh, typescript-eslint recommended rules
+npm run typecheck       # TypeScript - strict, no emit
+npm run format:check    # Prettier - fails if any file isn't already formatted
+npm run test            # Vitest
+npm run build           # tsc -b && vite build - the final, authoritative check
+```
+
+`npm run lint:fix` and `npm run format` apply the auto-fixable subset of the first two (formatting and the handful of ESLint rules that support `--fix`); everything else has to be fixed by hand. These are the exact commands a future CI workflow will call (see the "Not Implemented Yet" section below) - passing them locally is the same bar CI will hold the branch to.
+
+**ESLint** (`eslint.config.js`, flat config) extends `@eslint/js`'s recommended rules, `typescript-eslint`'s recommended rules, `eslint-plugin-react-hooks`'s recommended rules, and `eslint-plugin-react-refresh` (Vite's Fast Refresh boundary rule), then layers `eslint-config-prettier` last so Prettier owns 100% of formatting - ESLint never argues with Prettier over a stylistic call, and there are no formatting-motivated `eslint-disable` comments anywhere in the codebase to eliminate. There's no separate "Vite" ESLint plugin to add: `eslint-plugin-react-refresh`'s `only-export-components` rule *is* the Vite-specific check (it catches files that break Fast Refresh by exporting something other than components), and it was already configured. No `eslint-plugin-react` (the older, pre-React-17 plugin providing rules like `react/jsx-uses-react`) is installed or needed - this app uses the automatic JSX runtime (`"jsx": "react-jsx"` in `tsconfig.app.json`), which is exactly the case that plugin's own docs say to skip it for.
+
+**TypeScript** was already configured strictly before this issue - `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noUnusedLocals`, `noUnusedParameters`, and `noFallthroughCasesInSwitch` in `tsconfig.app.json`, mirrored (minus the DOM-specific settings) in `tsconfig.node.json` for `vite.config.ts`. Nothing about that strictness changed for this issue - `tsc -b` already ran clean, so `npm run typecheck` is that same project-references build made runnable on its own instead of only as half of `npm run build`. Both sub-configs already set `noEmit: true`, so this genuinely only type-checks; it writes no `.js` output (it does still write its `.tsbuildinfo` incremental-build cache to `node_modules/.tmp/`, same as `build` already did).
+
+**Prettier** (`.prettierrc.json`: no semicolons, single quotes, 100-char print width, trailing commas) was already configured and already wired into ESLint via `eslint-config-prettier`; this issue's only formatting work was running `npm run format` once to bring every source file up to date; every file was already in agreement on style since `eslint-config-prettier` and Prettier had no material rules to add.
+
+No new dependencies were added - every tool `lint`/`typecheck`/`format` needs was already a `devDependency`.
 
 Tests use Vitest, React Testing Library, and `@testing-library/user-event`, configured directly in `vite.config.ts` (reusing the same `@` alias as the app) rather than a separate Vitest config file. `test.globals` is deliberately left off, matching the rest of the codebase's explicit-import convention; since that also disables React Testing Library's automatic per-test DOM cleanup (it relies on detecting a global `afterEach`), `src/test/setup.ts` wires `afterEach(cleanup)` by hand instead.
 
@@ -695,3 +720,4 @@ The following are explicitly out of scope and left for future issues:
 - Provider-level analytics or notifications (none requested, none built). Settings now exists (see Settings and Theming above).
 - A real backend `username` field or a `first_name`/`last_name` column split - `ProfileSettings`' Username field is disabled and its First/Last Name split is a client-side heuristic over the single `name` column; see Settings above for exactly what backend work this needs.
 - Accessibility controls beyond the High Contrast theme (reduced motion, adjustable text size) - `SettingsPage`'s Accessibility section is a placeholder for these.
+- A GitHub Actions workflow that actually runs `lint`/`typecheck`/`format:check`/`test`/`build` on a PR (Issue #53's own explicit scope boundary) - those commands exist and pass locally (see Development Setup above) precisely so that workflow has nothing left to configure beyond calling them.

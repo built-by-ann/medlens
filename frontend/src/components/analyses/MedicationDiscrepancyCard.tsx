@@ -33,9 +33,7 @@ export function MedicationDiscrepancyCard({ discrepancy }: MedicationDiscrepancy
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h4 className="text-sm font-semibold break-words text-foreground">{medicationName}</h4>
-          <p className="text-xs text-muted">
-            {discrepancyTypeLabel(discrepancy.discrepancy_type)}
-          </p>
+          <p className="text-xs text-muted">{discrepancyTypeLabel(discrepancy.discrepancy_type)}</p>
         </div>
         <div className="flex flex-wrap items-start gap-2">
           <DiscrepancySeverityBadge severity={discrepancy.severity} />
