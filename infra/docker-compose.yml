@@ -3,23 +3,49 @@ services:
     build:
       context: ../backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     environment:
-      DATABASE_URL: postgresql://medlens_user:medlens_password@postgres:5432/medlens_db
+      # POSTGRES_PASSWORD is shared with the postgres service below - both
+      # read the same variable so they can never drift out of sync.
+      DATABASE_URL: postgresql://medlens_user:${POSTGRES_PASSWORD:-medlens_password}@postgres:5432/medlens_db
       # Settings.jwt_secret_key (app/core/config.py) is required with no
-      # default - previously supplied only via a developer's own,
-      # untracked backend/.env, which the old Dockerfile's `COPY . .` (with
-      # no .dockerignore) happened to bake into the image. Now that
-      # backend/.dockerignore excludes .env from the build context
-      # entirely (a real image should never contain a developer's local
-      # secrets - see docs/design-decisions.md), this container has no
-      # other source for it. A fixed placeholder is fine here, the same
-      # way backend.yml's CI job uses one: this is throwaway local/CI
-      # infrastructure, not a real deployment, and nothing depends on this
-      # value being kept secret.
-      JWT_SECRET_KEY: local-dev-secret-key-not-used-anywhere-real
+      # default. The placeholder below is fine for local development -
+      # nothing here is a real secret, and every service is thrown away on
+      # `docker compose down` - but a real deployment MUST override it with
+      # a real secret via infra/.env (see infra/.env.example), never by
+      # editing this file. See docs/deployment.md's "Environment Variables"
+      # section.
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-dev-secret-key-not-used-anywhere-real}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # development (the default) auto-allows any localhost/127.0.0.1
+      # origin for CORS in addition to CORS_ALLOWED_ORIGINS (see
+      # app/main.py) - correct for local Docker use, but a real deployment
+      # must set this to "production" and set CORS_ALLOWED_ORIGINS
+      # explicitly, or the deployed frontend's origin will be rejected.
+      APP_ENV: ${APP_ENV:-development}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+    restart: unless-stopped
+    healthcheck:
+      # GET /health always returns HTTP 200, even when the database is
+      # unreachable (see docs/api.md) - a plain "did the request succeed"
+      # check would report healthy the whole time the app is actually
+      # broken. This reads the response body and checks the field the
+      # endpoint itself defines as the real signal, the same way a human
+      # debugging it would.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json,urllib.request as u; d=json.loads(u.urlopen('http://localhost:8000/health').read()); exit(0 if d.get('status')=='ok' else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:
@@ -27,11 +53,26 @@ services:
       args:
         # Baked into the built JS bundle at image build time (see
         # frontend/Dockerfile) - the browser, not this container, is what
-        # actually calls the backend, so this points at the backend's
-        # host-mapped port above, not its in-network service name.
-        VITE_API_BASE_URL: http://localhost:8000
+        # actually calls the backend, so this must be a real, publicly
+        # reachable URL for a deployment (e.g. http://<ec2-public-ip>:8000),
+        # not backend's in-network service name. Rebuild the image (`docker
+        # compose build frontend`) after changing this - restarting the
+        # container alone has no effect, since it's already baked in.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped
+    healthcheck:
+      # 127.0.0.1, not localhost: this image's nginx only listens on
+      # IPv4 (0.0.0.0:80), but the container's /etc/hosts resolves
+      # "localhost" to ::1 (IPv6) first, which wget then tries first and
+      # gets connection-refused on - a real failure caught during
+      # verification, not a hypothetical.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
     depends_on:
       - backend
 
@@ -39,12 +80,25 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: medlens_user
-      POSTGRES_PASSWORD: medlens_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medlens_password}
       POSTGRES_DB: medlens_db
     ports:
-      - "5432:5432"
+      # Bound to localhost only, unlike backend/frontend above - the
+      # database has no reason to be reachable from outside the host at
+      # all (nothing outside this compose file ever needs to reach it
+      # directly), so it stays unreachable even if a security group is
+      # ever misconfigured to allow it. Still reachable from the host
+      # itself (e.g. `psql -h localhost`, or an SSH tunnel from a laptop)
+      # for debugging. See docs/deployment.md's Security section.
+      - "127.0.0.1:5432:5432"
     volumes:
       - medlens_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medlens_user -d medlens_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   medlens_postgres_data:

@@ -33,4 +33,12 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Applies any pending Alembic migrations before the server starts - without
+# this, a fresh database (a brand-new deployment, or a first `docker
+# compose up` on a clean volume) has no tables at all, and every
+# database-touching request fails. Safe to run on every container start:
+# `alembic upgrade head` against an already-current database is a no-op.
+# See alembic/env.py for how this resolves DATABASE_URL correctly whether
+# running here (Postgres reachable by its compose service name) or
+# directly on a developer's host (Postgres reachable at localhost).
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
