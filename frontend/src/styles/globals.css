@@ -1,17 +1,16 @@
 @import 'tailwindcss';
+@import './themes.css';
 
 @layer base {
-  :root {
-    color-scheme: light;
-  }
-
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply bg-background text-foreground antialiased;
   }
 
   /* Visible focus states for keyboard navigation, kept consistent across
-     native elements and the shared components built on top of them. */
+     native elements and the shared components built on top of them. Themed
+     via --focus-ring (see themes.css) rather than a fixed color, so High
+     Contrast and every other theme keeps a visible, on-brand focus state. */
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-blue-600;
+    @apply outline-2 outline-offset-2 outline-focus-ring;
   }
 }

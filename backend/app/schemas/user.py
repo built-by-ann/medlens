@@ -21,6 +21,18 @@ class UserCreate(BaseModel):
         return value
 
 
+class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Both optional and independently settable, so a caller can update just
+    # one field without resending the other - unlike UserCreate, there's no
+    # password field here (see app/api/routes/users.py: profile editing is
+    # deliberately separate from credential changes, which aren't in scope
+    # for this endpoint).
+    email: EmailStr | None = None
+    name: str | None = None
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

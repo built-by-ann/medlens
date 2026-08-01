@@ -1,0 +1,1366 @@
+/*
+ * Semantic design tokens for every theme, as CSS custom properties. A theme
+ * is a (palette, mode) pair - 7 palettes ('default' plus 6 drawn from
+ * inspiration boards) x 3 modes (light/dark/high-contrast) = 21 themes -
+ * selected by setting `data-theme="{palette}-{mode}"` on `<html>` (see
+ * ThemeProvider, src/contexts/ThemeProvider.tsx). Each `[data-theme="..."]`
+ * block below overrides the same fixed set of variable names, so switching
+ * theme never requires touching a single component.
+ *
+ * The `@theme inline` block registers each variable as a Tailwind color, so
+ * `bg-surface`, `text-foreground`, `border-border`, etc. are real utility
+ * classes that always resolve to whichever theme is currently active.
+ * Components must consume these utilities - never a raw palette color
+ * (bg-blue-600, text-slate-900, ...) - see docs/frontend.md's "Theme
+ * Architecture" section for the full token reference, the contrast ratios
+ * behind every color below, and the rationale for each palette's specific
+ * derivation from its source swatches.
+ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+
+  --color-foreground: var(--text);
+  --color-muted: var(--muted-text);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+
+  --color-focus-ring: var(--focus-ring);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  /* Solid-fill status badges (AnalysisStatusBadge, DiscrepancySeverityBadge,
+     ResolutionStatusBadge) - deliberately separate from success/warning/
+     danger/info above. Those must stay legible as plain text directly on
+     each palette's own background (FormError, success confirmations,
+     "Remove"/"Archive" action links), which is what keeps them dark and
+     muted-looking in every Light and High Contrast theme. A badge's fill
+     only ever has to contrast against its own paired text, never against
+     the page, so these can - and do - stay the same fully-saturated color
+     in every one of this app's themes; see docs/frontend.md. */
+  --color-success-badge: var(--success-badge);
+  --color-warning-badge: var(--warning-badge);
+  --color-danger-badge: var(--danger-badge);
+  --color-info-badge: var(--info-badge);
+  --color-badge-foreground: var(--badge-foreground);
+
+  --color-header: var(--header);
+  --color-header-foreground: var(--header-foreground);
+  /* Reserved for a future sidebar-style navigation layout - nothing in the
+     app renders a literal sidebar today (see docs/frontend.md). */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+}
+
+/* ======================================================================
+   DEFAULT - the application's own original look. Untouched by the palette
+   redesign; only this family's colors come from MedLens itself rather
+   than an inspiration board.
+   ====================================================================== */
+
+/* ---- Default / Light (the base :root, used when data-theme is unset) -- */
+:root {
+  color-scheme: light;
+
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --surface-hover: #f1f5f9;
+  --border: #94a3b8;
+
+  --text: #0f172a;
+  --muted-text: #475569;
+
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-foreground: #ffffff;
+
+  --secondary: #475569;
+  --secondary-foreground: #ffffff;
+
+  --link: #2563eb;
+  --link-hover: #1d4ed8;
+
+  --focus-ring: #2563eb;
+
+  /* success/warning/danger/info are identical across every palette's Light
+     mode (and every palette's Dark mode, and every palette's High Contrast
+     mode) by deliberate choice - "Completed", and every discrepancy
+     severity badge, must read as the exact same color no matter which
+     theme is active, so status meaning never depends on which palette a
+     provider happens to have selected. See docs/frontend.md. */
+  --success: #166534;
+  --success-foreground: #ffffff;
+  --warning: #92400e;
+  --warning-foreground: #ffffff;
+  --danger: #b91c1c;
+  --danger-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #ffffff;
+  --header-foreground: #0f172a;
+  --sidebar: #f8fafc;
+  --sidebar-foreground: #0f172a;
+}
+
+/* -------------------------- Default / Dark --------------------------- */
+:root[data-theme='default-dark'] {
+  color-scheme: dark;
+
+  --background: #0f172a;
+  --surface: #1e293b;
+  --surface-hover: #334155;
+  --border: #64748b;
+
+  --text: #f1f5f9;
+  --muted-text: #94a3b8;
+
+  --primary: #2563eb;
+  --primary-hover: #3b82f6;
+  --primary-foreground: #ffffff;
+
+  --secondary: #475569;
+  --secondary-foreground: #ffffff;
+
+  --link: #60a5fa;
+  --link-hover: #93c5fd;
+
+  --focus-ring: #60a5fa;
+
+  --success: #4ade80;
+  --success-foreground: #0f172a;
+  --warning: #fbbf24;
+  --warning-foreground: #0f172a;
+  --danger: #f87171;
+  --danger-foreground: #0f172a;
+  --info: #38bdf8;
+  --info-foreground: #0f172a;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #1e293b;
+  --header-foreground: #f1f5f9;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #f1f5f9;
+}
+
+/* ---------------------- Default / High Contrast ----------------------- */
+:root[data-theme='default-high-contrast'] {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #e5e7eb;
+  --border: #000000;
+
+  --text: #000000;
+  --muted-text: #3f3f46;
+
+  --primary: #0a3fa3;
+  --primary-hover: #082f7a;
+  --primary-foreground: #ffffff;
+
+  --secondary: #3f3f46;
+  --secondary-foreground: #ffffff;
+
+  --link: #0a3fa3;
+  --link-hover: #082f7a;
+
+  --focus-ring: #0a3fa3;
+
+  --success: #065f2b;
+  --success-foreground: #ffffff;
+  --warning: #ffcc00;
+  --warning-foreground: #000000;
+  --danger: #a3021a;
+  --danger-foreground: #ffffff;
+  --info: #00548c;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #ffffff;
+  --header-foreground: #000000;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+}
+
+/* ======================================================================
+   BLOSSOM - elegant, warm, soft, professional.
+   Source: Satin Sheen Gold #C89C40, Burnt Umber #8A3C26,
+   Silver Pink #CEAFB0, Old Rose #C57E7B, Shiny Shamrock #549B7A.
+   ====================================================================== */
+
+:root[data-theme='blossom-light'] {
+  color-scheme: light;
+
+  --background: #fbf4ee;
+  --surface: #ffffff;
+  /* Silver Pink, used directly as the hover tint rather than a generic
+     gray - the "Soft Surface" swatch doing what its name says. */
+  --surface-hover: #f3e1dc;
+  --border: #d9afa8;
+
+  --text: #2e1b12;
+  --muted-text: #6e574a;
+
+  /* Satin Sheen Gold, darkened until white text on it clears 4.5:1. */
+  --primary: #8a6423;
+  --primary-hover: #74521c;
+  --primary-foreground: #ffffff;
+
+  --secondary: #8a3c26;
+  --secondary-foreground: #ffffff;
+
+  --link: #8a6423;
+  --link-hover: #74521c;
+
+  --focus-ring: #8a6423;
+
+  --success: #166534;
+  --success-foreground: #ffffff;
+  --warning: #92400e;
+  --warning-foreground: #ffffff;
+  --danger: #b91c1c;
+  --danger-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #efd5cd;
+  --header-foreground: #2e1b12;
+  --sidebar: #fbf4ee;
+  --sidebar-foreground: #2e1b12;
+}
+
+:root[data-theme='blossom-dark'] {
+  color-scheme: dark;
+
+  --background: #1c120d;
+  --surface: #2b1d16;
+  --surface-hover: #3b2920;
+  --border: #8f6957;
+
+  --text: #f6eae2;
+  --muted-text: #cdb2a2;
+
+  --primary: #e8c377;
+  --primary-hover: #f2d699;
+  --primary-foreground: #241609;
+
+  --secondary: #d98f63;
+  --secondary-foreground: #241609;
+
+  --link: #e8c377;
+  --link-hover: #f2d699;
+
+  --focus-ring: #e8c377;
+
+  --success: #4ade80;
+  --success-foreground: #1c120d;
+  --warning: #fbbf24;
+  --warning-foreground: #1c120d;
+  --danger: #f87171;
+  --danger-foreground: #1c120d;
+  --info: #38bdf8;
+  --info-foreground: #1c120d;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #241811;
+  --header-foreground: #f6eae2;
+  --sidebar: #1c120d;
+  --sidebar-foreground: #f6eae2;
+}
+
+:root[data-theme='blossom-high-contrast'] {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f2e6dc;
+  --border: #000000;
+
+  --text: #000000;
+  --muted-text: #3f2e22;
+
+  --primary: #6b4f14;
+  --primary-hover: #57400f;
+  --primary-foreground: #ffffff;
+
+  --secondary: #7a2e1c;
+  --secondary-foreground: #ffffff;
+
+  --link: #6b4f14;
+  --link-hover: #57400f;
+
+  --focus-ring: #6b4f14;
+
+  --success: #065f2b;
+  --success-foreground: #ffffff;
+  --warning: #ffcc00;
+  --warning-foreground: #000000;
+  --danger: #a3021a;
+  --danger-foreground: #ffffff;
+  --info: #00548c;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #ffffff;
+  --header-foreground: #000000;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+}
+
+/* ======================================================================
+   SAGE - healthcare, calm, natural, minimal.
+   Source: Axolotl #6A7A5A, Morning Blue #8DAF9B, Jet Stream #BED2BA,
+   Dark Vanilla #D7CBB2, Opal #AAC4BC.
+   ====================================================================== */
+
+:root[data-theme='sage-light'] {
+  color-scheme: light;
+
+  --background: #ede7da;
+  --surface: #fbf9f3;
+  /* Jet Stream, the source board's own "Surface" swatch. */
+  --surface-hover: #e1ead9;
+  --border: #c9bfa0;
+
+  --text: #2b2a22;
+  --muted-text: #5f6653;
+
+  --primary: #55613f;
+  --primary-hover: #454e33;
+  --primary-foreground: #ffffff;
+
+  --secondary: #4f7a63;
+  --secondary-foreground: #ffffff;
+
+  --link: #55613f;
+  --link-hover: #454e33;
+
+  --focus-ring: #55613f;
+
+  --success: #166534;
+  --success-foreground: #ffffff;
+  --warning: #92400e;
+  --warning-foreground: #ffffff;
+  --danger: #b91c1c;
+  --danger-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #dce8e2;
+  --header-foreground: #2b2a22;
+  --sidebar: #ede7da;
+  --sidebar-foreground: #2b2a22;
+}
+
+:root[data-theme='sage-dark'] {
+  color-scheme: dark;
+
+  --background: #12160f;
+  --surface: #1d231a;
+  --surface-hover: #2a3324;
+  --border: #6e7f63;
+
+  --text: #e9eee2;
+  --muted-text: #b7c2ac;
+
+  --primary: #9cb37e;
+  --primary-hover: #aec494;
+  --primary-foreground: #14200d;
+
+  /* Morning Blue, brightened - light enough that it needs dark text,
+     unlike every other family's dark-mode secondary. */
+  --secondary: #7fb39c;
+  --secondary-foreground: #0d231c;
+
+  --link: #9cb37e;
+  --link-hover: #aec494;
+
+  --focus-ring: #9cb37e;
+
+  --success: #4ade80;
+  --success-foreground: #12160f;
+  --warning: #fbbf24;
+  --warning-foreground: #12160f;
+  --danger: #f87171;
+  --danger-foreground: #12160f;
+  --info: #38bdf8;
+  --info-foreground: #12160f;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #1a2017;
+  --header-foreground: #e9eee2;
+  --sidebar: #12160f;
+  --sidebar-foreground: #e9eee2;
+}
+
+:root[data-theme='sage-high-contrast'] {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #e7efe3;
+  --border: #000000;
+
+  --text: #000000;
+  --muted-text: #33402c;
+
+  --primary: #3e4f2a;
+  --primary-hover: #2f3d20;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1f5a48;
+  --secondary-foreground: #ffffff;
+
+  --link: #3e4f2a;
+  --link-hover: #2f3d20;
+
+  --focus-ring: #3e4f2a;
+
+  --success: #065f2b;
+  --success-foreground: #ffffff;
+  --warning: #ffcc00;
+  --warning-foreground: #000000;
+  --danger: #a3021a;
+  --danger-foreground: #ffffff;
+  --info: #00548c;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #ffffff;
+  --header-foreground: #000000;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+}
+
+/* ======================================================================
+   TWILIGHT - modern, calm, professional.
+   Source: YInMn Blue #294A8F, Pale Cerulean #9FB7E3,
+   Languid Lavender #D8D0E7, Ceil #9295D0, Chinese Black #0A111A.
+   ====================================================================== */
+
+:root[data-theme='twilight-light'] {
+  color-scheme: light;
+
+  --background: #eef1f9;
+  --surface: #ffffff;
+  --surface-hover: #e6e1f0;
+  --border: #b7bae0;
+
+  --text: #10192b;
+  --muted-text: #4b5a78;
+
+  --primary: #294a8f;
+  --primary-hover: #1f3a70;
+  --primary-foreground: #ffffff;
+
+  --secondary: #5b5fa8;
+  --secondary-foreground: #ffffff;
+
+  --link: #294a8f;
+  --link-hover: #1f3a70;
+
+  --focus-ring: #294a8f;
+
+  --success: #166534;
+  --success-foreground: #ffffff;
+  --warning: #92400e;
+  --warning-foreground: #ffffff;
+  --danger: #b91c1c;
+  --danger-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #e6e1f0;
+  --header-foreground: #10192b;
+  --sidebar: #eef1f9;
+  --sidebar-foreground: #10192b;
+}
+
+:root[data-theme='twilight-dark'] {
+  color-scheme: dark;
+
+  --background: #0a111a;
+  --surface: #141e2e;
+  --surface-hover: #1e2c42;
+  --border: #5b6c89;
+
+  --text: #e7ecf5;
+  --muted-text: #9aa6bf;
+
+  --primary: #3e63b0;
+  --primary-hover: #4c74c9;
+  --primary-foreground: #ffffff;
+
+  --secondary: #4c699c;
+  --secondary-foreground: #ffffff;
+
+  --link: #8fb0e8;
+  --link-hover: #b0cbf5;
+
+  --focus-ring: #8fb0e8;
+
+  --success: #4ade80;
+  --success-foreground: #0a111a;
+  --warning: #fbbf24;
+  --warning-foreground: #0a111a;
+  --danger: #f87171;
+  --danger-foreground: #0a111a;
+  --info: #38bdf8;
+  --info-foreground: #0a111a;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #141e2e;
+  --header-foreground: #e7ecf5;
+  --sidebar: #0a111a;
+  --sidebar-foreground: #e7ecf5;
+}
+
+:root[data-theme='twilight-high-contrast'] {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #e8e9f5;
+  --border: #000000;
+
+  --text: #000000;
+  --muted-text: #33384a;
+
+  /* YInMn Blue, used as-is - already dark enough to clear 7:1 with white
+     text without any adjustment. */
+  --primary: #294a8f;
+  --primary-hover: #1b3162;
+  --primary-foreground: #ffffff;
+
+  --secondary: #4a3e70;
+  --secondary-foreground: #ffffff;
+
+  --link: #294a8f;
+  --link-hover: #1b3162;
+
+  --focus-ring: #294a8f;
+
+  --success: #065f2b;
+  --success-foreground: #ffffff;
+  --warning: #ffcc00;
+  --warning-foreground: #000000;
+  --danger: #a3021a;
+  --danger-foreground: #ffffff;
+  --info: #00548c;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #ffffff;
+  --header-foreground: #000000;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+}
+
+/* ======================================================================
+   TERRACOTTA - warm, confident, editorial.
+   Source: Burnt Umber #863525, Medium Vermilion #DD733C,
+   Sandy Brown #F9A45F, New York Pink #D88E83, Raisin Black #271525.
+   ====================================================================== */
+
+:root[data-theme='terracotta-light'] {
+  color-scheme: light;
+
+  --background: #f7e6dd;
+  --surface: #ffffff;
+  /* New York Pink, the source board's own "Background Accent" swatch. */
+  --surface-hover: #f2d6cc;
+  --border: #e0b7a4;
+
+  /* Raisin Black, used as-is - the source board's own dark neutral. */
+  --text: #271525;
+  --muted-text: #7a5a52;
+
+  --primary: #863525;
+  --primary-hover: #6e2a1d;
+  --primary-foreground: #ffffff;
+
+  --secondary: #b65a28;
+  --secondary-foreground: #ffffff;
+
+  --link: #863525;
+  --link-hover: #6e2a1d;
+
+  --focus-ring: #863525;
+
+  --success: #166534;
+  --success-foreground: #ffffff;
+  --warning: #92400e;
+  --warning-foreground: #ffffff;
+  --danger: #b91c1c;
+  --danger-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #f5dcc3;
+  --header-foreground: #271525;
+  --sidebar: #f7e6dd;
+  --sidebar-foreground: #271525;
+}
+
+:root[data-theme='terracotta-dark'] {
+  color-scheme: dark;
+
+  /* Raisin Black, used as-is - the source board's own "Dark Surface". */
+  --background: #271525;
+  --surface: #3a2420;
+  --surface-hover: #4a2f29;
+  --border: #a6725f;
+
+  --text: #f5e3dc;
+  --muted-text: #cba99a;
+
+  /* Sandy Brown, used as-is - bright enough to read directly on this
+     background without any adjustment. */
+  --primary: #f9a45f;
+  --primary-hover: #fbb578;
+  --primary-foreground: #2a1710;
+
+  /* Medium Vermilion, used as-is. */
+  --secondary: #dd733c;
+  --secondary-foreground: #2a1710;
+
+  --link: #f9a45f;
+  --link-hover: #fbb578;
+
+  --focus-ring: #f9a45f;
+
+  --success: #4ade80;
+  --success-foreground: #271525;
+  --warning: #fbbf24;
+  --warning-foreground: #271525;
+  --danger: #f87171;
+  --danger-foreground: #271525;
+  --info: #38bdf8;
+  --info-foreground: #271525;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #1f120f;
+  --header-foreground: #f5e3dc;
+  --sidebar: #271525;
+  --sidebar-foreground: #f5e3dc;
+}
+
+:root[data-theme='terracotta-high-contrast'] {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f5e6dc;
+  --border: #000000;
+
+  --text: #000000;
+  --muted-text: #4a352f;
+
+  --primary: #863525;
+  --primary-hover: #6e2a1d;
+  --primary-foreground: #ffffff;
+
+  --secondary: #8c3d12;
+  --secondary-foreground: #ffffff;
+
+  --link: #863525;
+  --link-hover: #6e2a1d;
+
+  --focus-ring: #863525;
+
+  --success: #065f2b;
+  --success-foreground: #ffffff;
+  --warning: #ffcc00;
+  --warning-foreground: #000000;
+  --danger: #a3021a;
+  --danger-foreground: #ffffff;
+  --info: #00548c;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #ffffff;
+  --header-foreground: #000000;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+}
+
+/* ======================================================================
+   COASTAL - fresh, modern, creative.
+   Source: Moonstone #399DB5, English Violet #593E58,
+   Mountbatten Pink #A17F98, Ruddy Pink #E9819A, Deep Taupe #7D5265.
+   ====================================================================== */
+
+:root[data-theme='coastal-light'] {
+  color-scheme: light;
+
+  --background: #f2edf1;
+  --surface: #ffffff;
+  /* Mountbatten Pink, the source board's own "Surface" swatch. */
+  --surface-hover: #ede0e7;
+  --border: #cbb7c6;
+
+  --text: #2b1f28;
+  --muted-text: #6b5566;
+
+  /* Moonstone, shifted a touch more teal (away from Info's sky blue) so
+     the two stay visually distinct - see docs/frontend.md. */
+  --primary: #14746e;
+  --primary-hover: #0f5b56;
+  --primary-foreground: #ffffff;
+
+  --secondary: #593e58;
+  --secondary-foreground: #ffffff;
+
+  --link: #14746e;
+  --link-hover: #0f5b56;
+
+  --focus-ring: #14746e;
+
+  --success: #166534;
+  --warning: #92400e;
+  --warning-foreground: #ffffff;
+  --success-foreground: #ffffff;
+  --danger: #b91c1c;
+  --danger-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #f5dde3;
+  --header-foreground: #2b1f28;
+  --sidebar: #f2edf1;
+  --sidebar-foreground: #2b1f28;
+}
+
+:root[data-theme='coastal-dark'] {
+  color-scheme: dark;
+
+  --background: #1b1420;
+  --surface: #2a1f2e;
+  --surface-hover: #3a2c3f;
+  --border: #8f7288;
+
+  --text: #f2e9ee;
+  --muted-text: #c7aebd;
+
+  /* Moonstone, brightened. */
+  --primary: #4fc2da;
+  --primary-hover: #6ed0e5;
+  --primary-foreground: #0c2b30;
+
+  /* Ruddy Pink, brightened - light enough that it needs dark text. */
+  --secondary: #f0a0b4;
+  --secondary-foreground: #3a1420;
+
+  --link: #4fc2da;
+  --link-hover: #6ed0e5;
+
+  --focus-ring: #4fc2da;
+
+  --success: #4ade80;
+  --success-foreground: #1b1420;
+  --warning: #fbbf24;
+  --warning-foreground: #1b1420;
+  --danger: #f87171;
+  --danger-foreground: #1b1420;
+  --info: #38bdf8;
+  --info-foreground: #1b1420;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #241b29;
+  --header-foreground: #f2e9ee;
+  --sidebar: #1b1420;
+  --sidebar-foreground: #f2e9ee;
+}
+
+:root[data-theme='coastal-high-contrast'] {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f0e6ec;
+  --border: #000000;
+
+  --text: #000000;
+  --muted-text: #4a2e40;
+
+  --primary: #0e5c58;
+  --primary-hover: #0b4b47;
+  --primary-foreground: #ffffff;
+
+  --secondary: #452e44;
+  --secondary-foreground: #ffffff;
+
+  --link: #0e5c58;
+  --link-hover: #0b4b47;
+
+  --focus-ring: #0e5c58;
+
+  --success: #065f2b;
+  --success-foreground: #ffffff;
+  --warning: #ffcc00;
+  --warning-foreground: #000000;
+  --danger: #a3021a;
+  --danger-foreground: #ffffff;
+  --info: #00548c;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #ffffff;
+  --header-foreground: #000000;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+}
+
+/* ======================================================================
+   LAVENDER - relaxed, friendly, soft.
+   Source: Liberty #5C63A4, Lavender Purple #8B7FAC,
+   Cadet Blue #ACB0CC, Dark Vanilla #DEC0AE, Parrot Pink #D4949D.
+   ====================================================================== */
+
+:root[data-theme='lavender-light'] {
+  color-scheme: light;
+
+  --background: #f3e9e1;
+  --surface: #ffffff;
+  /* Cadet Blue, the source board's own "Surface" swatch. */
+  --surface-hover: #e4e6f0;
+  --border: #cdb9ac;
+
+  --text: #2a2438;
+  --muted-text: #6b6285;
+
+  --primary: #4a4f87;
+  --primary-hover: #3b3f6d;
+  --primary-foreground: #ffffff;
+
+  --secondary: #6f6390;
+  --secondary-foreground: #ffffff;
+
+  --link: #4a4f87;
+  --link-hover: #3b3f6d;
+
+  --focus-ring: #4a4f87;
+
+  --success: #166534;
+  --success-foreground: #ffffff;
+  --warning: #92400e;
+  --warning-foreground: #ffffff;
+  --danger: #b91c1c;
+  --danger-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #f3dfe1;
+  --header-foreground: #2a2438;
+  --sidebar: #f3e9e1;
+  --sidebar-foreground: #2a2438;
+}
+
+:root[data-theme='lavender-dark'] {
+  color-scheme: dark;
+
+  --background: #171426;
+  --surface: #221d34;
+  --surface-hover: #2e2745;
+  --border: #6d6690;
+
+  --text: #ede9f5;
+  --muted-text: #b8b0d6;
+
+  /* Liberty, brightened. */
+  --primary: #7b81c4;
+  --primary-hover: #9095d2;
+  --primary-foreground: #14101f;
+
+  /* Parrot Pink, brightened - light enough that it needs dark text. */
+  --secondary: #e5a9b1;
+  --secondary-foreground: #2e1015;
+
+  --link: #7b81c4;
+  --link-hover: #9095d2;
+
+  --focus-ring: #7b81c4;
+
+  --success: #4ade80;
+  --success-foreground: #171426;
+  --warning: #fbbf24;
+  --warning-foreground: #171426;
+  --danger: #f87171;
+  --danger-foreground: #171426;
+  --info: #38bdf8;
+  --info-foreground: #171426;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #1d1930;
+  --header-foreground: #ede9f5;
+  --sidebar: #171426;
+  --sidebar-foreground: #ede9f5;
+}
+
+:root[data-theme='lavender-high-contrast'] {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #eeeaf5;
+  --border: #000000;
+
+  --text: #000000;
+  --muted-text: #3a3450;
+
+  --primary: #363b70;
+  --primary-hover: #2b3059;
+  --primary-foreground: #ffffff;
+
+  --secondary: #7a2e3d;
+  --secondary-foreground: #ffffff;
+
+  --link: #363b70;
+  --link-hover: #2b3059;
+
+  --focus-ring: #363b70;
+
+  --success: #065f2b;
+  --success-foreground: #ffffff;
+  --warning: #ffcc00;
+  --warning-foreground: #000000;
+  --danger: #a3021a;
+  --danger-foreground: #ffffff;
+  --info: #00548c;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #ffffff;
+  --header-foreground: #000000;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+}
+
+/* ======================================================================
+   AURORA - modern, energetic, colorful, AI/technology, creative. The most
+   vibrant palette while staying professional.
+   Source: Celtic Blue #2E68BB, Byzantine #AF28AA, Old Gold #C6C042,
+   Gainsboro #E2DAE0, background #F8F4FA (lightened from Gainsboro).
+   ====================================================================== */
+
+:root[data-theme='aurora-light'] {
+  color-scheme: light;
+
+  --background: #f8f4fa;
+  --surface: #ffffff;
+  /* Gainsboro, the source board's own "Surface" swatch, tinted lighter. */
+  --surface-hover: #ece3ea;
+  --border: #cbbec7;
+
+  --text: #1a1b2e;
+  --muted-text: #5c5a72;
+
+  /* Celtic Blue, used as-is. */
+  --primary: #2e68bb;
+  --primary-hover: #234f8f;
+  --primary-foreground: #ffffff;
+
+  /* Byzantine, used as-is. */
+  --secondary: #af28aa;
+  --secondary-foreground: #ffffff;
+
+  --link: #2e68bb;
+  --link-hover: #234f8f;
+
+  --focus-ring: #2e68bb;
+
+  --success: #166534;
+  --success-foreground: #ffffff;
+  --warning: #92400e;
+  --warning-foreground: #ffffff;
+  --danger: #b91c1c;
+  --danger-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  /* Old Gold, tinted pale - the third source hue gets real presence here
+     rather than being dropped, giving the header its own energetic accent
+     distinct from every other palette's header treatment. */
+  --header: #f5efc9;
+  --header-foreground: #1a1b2e;
+  --sidebar: #f8f4fa;
+  --sidebar-foreground: #1a1b2e;
+}
+
+:root[data-theme='aurora-dark'] {
+  color-scheme: dark;
+
+  --background: #12101f;
+  --surface: #1d1a30;
+  --surface-hover: #282440;
+  --border: #6c6690;
+
+  --text: #f1eefa;
+  --muted-text: #b6afd6;
+
+  /* Celtic Blue, brightened. */
+  --primary: #5a8fd9;
+  --primary-hover: #7ba6e3;
+  --primary-foreground: #0e1a2e;
+
+  /* Byzantine, brightened. */
+  --secondary: #d65ecf;
+  --secondary-foreground: #2e0e2c;
+
+  /* Old Gold, brightened - used for links specifically, so the third
+     source hue shows up somewhere a provider actually reads text through,
+     not just decoratively. Bright enough to clear 4.5:1 directly on this
+     background on its own. */
+  --link: #e8d96a;
+  --link-hover: #f0e691;
+
+  --focus-ring: #e8d96a;
+
+  --success: #4ade80;
+  --success-foreground: #12101f;
+  --warning: #fbbf24;
+  --warning-foreground: #12101f;
+  --danger: #f87171;
+  --danger-foreground: #12101f;
+  --info: #38bdf8;
+  --info-foreground: #12101f;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #241f3d;
+  --header-foreground: #f1eefa;
+  --sidebar: #12101f;
+  --sidebar-foreground: #f1eefa;
+}
+
+:root[data-theme='aurora-high-contrast'] {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #efe9f2;
+  --border: #000000;
+
+  --text: #000000;
+  --muted-text: #322d4a;
+
+  --primary: #1c3f73;
+  --primary-hover: #16305a;
+  --primary-foreground: #ffffff;
+
+  --secondary: #6e1a6b;
+  --secondary-foreground: #ffffff;
+
+  --link: #1c3f73;
+  --link-hover: #16305a;
+
+  --focus-ring: #1c3f73;
+
+  --success: #065f2b;
+  --success-foreground: #ffffff;
+  --warning: #ffcc00;
+  --warning-foreground: #000000;
+  --danger: #a3021a;
+  --danger-foreground: #ffffff;
+  --info: #00548c;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #ffffff;
+  --header-foreground: #000000;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+}
+
+/* ======================================================================
+   BOTANICAL - a rose/olive garden palette.
+   Source: Crushed Rose #8B263E, Spring Olive #786825, Tulip Bloom #D17484,
+   Blush Petal #E0AEBA, Deep Garden #292800, background #FAF7F5.
+   ====================================================================== */
+
+:root[data-theme='botanical-light'] {
+  color-scheme: light;
+
+  --background: #faf7f5;
+  --surface: #ffffff;
+  /* Blush Petal, the source board's own "Surface" swatch, tinted lighter. */
+  --surface-hover: #f3e1e6;
+  --border: #e3b7be;
+
+  /* Deep Garden, used as-is. */
+  --text: #292800;
+  --muted-text: #6b6350;
+
+  /* Crushed Rose, used as-is. */
+  --primary: #8b263e;
+  --primary-hover: #6e1e31;
+  --primary-foreground: #ffffff;
+
+  /* Spring Olive, used as-is. */
+  --secondary: #786825;
+  --secondary-foreground: #ffffff;
+
+  --link: #8b263e;
+  --link-hover: #6e1e31;
+
+  --focus-ring: #8b263e;
+
+  --success: #166534;
+  --success-foreground: #ffffff;
+  --warning: #92400e;
+  --warning-foreground: #ffffff;
+  --danger: #b91c1c;
+  --danger-foreground: #ffffff;
+  --info: #0369a1;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  /* Tulip Bloom, tinted pale. */
+  --header: #f6dde2;
+  --header-foreground: #292800;
+  --sidebar: #faf7f5;
+  --sidebar-foreground: #292800;
+}
+
+:root[data-theme='botanical-dark'] {
+  color-scheme: dark;
+
+  --background: #1a0e12;
+  --surface: #2a1820;
+  --surface-hover: #3a2029;
+  --border: #8c5a66;
+
+  --text: #f7edef;
+  --muted-text: #c9a8af;
+
+  /* Crushed Rose, brightened. */
+  --primary: #d9607a;
+  --primary-hover: #e486a0;
+  --primary-foreground: #2a0e15;
+
+  /* Spring Olive, brightened - light enough that it needs dark text. */
+  --secondary: #c3a93f;
+  --secondary-foreground: #241e08;
+
+  /* Tulip Bloom, brightened - used for links, so the third source hue
+     shows up somewhere read as text, not just decoratively. */
+  --link: #f0a0b0;
+  --link-hover: #f5bcc8;
+
+  --focus-ring: #f0a0b0;
+
+  --success: #4ade80;
+  --success-foreground: #1a0e12;
+  --warning: #fbbf24;
+  --warning-foreground: #1a0e12;
+  --danger: #f87171;
+  --danger-foreground: #1a0e12;
+  --info: #38bdf8;
+  --info-foreground: #1a0e12;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #201319;
+  --header-foreground: #f7edef;
+  --sidebar: #1a0e12;
+  --sidebar-foreground: #f7edef;
+}
+
+:root[data-theme='botanical-high-contrast'] {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f5e6e9;
+  --border: #000000;
+
+  --text: #000000;
+  --muted-text: #4a3a3e;
+
+  --primary: #6e1e31;
+  --primary-hover: #571827;
+  --primary-foreground: #ffffff;
+
+  --secondary: #4a3f16;
+  --secondary-foreground: #ffffff;
+
+  --link: #6e1e31;
+  --link-hover: #571827;
+
+  --focus-ring: #6e1e31;
+
+  --success: #065f2b;
+  --success-foreground: #ffffff;
+  --warning: #ffcc00;
+  --warning-foreground: #000000;
+  --danger: #a3021a;
+  --danger-foreground: #ffffff;
+  --info: #00548c;
+  --info-foreground: #ffffff;
+
+  --success-badge: #4ade80;
+  --warning-badge: #fbbf24;
+  --danger-badge: #f87171;
+  --info-badge: #38bdf8;
+  --badge-foreground: #000000;
+
+  --header: #ffffff;
+  --header-foreground: #000000;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+}

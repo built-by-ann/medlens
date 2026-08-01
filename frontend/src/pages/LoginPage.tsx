@@ -124,9 +124,9 @@ export function LoginPage() {
               {isSubmitting ? 'Logging in...' : 'Log in'}
             </Button>
 
-            <p className="text-center text-sm text-slate-600">
+            <p className="text-center text-sm text-muted">
               Don&apos;t have an account?{' '}
-              <Link to={ROUTES.signup} className="font-medium text-blue-600 hover:underline">
+              <Link to={ROUTES.signup} className="font-medium text-link hover:underline">
                 Sign up
               </Link>
             </p>

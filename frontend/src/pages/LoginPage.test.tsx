@@ -40,6 +40,7 @@ describe('LoginPage', () => {
       isLoading: false,
       login,
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })
@@ -118,6 +119,7 @@ describe('LoginPage', () => {
       isLoading: false,
       login,
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: 'Your session has expired. Please log in again.',
       clearSessionExpiredMessage,
     })

@@ -6,20 +6,20 @@ import { ROUTES } from '@/routes/paths'
 const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
   cn(
     'rounded-md px-3 py-2 text-sm font-medium',
-    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600',
-    isActive ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100',
+    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring',
+    isActive ? 'bg-primary text-primary-foreground' : 'text-header-foreground hover:bg-surface-hover',
   )
 
 export function TopNav() {
   const { user, logout } = useAuth()
 
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="border-b border-border bg-header">
       <nav
         aria-label="Main navigation"
         className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6"
       >
-        <span className="text-base font-semibold text-slate-900">MedLens</span>
+        <span className="text-base font-semibold text-header-foreground">MedLens</span>
 
         <ul className="flex flex-wrap items-center gap-1">
           <li>
@@ -32,6 +32,11 @@ export function TopNav() {
               Patients
             </NavLink>
           </li>
+          <li>
+            <NavLink to={ROUTES.settings} className={navLinkClassName}>
+              Settings
+            </NavLink>
+          </li>
         </ul>
 
         <div>
@@ -39,7 +44,7 @@ export function TopNav() {
             <button
               type="button"
               onClick={logout}
-              className="rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="rounded-md px-3 py-2 text-sm font-medium text-header-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             >
               Log out
             </button>

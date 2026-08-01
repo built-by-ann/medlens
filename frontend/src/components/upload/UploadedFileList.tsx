@@ -56,13 +56,13 @@ export function UploadedFileList({
           <li key={queued.id}>
             <Card className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-slate-700">File</span>
-                <p className="truncate text-sm text-slate-900">
+                <span className="text-sm font-medium text-foreground">File</span>
+                <p className="truncate text-sm text-foreground">
                   {queued.file.name}{' '}
-                  <span className="text-slate-400">({formatFileSize(queued.file.size)})</span>
+                  <span className="text-muted">({formatFileSize(queued.file.size)})</span>
                 </p>
                 {duplicateOfTitle && (
-                  <p className="text-xs text-amber-600" role="status">
+                  <p className="text-xs text-warning" role="status">
                     A document named "{duplicateOfTitle}" already exists for this patient.
                   </p>
                 )}
@@ -82,7 +82,7 @@ export function UploadedFileList({
                 type="button"
                 onClick={() => onRemove(queued.id)}
                 aria-label={`Remove ${queued.file.name}`}
-                className="self-start rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                className="self-start rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
               >
                 Remove
               </button>

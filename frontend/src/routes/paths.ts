@@ -4,6 +4,7 @@ export const ROUTES = {
   signup: '/signup',
   dashboard: '/dashboard',
   patients: '/patients',
+  settings: '/settings',
   newPatient: '/patients/new',
   patientDetail: '/patients/:patientId',
   patientEdit: '/patients/:patientId/edit',

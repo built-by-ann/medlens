@@ -102,7 +102,7 @@ export function MedicationCard({ medication, onEdit, onDelete }: MedicationCardP
               type="button"
               onClick={() => setIsEditing(false)}
               disabled={isSaving}
-              className="cursor-pointer rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="cursor-pointer rounded-md px-4 py-2 text-sm font-medium text-muted hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             >
               Cancel
             </button>
@@ -115,14 +115,14 @@ export function MedicationCard({ medication, onEdit, onDelete }: MedicationCardP
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
-        <h4 className="min-w-0 truncate text-sm font-semibold text-slate-900">
+        <h4 className="min-w-0 truncate text-sm font-semibold text-foreground">
           {medication.medication_name}
         </h4>
         <div className="flex shrink-0 flex-wrap gap-2">
           <button
             type="button"
             onClick={startEditing}
-            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-link hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
             Edit
           </button>
@@ -131,7 +131,7 @@ export function MedicationCard({ medication, onEdit, onDelete }: MedicationCardP
             onClick={handleDelete}
             disabled={isDeleting}
             aria-label={`Delete ${medication.medication_name}`}
-            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isDeleting ? 'Removing...' : 'Delete'}
           </button>
@@ -143,7 +143,7 @@ export function MedicationCard({ medication, onEdit, onDelete }: MedicationCardP
         <SummaryStat label="Frequency" value={medication.frequency} />
         <SummaryStat label="Status" value={medication.status} />
       </dl>
-      {medication.notes && <p className="text-sm break-words text-slate-600">{medication.notes}</p>}
+      {medication.notes && <p className="text-sm break-words text-muted">{medication.notes}</p>}
       {deleteError && <FormError message={deleteError} />}
     </Card>
   )

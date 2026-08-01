@@ -112,6 +112,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isLoading,
       login,
       logout,
+      setUser,
       sessionExpiredMessage,
       clearSessionExpiredMessage,
     }),

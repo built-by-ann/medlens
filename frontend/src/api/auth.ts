@@ -29,3 +29,14 @@ export async function getCurrentUser(): Promise<User> {
 
   return response.data
 }
+
+export interface UpdateUserPayload {
+  name?: string | null
+  email?: string
+}
+
+export async function updateUser(payload: UpdateUserPayload): Promise<User> {
+  const response = await apiClient.patch<User>('/users/me', payload)
+
+  return response.data
+}

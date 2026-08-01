@@ -62,6 +62,7 @@ describe('AppRoutes legacy route redirects', () => {
       isLoading: false,
       login: vi.fn(),
       logout: vi.fn(),
+      setUser: vi.fn(),
       sessionExpiredMessage: null,
       clearSessionExpiredMessage: vi.fn(),
     })

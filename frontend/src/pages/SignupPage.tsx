@@ -154,9 +154,9 @@ export function SignupPage() {
               {isSubmitting ? 'Creating account...' : 'Create account'}
             </Button>
 
-            <p className="text-center text-sm text-slate-600">
+            <p className="text-center text-sm text-muted">
               Already have an account?{' '}
-              <Link to={ROUTES.login} className="font-medium text-blue-600 hover:underline">
+              <Link to={ROUTES.login} className="font-medium text-link hover:underline">
                 Log in
               </Link>
             </p>

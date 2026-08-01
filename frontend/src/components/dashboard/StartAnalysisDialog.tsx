@@ -57,21 +57,21 @@ export function StartAnalysisDialog({
       aria-labelledby="start-analysis-heading"
       onClose={onClose}
       onClick={handleBackdropClick}
-      className="fixed inset-0 m-auto h-fit max-h-[80vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg border border-slate-200 p-6 shadow-lg backdrop:bg-slate-900/40"
+      className="fixed inset-0 m-auto h-fit max-h-[80vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg border border-border bg-surface p-6 text-foreground shadow-lg backdrop:bg-black/40"
     >
       {isOpen && (
         <div className="flex flex-col gap-4">
           <div>
-            <h2 id="start-analysis-heading" className="text-lg font-semibold text-slate-900">
+            <h2 id="start-analysis-heading" className="text-lg font-semibold text-foreground">
               Start an analysis
             </h2>
-            <p className="mt-1 text-sm text-slate-600">Choose a patient to build it for.</p>
+            <p className="mt-1 text-sm text-muted">Choose a patient to build it for.</p>
           </div>
 
           <PatientSearch value={searchTerm} onChange={setSearchTerm} />
 
           {filteredPatients.length === 0 ? (
-            <p className="text-sm text-slate-500">No patients match your search.</p>
+            <p className="text-sm text-muted">No patients match your search.</p>
           ) : (
             <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
               {filteredPatients.map((patient) => (
@@ -79,15 +79,13 @@ export function StartAnalysisDialog({
                   <button
                     type="button"
                     onClick={() => onSelectPatient(patient)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    className="w-full rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
                   >
-                    <span className="font-medium text-slate-900">
+                    <span className="font-medium text-foreground">
                       {patient.first_name} {patient.last_name}
                     </span>
                     {patient.external_mrn && (
-                      <span className="ml-2 text-xs text-slate-500">
-                        MRN: {patient.external_mrn}
-                      </span>
+                      <span className="ml-2 text-xs text-muted">MRN: {patient.external_mrn}</span>
                     )}
                   </button>
                 </li>
@@ -99,7 +97,7 @@ export function StartAnalysisDialog({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="rounded-md px-4 py-2 text-sm font-medium text-muted hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             >
               Cancel
             </button>

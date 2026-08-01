@@ -182,10 +182,10 @@ describe('AnalysisProcessingPage', () => {
       error: null,
       retry: vi.fn(),
     })
-    const { container } = renderProcessingPage()
+    renderProcessingPage()
 
     await screen.findByText('Created')
-    expect(container.querySelector('.bg-blue-100')).toHaveTextContent('Processing')
+    expect(screen.getByText('Status').nextElementSibling).toHaveTextContent('Processing')
   })
 
   it('automatically navigates to the analysis results page once completed', async () => {

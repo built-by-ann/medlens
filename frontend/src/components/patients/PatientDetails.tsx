@@ -33,9 +33,9 @@ export function PatientDetails({ patient }: PatientDetailsProps) {
         {updatedAt && <SummaryStat label="Last updated" value={updatedAt} />}
       </dl>
       {patient.notes && (
-        <div className="flex flex-col gap-1 border-t border-slate-200 pt-4">
-          <span className="text-xs font-medium tracking-wide text-slate-500 uppercase">Notes</span>
-          <p className="text-sm text-slate-700">{patient.notes}</p>
+        <div className="flex flex-col gap-1 border-t border-border pt-4">
+          <span className="text-xs font-medium tracking-wide text-muted uppercase">Notes</span>
+          <p className="text-sm text-foreground">{patient.notes}</p>
         </div>
       )}
     </Card>

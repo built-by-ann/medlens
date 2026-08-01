@@ -135,7 +135,7 @@ export function CreateAnalysisPage() {
       />
 
       <section aria-labelledby="existing-documents-heading" className="flex flex-col gap-4">
-        <h2 id="existing-documents-heading" className="text-lg font-semibold text-slate-900">
+        <h2 id="existing-documents-heading" className="text-lg font-semibold text-foreground">
           Existing Documents
         </h2>
 
@@ -165,7 +165,7 @@ export function CreateAnalysisPage() {
             />
 
             {filteredExistingDocuments.length === 0 ? (
-              <p className="text-sm text-slate-500">No documents match your search.</p>
+              <p className="text-sm text-muted">No documents match your search.</p>
             ) : (
               <>
                 <ul className="flex flex-col gap-3">
@@ -175,21 +175,21 @@ export function CreateAnalysisPage() {
                     return (
                       <li key={document.id}>
                         <label
-                          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 shadow-sm hover:bg-slate-50 ${
-                            isSelected ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white'
+                          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 shadow-sm hover:bg-surface-hover ${
+                            isSelected ? 'border-primary/60 bg-info/10' : 'border-border bg-surface'
                           }`}
                         >
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleExistingDocument(document.id)}
-                            className="mt-1 h-4 w-4 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                            className="mt-1 h-4 w-4 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
                           />
                           <span className="flex min-w-0 flex-col gap-0.5">
-                            <span className="text-sm font-semibold break-words text-slate-900">
+                            <span className="text-sm font-semibold break-words text-foreground">
                               {document.title}
                             </span>{' '}
-                            <span className="text-xs text-slate-500">
+                            <span className="text-xs text-muted">
                               {documentTypeLabel(document.document_type)} · Uploaded{' '}
                               {formatDate(document.created_at)}
                             </span>
@@ -204,7 +204,7 @@ export function CreateAnalysisPage() {
                   <button
                     type="button"
                     onClick={() => setShowAllExisting(true)}
-                    className="self-start rounded-md px-2 py-1 text-sm font-medium text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    className="self-start rounded-md px-2 py-1 text-sm font-medium text-link hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
                   >
                     Show {hiddenExistingDocumentsCount} more
                   </button>
@@ -215,7 +215,7 @@ export function CreateAnalysisPage() {
                     <button
                       type="button"
                       onClick={() => setShowAllExisting(false)}
-                      className="self-start rounded-md px-2 py-1 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                      className="self-start rounded-md px-2 py-1 text-sm font-medium text-muted hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
                     >
                       Show less
                     </button>
@@ -227,7 +227,7 @@ export function CreateAnalysisPage() {
       </section>
 
       <section aria-labelledby="upload-additional-heading" className="flex flex-col gap-4">
-        <h2 id="upload-additional-heading" className="text-lg font-semibold text-slate-900">
+        <h2 id="upload-additional-heading" className="text-lg font-semibold text-foreground">
           Upload Additional Documents
         </h2>
 
@@ -250,19 +250,19 @@ export function CreateAnalysisPage() {
         <h2
           id="selected-documents-heading"
           aria-live="polite"
-          className="text-lg font-semibold text-slate-900"
+          className="text-lg font-semibold text-foreground"
         >
           Selected Documents ({totalSelectedCount})
         </h2>
 
         {totalSelectedCount === 0 && (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted">
             No documents selected yet. Check an existing document above, or upload a new one.
           </p>
         )}
 
         {totalSelectedCount > 0 && selectedExistingDocuments.length === 0 && notes.length === 0 && (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted">
             Uploaded files are listed above, in Upload Additional Documents.
           </p>
         )}
@@ -274,11 +274,11 @@ export function CreateAnalysisPage() {
                 {selectedExistingDocuments.map((document) => (
                   <li
                     key={document.id}
-                    className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
                   >
                     <span className="min-w-0 break-words">
-                      <span className="font-medium text-slate-900">{document.title}</span>{' '}
-                      <span className="text-xs text-slate-500">
+                      <span className="font-medium text-foreground">{document.title}</span>{' '}
+                      <span className="text-xs text-muted">
                         ({documentTypeLabel(document.document_type)}, already on file)
                       </span>
                     </span>
@@ -286,7 +286,7 @@ export function CreateAnalysisPage() {
                       type="button"
                       onClick={() => toggleExistingDocument(document.id)}
                       aria-label={`Remove ${document.title} from selection`}
-                      className="self-start rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:self-auto"
+                      className="self-start rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring sm:self-auto"
                     >
                       Remove
                     </button>
@@ -320,7 +320,7 @@ export function CreateAnalysisPage() {
         <Link
           to={patientDetailPath(patient.id)}
           replace
-          className="text-sm text-red-600 hover:underline"
+          className="text-sm text-danger hover:underline"
         >
           Cancel
         </Link>

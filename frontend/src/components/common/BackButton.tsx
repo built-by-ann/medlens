@@ -36,7 +36,7 @@ export function BackButton({ to, label }: BackButtonProps) {
     <button
       type="button"
       onClick={handleClick}
-      className="self-start text-sm text-slate-600 hover:underline"
+      className="self-start text-sm text-link hover:underline"
     >
       <span aria-hidden="true">←</span> Back to {label}
     </button>

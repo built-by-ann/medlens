@@ -61,6 +61,7 @@ Routing is configured in `src/App.tsx` using `react-router-dom`.
 | `/patients/:patientId/analyses/new` | `CreateAnalysisPage` | `AppLayout` | yes |
 | `/patients/:patientId/analyses/processing` | `AnalysisProcessingPage` | `AppLayout` | yes |
 | `/patients/:patientId/analyses/:analysisId` | `AnalysisDetailPage` | `AppLayout` | yes |
+| `/settings` | `SettingsPage` | `ProtectedLayout` | yes |
 | `/upload` | redirects to `/patients` (legacy, Sprint 3.5 Issue #130) | | |
 | `/analyses/:id` | redirects to `/patients` (legacy, Sprint 3.5 Issue #130) | | |
 | `/` | redirects to `/dashboard` | | |
@@ -470,6 +471,120 @@ Only one file at a time: the file input has no `multiple` attribute, which is su
 
 ---
 
+## Settings
+
+`SettingsPage` (`/settings`, `src/pages/SettingsPage.tsx`) is the account-level counterpart to the patient-scoped pages above: a single page under `ProtectedLayout`, linked from `TopNav`, with no patient context. It renders four `Card`s in a vertical stack - Profile, Appearance, Accessibility, About - each a self-contained section, not a tab set, so there's nothing to route or deep-link to within the page itself.
+
+### Profile
+
+`ProfileSettings` (`src/components/settings/ProfileSettings.tsx`) edits First Name, Last Name, and Email Address against the real backend, and shows (but disables) a Username field the backend has no concept of - see "Backend gap: Username and a real first/last name split" below.
+
+The backend `User` model (`backend/app/models/user.py`) has only `email` and a single optional `name` string - no `first_name`/`last_name` columns. `profileFormValidation.ts`'s `splitName`/`joinName` bridge that gap entirely client-side: `splitName` takes the first whitespace-separated word as "First name" and everything after it as "Last name" (so "Ann Marie Mathew" round-trips as `firstName: "Ann"`, `lastName: "Marie Mathew"`, not silently dropping the middle name); `joinName` reverses it with a single space before saving. This is a deliberate, disclosed heuristic over one real column, not two real fields - the alternative (adding real `first_name`/`last_name` columns) was treated as backend work out of scope for this issue (see below), consistent with "if backend endpoints don't exist, build the frontend and document what's required, don't invent fake persistence."
+
+Saving calls the new `PATCH /users/me` (`updateUser`, `src/api/auth.ts`) and, on success, pushes the returned `User` into `AuthContext` via a new `setUser` (`AuthProvider.tsx`) - the same context `TopNav`'s "Welcome back, {name}" and the Dashboard's `PageHeader` already read, so a name change is reflected everywhere immediately, with no second `GET /users/me` and no page reload. A changed email that collides with another account surfaces the backend's `409` attached to the Email field specifically (mirroring `SignupPage`'s existing 409-to-field pattern); every other failure is a generic form-level `FormError`. Validation (`validateProfileForm`) mirrors the app's established per-form pattern (`patientFormValidation.ts`, `SignupPage`'s inline `validate`): First Name, Last Name, and Email are required, Email must additionally pass `isValidEmail` (`src/utils/validation.ts`).
+
+**Backend gap: Username and a real first/last name split.** There is no `username` column, uniqueness constraint, or route anywhere in the backend - accounts are identified by email only. `ProfileSettings` renders the field anyway (disabled, `placeholder="Not available yet"`, with an inline caption explaining why) rather than omitting it, since the issue's field list explicitly asked for it; nothing is submitted for it, and no request pretends it was saved. To make Username and a real (non-heuristic) first/last name split actually work would require: two new `User` columns (`first_name`, `last_name`) or one (`username`) with a uniqueness constraint mirroring `email`'s, an Alembic migration, `UserUpdate`/`UserResponse` schema updates (`backend/app/schemas/user.py`), and a small service-layer change to `update_user` (`backend/app/services/user_service.py`) to validate and persist the new column(s) the same way it already does for `email`. None of that exists today.
+
+### Appearance
+
+`AppearanceSettings` (`src/components/settings/AppearanceSettings.tsx`) is a two-step picker over `useTheme()` (see Theming below): a **Palette** grid (7 options - `PALETTE_OPTIONS`, `ThemeContext.ts`) and, independently, a **Mode** toggle (Light / Dark / High Contrast / System - `MODE_OPTIONS`). The two are genuinely independent state (`palette`, `modePreference`) - picking a different palette never changes the current mode and vice versa, so "Twilight, but in Dark" and "Twilight, but High Contrast" are just two clicks from any starting point, not two separate named themes to hunt for in one long list.
+
+Each palette card's swatch (`PALETTE_PREVIEWS`, a small hardcoded lookup table in the component - the one deliberate exception to "consume tokens, not raw colors," since a picker's whole job is showing colors that are *not* currently active) re-renders using whichever mode is presently selected, so the grid always shows what choosing that palette would actually look like right now, not a fixed thumbnail.
+
+### Accessibility
+
+Currently a placeholder `Card` pointing at the High Contrast mode under Appearance (see Theming's Accessibility notes below) as the accessibility control that exists today. No reduced-motion or text-size controls are implemented; the section exists so Settings has a stable place to add them later without restructuring the page.
+
+### About
+
+A static `Card` restating the application's synthetic-data-only scope. No data, no props, nothing to test beyond that it renders.
+
+---
+
+## Theming
+
+Every color in the app is a CSS custom property, switched by setting `data-theme="{palette}-{mode}"` on `<html>`. No component ever branches on which theme is active (`if (theme === ...)`) - everything flows through Tailwind utility classes generated from those custom properties, so adding a theme never touches component code, and the ~60 components across the app that render color at all consume exactly the same token vocabulary regardless of which of the 21 themes is currently applied.
+
+### The token system
+
+Tailwind v4 has no JS config file; tokens are declared with an `@theme inline` block in `src/styles/themes.css`:
+
+```css
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  /* ...one line per token */
+}
+```
+
+`inline` is what makes this dynamic: it tells Tailwind to generate each utility (`bg-surface`, `text-foreground`, `outline-focus-ring`, ...) as a direct reference to the underlying custom property (`background-color: var(--surface)`) rather than resolving it once at build time. The custom properties themselves are defined separately, under `:root` (the default theme) and one `:root[data-theme="..."]` block per other theme, each redefining the same fixed set of names to different values. Switching `data-theme` therefore changes what every already-generated utility class resolves to, with no re-render, no class-name swapping, and no JS-driven style computation anywhere.
+
+### Semantic tokens
+
+| Token | Utility classes | Used for |
+|---|---|---|
+| `background` / `foreground` | `bg-background`, `text-foreground` | Page background; primary body/heading text |
+| `surface` / `surface-hover` | `bg-surface`, `bg-surface-hover` | Card and control backgrounds; their hover state |
+| `border` | `border-border` | Card, input, and divider borders |
+| `muted` | `text-muted` | Secondary/description text |
+| `primary` / `primary-hover` / `primary-foreground` | `bg-primary`, `hover:bg-primary-hover`, `text-primary-foreground` | The solid-fill `Button`, the "+ New Analysis" action, active nav state |
+| `secondary` / `secondary-foreground` | `bg-secondary`, `text-secondary-foreground` | The "AI-generated" badge (`AnalysisDetailPage`) - the one place today that reaches for a second accent distinct from `primary` |
+| `link` / `link-hover` | `text-link`, `hover:text-link-hover` | Inline text links (may differ from `primary` - e.g. Dark/Twilight need a brighter shade to read directly on a dark background than a button fill does) |
+| `focus-ring` | `outline-focus-ring` | Every `:focus-visible` state, including the one global rule in `globals.css` |
+| `success` / `warning` / `danger` / `info` (+ `-foreground`) | `text-success`, `bg-success/10`, ... | Plain-text status usage: form/API errors (`FormError`), success confirmations, "Remove"/"Archive" action links - anywhere the color has to stay legible directly against the page/card background |
+| `success-badge` / `warning-badge` / `danger-badge` / `info-badge` / `badge-foreground` | `bg-success-badge text-badge-foreground`, ... | Solid-fill status badges (`AnalysisStatusBadge`, `DiscrepancySeverityBadge`, `ResolutionStatusBadge`) - see below for why these are separate from `success`/`warning`/`danger`/`info` above |
+| `header` / `header-foreground` | `bg-header`, `text-header-foreground` | `TopNav` |
+| `sidebar` / `sidebar-foreground` | `bg-sidebar`, `text-sidebar-foreground` | Reserved - nothing in the app renders a literal sidebar today; defined for every theme so a future layout change doesn't need a theming pass of its own |
+
+"Cards," "Buttons," and "Inputs" from the original token wishlist aren't separate values - a card is `surface` + `border`, a button is `primary` + `primary-foreground`, an input is `surface` + `border` + `foreground` + `focus-ring`. "Badges" *is* a separate pair of tokens (`*-badge` + `badge-foreground`) - see the next section for why a single `success`/`bg-success/15` pattern (the original approach) couldn't serve both a badge and plain text at once.
+
+**Why badges need their own tokens.** `success`/`warning`/`danger`/`info` are also used as plain inline text (`FormError`, success confirmations, "Remove"/"Archive" links) directly against each palette's own page or card background - so their exact shade is constrained by "must stay legible as text on 9 different backgrounds," which forces them dark and comparatively muted in every Light and every High Contrast theme (a genuinely bright, saturated green literally cannot pass 4.5:1 as text on a near-white background - the two facts are physically incompatible, not a design oversight). A badge is different: its fill only ever has to contrast against its own paired text (`badge-foreground`), never against the page, so it's free to be as saturated as it likes. `success-badge`/`warning-badge`/`danger-badge`/`info-badge` reuse the exact same bright colors Dark mode's `success`/`warning`/`danger`/`info` already used (`#4ade80`/`#fbbf24`/`#f87171`/`#38bdf8`), paired with black `badge-foreground` text - verified to clear AA (and comfortably AAA) with black text in every mode, including Light and High Contrast, which is what makes it possible for these five tokens to hold the exact same value in all 27 themes with no per-mode variation at all, unlike every other token in the system. `src/styles/themes.test.ts` asserts this directly from the CSS source, not just by having written it that way once.
+
+### Palettes and modes
+
+A theme is a `(palette, mode)` pair. 9 palettes x 3 modes = 27 themes, all defined in `src/styles/themes.css`:
+
+| Palette | Feel | Source |
+|---|---|---|
+| Default | The application's own original look | - |
+| Blossom | Elegant, warm, soft | Satin Sheen Gold, Burnt Umber, Silver Pink, Old Rose, Shiny Shamrock |
+| Sage | Healthcare, calm, natural, minimal | Axolotl, Morning Blue, Jet Stream, Dark Vanilla, Opal |
+| Twilight | Modern, calm, professional | YInMn Blue, Pale Cerulean, Languid Lavender, Ceil, Chinese Black |
+| Terracotta | Warm, confident, editorial | Burnt Umber, Medium Vermilion, Sandy Brown, New York Pink, Raisin Black |
+| Coastal | Fresh, modern, creative | Moonstone, English Violet, Mountbatten Pink, Ruddy Pink, Deep Taupe |
+| Lavender | Relaxed, friendly, soft | Liberty, Lavender Purple, Cadet Blue, Dark Vanilla, Parrot Pink |
+| Aurora | Modern, energetic, colorful, AI/technology, creative - the most vibrant palette while staying professional | Celtic Blue, Byzantine, Old Gold, Gainsboro, a lightened-from-Gainsboro background |
+| Botanical | A rose/olive garden palette | Crushed Rose, Spring Olive, Tulip Bloom, Blush Petal, Deep Garden |
+
+Each non-Default palette uses more than the one or two colors a first pass reached for: the source board's own "Surface"/"Background Accent" swatch became that palette's `surface-hover` (e.g. Sage's `surface-hover` is literally Jet Stream, Coastal's is Mountbatten Pink, Aurora's is Gainsboro itself), a different swatch became `header` (a color distinct from `surface`, so `TopNav` reads as part of the palette rather than blending into the page - Aurora's header is a pale Old Gold tint, giving its third source hue real presence even though nothing else in the token set uses it), and Terracotta's Light and Dark modes use two *different* given colors as `text`/`background` respectively (Raisin Black as the light mode's dark text; Raisin Black again, unchanged, as the dark mode's actual background - the board's own "Dark Surface" swatch used exactly as labeled) rather than deriving both computationally. Where a palette's own accent was already legible as-is against its dark-mode background (Terracotta's Sandy Brown, Twilight's YInMn Blue in High Contrast, Aurora's brightened Old Gold as its Dark-mode link color), it's used unadjusted rather than recolored to match a formula. Coastal's `primary` was shifted from a first-pass sky-blue toward teal, specifically so it stays visually distinct from `info` (also blue) rather than the two looking like the same color at different tints.
+
+`success`/`warning`/`danger`/`info` are **identical across every palette within a mode** - one fixed value for light, one for dark, one for high-contrast, shared by all 9 palettes with zero per-palette exceptions. This was tightened after an early version let Default Light run slightly brighter than the rest, and let Blossom and Terracotta each tint one status color to match their own palette (a source-board color literally labeled "Success," a warning shifted toward gold so it wouldn't blend into Terracotta's orange-browns) - reasonable-looking in isolation, but it meant a discrepancy's severity or "Completed" badge could subtly change shade depending on which palette happened to be active. All three exceptions were removed in favor of one shared value per mode.
+
+That still left every Light and every High Contrast theme's badges looking noticeably duller than Dark mode's, for a real reason, not an inconsistency: `success`/`warning`/`danger` also had to stay legible as *plain text* against each palette's own light background, which structurally caps how bright they can be (see "Why badges need their own tokens" above). `success-badge`/`warning-badge`/`danger-badge`/`info-badge` fix this the rest of the way: since a badge's fill never has to contrast against the page, these five tokens hold the *exact same value in all 27 themes*, not just within a mode - "Completed," and every discrepancy severity badge, now render as the literal same bright color everywhere, verified by `src/styles/themes.test.ts` rather than by eye.
+
+Each palette's Dark and High Contrast modes were designed, not mechanically derived from Light: Dark backgrounds are the palette's own darkest given color where the board provided one dark enough to use directly (Terracotta's Raisin Black, Twilight's Chinese Black), or a new near-black tinted toward the palette's hue where it didn't; every Dark mode's `primary`/`secondary`/`link` are brightened versions of the same source colors (never the Light mode's darker shades, which would fail contrast against a dark background) - and where a palette's given accent was already light (Sage's Morning Blue, Coastal's Ruddy Pink, Lavender's Parrot Pink), that color's `-foreground` pairing is dark text, not the white every other family uses, since a light color needs dark text to read as a solid fill. High Contrast modes across every palette share the same white background/black text/AAA status-color base as Default High Contrast, so the mode's actual promise (maximum readability) never varies by palette - only `primary`/`secondary`/`link`/`focus-ring` change per palette, each darkened until white text on it clears 7:1, so High Contrast still visually reads as "that palette," just at its most legible.
+
+### `ThemeProvider` and persistence
+
+`ThemeProvider` (`src/contexts/ThemeProvider.tsx`) owns two independent pieces of state:
+
+- `palette` (`PaletteName`, defaults to `'default'`)
+- `modePreference` (`Mode | 'system'`, defaults to `'system'`)
+
+`resolvedMode` is derived at render time, never stored separately: `modePreference === 'system' ? systemMode : modePreference`. `systemMode` is tracked by one permanent `matchMedia('(prefers-color-scheme: dark)')` subscription for the lifetime of the provider (not one that's added/removed as `modePreference` changes), updated only through its `change` event callback - this is what keeps the provider's effects free of the "calling setState synchronously in an effect body" pattern React's `eslint-plugin-react-hooks` purity rule flags: `resolvedMode`/`resolvedTheme` are plain derived values recomputed on every render, not state kept in sync by an effect reacting to `palette`/`modePreference`. `'system'` only ever resolves to `'light'` or `'dark'` - there is no OS-level signal for "high contrast," so that mode is always an explicit user choice.
+
+`src/lib/themeStorage.ts` persists the two independently under separate `localStorage` keys (`medlens.theme.palette`, `medlens.theme.mode`), mirroring the minimal get/set/clear-per-value shape `tokenStorage.ts` already established for the access token. On load, each key that has a valid stored value wins; a missing or unrecognized value (e.g. a key from a since-renamed palette) falls back to the same defaults as first load, never throws.
+
+### Accessibility
+
+- Every theme targets WCAG AA (4.5:1 for text, 3:1 for large text/UI components); every High Contrast mode targets AAA (7:1) and was verified against it, not just AA.
+- Contrast was verified computationally (a small WCAG relative-luminance script, not eyeballed) for every text/background and button-fill/text pairing in every theme before it was written into `themes.css` - not simply plausible-looking colors.
+- Borders are the one consistent exception: light-mode borders sit around 1.5-2.6:1 against their surface, short of the 3:1 non-text-contrast guideline. This is a deliberate, app-wide tradeoff (already true of the pre-theming app, unchanged here) rather than an oversight - card and input borders are backed by additional cues (surrounding padding, the surface/background color difference, the label above an input), and the one boundary WCAG cares about most for keyboard/assistive-tech users, the focus ring, is held to the full 3:1+ standard in every theme (see below), not relaxed like decorative borders are.
+- `focus-ring` clears 3:1 against both `background` and `surface` in every theme - verified, not assumed - since focus visibility was called out explicitly as something no theme may compromise on.
+- Status colors (`success`/`warning`/`danger`/`info`) come from a small set of shared, pre-verified ramps (see Palettes and modes above) specifically so severity/status meaning never depends on which theme happens to be active; the badge-specific tokens (`success-badge`, etc.) go further and hold one literal value across all 27 themes with no per-mode variation at all.
+
+---
+
 ## Shared Components
 
 `src/components/common/`: `Button`, `Input`, `Card`, `PageHeader`, `LoadingSpinner`, `ErrorState`, `SummaryStat`, `ProtectedRoute`, `PublicOnlyRoute`, `BackButton` (Issue #158 - see Patient breadcrumb navigation above).
@@ -577,4 +692,6 @@ The following are explicitly out of scope and left for future issues:
 - A "Key clinical observations", "Mentioned conditions", or "Notable findings" section on `AnalysisDetailPage`'s AI Summary (Issue #47) - the AI response schema (`app/ai/schemas.py`) has no structured field for any of these; see Analyses above.
 - A Docker Compose service for the frontend.
 - Access-timestamp tracking for a truer "recently accessed" patient ordering on the Dashboard - `sortPatientsByRecentActivity` uses `updated_at`/`created_at` instead (see Dashboard above), since there is no "last opened by this provider" timestamp anywhere in this app, unrelated to Issue #157's separate Recent *Analyses* feed (which does now exist, see Dashboard above).
-- Provider-level analytics, settings, or notifications (none requested, none built).
+- Provider-level analytics or notifications (none requested, none built). Settings now exists (see Settings and Theming above).
+- A real backend `username` field or a `first_name`/`last_name` column split - `ProfileSettings`' Username field is disabled and its First/Last Name split is a client-side heuristic over the single `name` column; see Settings above for exactly what backend work this needs.
+- Accessibility controls beyond the High Contrast theme (reduced motion, adjustable text size) - `SettingsPage`'s Accessibility section is a placeholder for these.

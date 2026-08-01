@@ -42,26 +42,26 @@ interface FailureCardProps {
 function FailureCard({ message, onRetry, patientId }: FailureCardProps) {
   return (
     <Card role="alert" className="flex flex-col items-center gap-4 py-12 text-center">
-      <h2 className="text-lg font-semibold text-slate-900">Analysis failed</h2>
-      <p className="max-w-md text-sm text-slate-600">{message}</p>
+      <h2 className="text-lg font-semibold text-foreground">Analysis failed</h2>
+      <p className="max-w-md text-sm text-muted">{message}</p>
       <div className="flex flex-wrap justify-center gap-2">
         {onRetry && (
           <Button
             onClick={onRetry}
-            className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
             Try again
           </Button>
         )}
         <Link
           to={patientDetailPath(patientId)}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
         >
           Return to Patient Overview
         </Link>
         <Link
           to={patientAnalysesPath(patientId)}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
         >
           Return to Analysis History
         </Link>
@@ -147,13 +147,13 @@ export function AnalysisProcessingPage() {
           description={`For ${patient.first_name} ${patient.last_name}`}
         />
         <Card className="flex flex-col items-center gap-4 py-12 text-center">
-          <p className="max-w-md text-sm text-slate-600">
+          <p className="max-w-md text-sm text-muted">
             This page only works right after starting an analysis, either by uploading documents or
             selecting existing ones.
           </p>
           <Link
             to={patientUploadPath(patient.id)}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
             Go to Upload
           </Link>
@@ -203,16 +203,16 @@ export function AnalysisProcessingPage() {
       ) : (
         <Card aria-live="polite" className="flex flex-col items-center gap-3 py-12 text-center">
           <LoadingSpinner label="Analysis in progress" />
-          <p className="text-base font-semibold text-slate-900">{message}</p>
-          <p className="text-sm text-slate-600">AI is reviewing uploaded clinical documents.</p>
-          <p className="text-sm text-slate-600">Estimated time: 10-30 seconds</p>
-          <p className="text-sm font-medium text-slate-700">Please keep this page open.</p>
+          <p className="text-base font-semibold text-foreground">{message}</p>
+          <p className="text-sm text-muted">AI is reviewing uploaded clinical documents.</p>
+          <p className="text-sm text-muted">Estimated time: 10-30 seconds</p>
+          <p className="text-sm font-medium text-foreground">Please keep this page open.</p>
 
           {analysis && (
             <dl className="mt-4 grid grid-cols-2 gap-4">
               {createdAt && <SummaryStat label="Created" value={createdAt} />}
               <div className="flex flex-col gap-0.5">
-                <dt className="text-xs font-medium tracking-wide text-slate-500 uppercase">
+                <dt className="text-xs font-medium tracking-wide text-muted uppercase">
                   Status
                 </dt>
                 <dd>

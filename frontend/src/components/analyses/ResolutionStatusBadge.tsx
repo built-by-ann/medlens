@@ -3,10 +3,10 @@ import { RESOLUTION_STATUS_LABELS } from '@/utils/discrepancy'
 import type { ResolutionStatus } from '@/types/api'
 
 const RESOLUTION_STATUS_STYLES: Record<ResolutionStatus, string> = {
-  open: 'bg-slate-100 text-slate-700',
-  reviewed: 'bg-blue-100 text-blue-700',
-  resolved: 'bg-green-100 text-green-700',
-  dismissed: 'bg-slate-100 text-slate-500',
+  open: 'bg-surface-hover text-foreground',
+  reviewed: 'bg-info-badge text-badge-foreground',
+  resolved: 'bg-success-badge text-badge-foreground',
+  dismissed: 'bg-surface-hover text-muted',
 }
 
 interface ResolutionStatusBadgeProps {

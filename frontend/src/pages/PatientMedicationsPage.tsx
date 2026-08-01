@@ -59,7 +59,7 @@ export function PatientMedicationsPage() {
           />
 
           <section aria-labelledby="medication-list-heading" className="flex flex-col gap-4">
-            <h2 id="medication-list-heading" className="text-lg font-semibold text-slate-900">
+            <h2 id="medication-list-heading" className="text-lg font-semibold text-foreground">
               Current medications
             </h2>
 

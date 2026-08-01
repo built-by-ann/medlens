@@ -6,6 +6,7 @@ import { HomePage } from '@/pages/HomePage'
 import { LoginPage } from '@/pages/LoginPage'
 import { SignupPage } from '@/pages/SignupPage'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { SettingsPage } from '@/pages/SettingsPage'
 import { AnalysisDetailPage } from '@/pages/AnalysisDetailPage'
 import { AnalysisProcessingPage } from '@/pages/AnalysisProcessingPage'
 import { CreateAnalysisPage } from '@/pages/CreateAnalysisPage'
@@ -46,6 +47,7 @@ export function AppRoutes() {
       <Route element={<ProtectedLayout />}>
         <Route path={ROUTES.dashboard} element={<DashboardPage />} />
         <Route path={ROUTES.patients} element={<PatientsPage />} />
+        <Route path={ROUTES.settings} element={<SettingsPage />} />
         <Route path={ROUTES.newPatient} element={<NewPatientPage />} />
         <Route path={ROUTES.patientEdit} element={<EditPatientPage />} />
         <Route path={ROUTES.patientMedications} element={<PatientMedicationsPage />} />

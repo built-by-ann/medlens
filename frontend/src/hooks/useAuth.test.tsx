@@ -11,6 +11,7 @@ const value: AuthContextValue = {
   isLoading: false,
   login: async () => {},
   logout: () => {},
+  setUser: () => {},
   sessionExpiredMessage: null,
   clearSessionExpiredMessage: () => {},
 }
