@@ -382,6 +382,37 @@ Cons
 
 ---
 
+# Decision 18: Multi-Stage, Non-Root Dockerfiles with .dockerignore as a Security Fix
+
+**Decision**
+
+Rebuild `backend/Dockerfile` and the newly-added `frontend/Dockerfile` as multi-stage builds (a build stage with the toolchain, a slim runtime stage with only what's needed to run), have the backend's runtime stage run as a dedicated non-root user, and add a `.dockerignore` to both build contexts.
+
+**Reasoning**
+
+Auditing the existing setup for Issue #56 found that `backend/Dockerfile`'s single-stage `COPY . .` had no `.dockerignore` excluding it - a real `docker build` would copy the developer's actual local secrets (`backend/.env`: `DATABASE_URL`, `JWT_SECRET_KEY`, `GEMINI_API_KEY`) directly into an image layer, along with 182 MB of `.venv` and Python/pytest/ruff caches. This is treated as a security fix, not a cleanup nice-to-have: an image is something that gets pushed to a registry and potentially run outside the machine it was built on, and a leaked `.env` baked into a layer stays recoverable from that layer's history even if a later layer overwrites the file. `frontend/Dockerfile` gets the same treatment for the same reason (`frontend/.env`, `node_modules`), and both `.dockerignore` files additionally exclude `tests/`/test-only artifacts and dev caches purely for image size, a secondary concern to the leak itself.
+
+Multi-stage was chosen over the previous single-stage backend Dockerfile because splitting "install dependencies" from "run the application" means the final image never contains pip's build cache or any transient install artifacts - `pip install --prefix=/install` in a `builder` stage, then only `/install` (not the whole stage) is copied into the runtime stage. The backend's runtime stage also drops root: nothing in this application writes to the filesystem at runtime (confirmed by inspection - all persistence goes through the database, not local files), so there is no reason a compromised dependency or a request-handling bug should have root inside the container.
+
+The frontend's runtime stage uses `nginx:alpine` rather than `npm run preview` (Vite's own preview server, explicitly documented as not intended for production) or a Node-based static file server, which would otherwise mean shipping all of Node and `node_modules` in the runtime image just to serve static files a real web server is already built to serve. A small `frontend/nginx.conf` adds one SPA-routing rule (`try_files $uri /index.html`) so a direct load or refresh on a client-side route like `/patients/5` doesn't 404 - without it, nginx has no way to know `/patients/5` isn't a real file and should fall through to the React app.
+
+**Trade-offs**
+
+Pros
+
+- A real, previously-exploitable secret-leak path is closed, not just a size optimization
+- The final backend image contains no build tooling, no test suite, and no dev caches - smaller and with a narrower attack surface
+- The backend runtime user has no more privilege than the application actually needs
+- The frontend's runtime image (nginx + static files) is a fraction of the size of the build stage (Node + `node_modules` + source)
+
+Cons
+
+- Two-stage Dockerfiles are slightly harder to read than the original single-stage version, for a project whose current scale doesn't strictly require multi-stage's size benefits
+- `frontend/nginx.conf` is a second thing to keep in sync if the app ever needs more than one SPA-routing rule (a custom 404 page, cache headers, etc.)
+- `VITE_API_BASE_URL` must be supplied as a Docker build argument, not a container-runtime environment variable like every other config value in this project - a real deployment has to know to rebuild the image (not just restart the container) to point it at a different backend URL
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:

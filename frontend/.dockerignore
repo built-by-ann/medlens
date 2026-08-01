@@ -1,0 +1,25 @@
+# Local secrets - never bake a developer's real .env into an image. The
+# frontend needs VITE_API_BASE_URL baked in at build time (Vite inlines
+# import.meta.env.* into the bundle), but that comes from a Docker build
+# ARG (see Dockerfile / docker-compose.yml), not this file.
+.env
+.env.*
+!.env.example
+
+# Installed dependencies and build output - large, host-specific, and
+# unnecessary since the image runs its own `npm ci` and `npm run build`.
+node_modules
+dist
+coverage
+
+# Version control and editor/OS metadata.
+.git
+.gitignore
+.DS_Store
+.dockerignore
+Dockerfile
+
+# Compose reads this file from the repo root, not from the build context -
+# excluding it here has no effect on it either way, but it has no reason to
+# be copied into the image.
+docker-compose*.yml

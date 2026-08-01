@@ -112,3 +112,15 @@ jobs:
       # and nothing about the test itself needed to change or weaken.
       - name: Test
         run: pytest -v
+
+      # Issue #56: the final step of this job, not a separate workflow or
+      # job - a change that passes every check above but produces a
+      # Dockerfile that can't actually be built would otherwise only be
+      # caught by hand, at deploy time. `docker build` alone (no push, no
+      # registry login, no compose) is enough to prove the production
+      # image still builds; it needs no environment variables; the ones
+      # Settings() requires (DATABASE_URL, JWT_SECRET_KEY) are only read
+      # when the built image is actually run, which this step doesn't do -
+      # see docker-compose up in docs/deployment.md for where those matter.
+      - name: Validate Docker image build
+        run: docker build -t medlens-backend:ci .

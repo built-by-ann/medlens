@@ -81,3 +81,20 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Issue #56: the final step of this job, not a separate workflow or
+      # job - a change that passes every check above but produces a
+      # Dockerfile that can't actually be built would otherwise only be
+      # caught by hand, at deploy time. `docker build` alone (no push, no
+      # registry login, no compose) is enough to prove the production
+      # image still builds. VITE_API_BASE_URL is passed explicitly as a
+      # build arg (reusing the same job-level value the steps above
+      # already use) because Vite inlines it into the built JS bundle at
+      # build time - it isn't read from the process environment the way
+      # the steps above read it, so it has to be threaded through
+      # `--build-arg` rather than just being present in `env:` above. The
+      # Dockerfile's own ARG default is this same value, so this flag is
+      # for clarity/consistency with the rest of the job, not because the
+      # build would fail without it.
+      - name: Validate Docker image build
+        run: docker build --build-arg VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }} -t medlens-frontend:ci .

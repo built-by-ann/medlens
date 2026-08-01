@@ -6,8 +6,34 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://medlens_user:medlens_password@postgres:5432/medlens_db
+      # Settings.jwt_secret_key (app/core/config.py) is required with no
+      # default - previously supplied only via a developer's own,
+      # untracked backend/.env, which the old Dockerfile's `COPY . .` (with
+      # no .dockerignore) happened to bake into the image. Now that
+      # backend/.dockerignore excludes .env from the build context
+      # entirely (a real image should never contain a developer's local
+      # secrets - see docs/design-decisions.md), this container has no
+      # other source for it. A fixed placeholder is fine here, the same
+      # way backend.yml's CI job uses one: this is throwaway local/CI
+      # infrastructure, not a real deployment, and nothing depends on this
+      # value being kept secret.
+      JWT_SECRET_KEY: local-dev-secret-key-not-used-anywhere-real
     depends_on:
       - postgres
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        # Baked into the built JS bundle at image build time (see
+        # frontend/Dockerfile) - the browser, not this container, is what
+        # actually calls the backend, so this points at the backend's
+        # host-mapped port above, not its in-network service name.
+        VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
 
   postgres:
     image: postgres:16

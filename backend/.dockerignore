@@ -1,0 +1,32 @@
+# Local secrets - never bake a developer's real .env into an image; the
+# Dockerfile reads configuration from real environment variables at
+# container runtime instead (see docker-compose.yml / docs/deployment.md).
+.env
+.env.*
+!.env.example
+
+# Python virtual environment and caches - large, host-specific, and
+# unnecessary since the image installs its own dependencies from
+# requirements.txt.
+.venv
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Test suite - not needed at runtime; kept out of the production image to
+# minimize its size (backend/tests/ has its own fixtures, sample files,
+# etc. that only matter for `pytest`, which CI already runs outside Docker).
+tests/
+
+# Version control and editor/OS metadata.
+.git
+.gitignore
+.DS_Store
+.dockerignore
+Dockerfile
+
+# Compose reads this file from the repo root, not from the build context -
+# excluding it here has no effect on it either way, but it has no reason to
+# be copied into the image.
+docker-compose*.yml
