@@ -13,13 +13,21 @@ from app.models.medication_mention import MedicationMention
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.medication_discrepancy import (
+    DiscrepancyResolutionIn,
     DiscrepancySeverity,
     DiscrepancyType,
     MedicationDiscrepancyCreate,
     MedicationDiscrepancyResponse,
+    ResolutionAction,
     ResolutionStatus,
 )
-from app.services.medication_discrepancy_service import create_medication_discrepancy
+from app.services.medication_discrepancy_service import (
+    DiscrepancyAlreadyResolvedError,
+    InvalidResolutionActionError,
+    create_medication_discrepancy,
+    get_discrepancy_for_analysis,
+    resolve_discrepancy,
+)
 
 
 def _create_user(db, email="finding.user@example.com"):
@@ -356,3 +364,404 @@ def test_deleting_medication_mention_sets_medication_mention_id_null_on_discrepa
     remaining = db.get(MedicationDiscrepancy, discrepancy_id)
     assert remaining is not None
     assert remaining.medication_mention_id is None
+
+
+# --- Resolution (resolve_discrepancy, get_discrepancy_for_analysis) ---
+
+
+def _create_analysis_with_patient(db, user):
+    patient = _create_patient(db, user)
+    analysis = Analysis(patient_id=patient.id, status="processing")
+    db.add(analysis)
+    db.commit()
+    db.refresh(analysis)
+
+    return patient, analysis
+
+
+def _create_medication_for_patient(db, patient):
+    # Unlike _create_medication above, this ties the medication to a given
+    # patient rather than creating its own - resolve_discrepancy scopes its
+    # medication lookups by patient_id (via update_medication), so a
+    # medication created for the wrong patient would silently fail to
+    # update rather than raise, which is exactly the bug this helper avoids
+    # tests from accidentally reintroducing.
+    medication = Medication(
+        patient_id=patient.id,
+        medication_name="Lisinopril",
+        dose="10 mg",
+        route="oral",
+        frequency="once daily",
+        status="active",
+        source="patient_reported",
+    )
+    db.add(medication)
+    db.commit()
+    db.refresh(medication)
+
+    return medication
+
+
+def test_get_discrepancy_for_analysis_finds_it(db):
+    user = _create_user(db, email="getfound@example.com")
+    _, analysis = _create_analysis_with_patient(db, user)
+    discrepancy = create_medication_discrepancy(db, analysis.id, _build_discrepancy_in())
+
+    found = get_discrepancy_for_analysis(db, analysis.id, discrepancy.id)
+
+    assert found is not None
+    assert found.id == discrepancy.id
+
+
+def test_get_discrepancy_for_analysis_returns_none_for_wrong_analysis(db):
+    user = _create_user(db, email="getwronganalysis@example.com")
+    _, analysis_a = _create_analysis_with_patient(db, user)
+    _, analysis_b = _create_analysis_with_patient(db, user)
+    discrepancy = create_medication_discrepancy(db, analysis_a.id, _build_discrepancy_in())
+
+    assert get_discrepancy_for_analysis(db, analysis_b.id, discrepancy.id) is None
+
+
+def test_resolve_discrepancy_dismiss_never_touches_medication(db):
+    user = _create_user(db, email="dismissnomedication@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    medication = _create_medication_for_patient(db, patient)
+    discrepancy = create_medication_discrepancy(
+        db, analysis.id, _build_discrepancy_in(medication_id=medication.id)
+    )
+    original_dose = medication.dose
+
+    resolved = resolve_discrepancy(
+        db, discrepancy, patient, DiscrepancyResolutionIn(action=ResolutionAction.DISMISS), user
+    )
+    db.commit()
+
+    db.refresh(medication)
+    assert medication.dose == original_dose
+    assert resolved.resolution_status == "dismissed"
+    assert resolved.resolution_action == "dismiss"
+
+
+def test_resolve_discrepancy_dismiss_records_audit_fields(db):
+    user = _create_user(db, email="dismissaudit@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    discrepancy = create_medication_discrepancy(db, analysis.id, _build_discrepancy_in())
+
+    resolved = resolve_discrepancy(
+        db,
+        discrepancy,
+        patient,
+        DiscrepancyResolutionIn(action=ResolutionAction.DISMISS, note="Confirmed with patient."),
+        user,
+    )
+    db.commit()
+
+    assert resolved.resolved_by_user_id == user.id
+    assert resolved.resolved_at is not None
+    assert resolved.resolution_note == "Confirmed with patient."
+
+
+def test_resolve_discrepancy_add_medication_creates_medication_and_links_it(db):
+    user = _create_user(db, email="addmedication@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    document = _create_clinical_document(db, user)
+    mention = _create_medication_mention(db, document)
+    discrepancy = create_medication_discrepancy(
+        db,
+        analysis.id,
+        _build_discrepancy_in(
+            discrepancy_type=DiscrepancyType.MISSING_FROM_MEDICATION_LIST,
+            medication_mention_id=mention.id,
+        ),
+    )
+
+    resolved = resolve_discrepancy(
+        db,
+        discrepancy,
+        patient,
+        DiscrepancyResolutionIn(
+            action=ResolutionAction.ADD_MEDICATION,
+            medication_name="Lisinopril",
+            dose="10 mg",
+            route="oral",
+            frequency="once daily",
+            status="discontinued",
+        ),
+        user,
+    )
+    db.commit()
+
+    assert resolved.resolution_status == "resolved"
+    assert resolved.resolution_action == "add_medication"
+    assert resolved.medication_id is not None
+
+    created = db.get(Medication, resolved.medication_id)
+    assert created.medication_name == "Lisinopril"
+    assert created.dose == "10 mg"
+    assert created.status == "discontinued"
+    assert created.source == "reconciliation"
+    assert created.patient_id == patient.id
+
+
+def test_resolve_discrepancy_add_medication_rejects_missing_fields(db):
+    user = _create_user(db, email="addmissingfields@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    discrepancy = create_medication_discrepancy(
+        db,
+        analysis.id,
+        _build_discrepancy_in(discrepancy_type=DiscrepancyType.MISSING_FROM_MEDICATION_LIST),
+    )
+
+    with pytest.raises(InvalidResolutionActionError):
+        resolve_discrepancy(
+            db,
+            discrepancy,
+            patient,
+            DiscrepancyResolutionIn(
+                action=ResolutionAction.ADD_MEDICATION, medication_name="Lisinopril"
+            ),
+            user,
+        )
+
+
+def test_resolve_discrepancy_add_medication_rejects_when_already_linked(db):
+    user = _create_user(db, email="addalreadylinked@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    medication = _create_medication_for_patient(db, patient)
+    discrepancy = create_medication_discrepancy(
+        db,
+        analysis.id,
+        _build_discrepancy_in(
+            discrepancy_type=DiscrepancyType.MISSING_FROM_MEDICATION_LIST,
+            medication_id=medication.id,
+        ),
+    )
+
+    with pytest.raises(InvalidResolutionActionError):
+        resolve_discrepancy(
+            db,
+            discrepancy,
+            patient,
+            DiscrepancyResolutionIn(
+                action=ResolutionAction.ADD_MEDICATION,
+                medication_name="Lisinopril",
+                dose="10 mg",
+                route="oral",
+                frequency="once daily",
+                status="active",
+            ),
+            user,
+        )
+
+
+def test_resolve_discrepancy_update_medication_updates_only_provided_fields(db):
+    user = _create_user(db, email="updatedose@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    medication = _create_medication_for_patient(db, patient)
+    discrepancy = create_medication_discrepancy(
+        db,
+        analysis.id,
+        _build_discrepancy_in(
+            discrepancy_type=DiscrepancyType.DOSE_CONFLICT, medication_id=medication.id
+        ),
+    )
+
+    resolved = resolve_discrepancy(
+        db,
+        discrepancy,
+        patient,
+        DiscrepancyResolutionIn(action=ResolutionAction.UPDATE_MEDICATION, dose="20 mg"),
+        user,
+    )
+    db.commit()
+
+    db.refresh(medication)
+    assert medication.dose == "20 mg"
+    assert medication.route == "oral"  # untouched
+    assert medication.frequency == "once daily"  # untouched
+    assert resolved.resolution_status == "resolved"
+    assert resolved.resolution_action == "update_medication"
+
+
+def test_resolve_discrepancy_update_medication_marks_discontinued(db):
+    user = _create_user(db, email="markdiscontinued@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    medication = _create_medication_for_patient(db, patient)
+    discrepancy = create_medication_discrepancy(
+        db,
+        analysis.id,
+        _build_discrepancy_in(
+            discrepancy_type=DiscrepancyType.DISCONTINUED_STATUS_CONFLICT,
+            medication_id=medication.id,
+        ),
+    )
+
+    resolve_discrepancy(
+        db,
+        discrepancy,
+        patient,
+        DiscrepancyResolutionIn(action=ResolutionAction.UPDATE_MEDICATION, status="discontinued"),
+        user,
+    )
+    db.commit()
+
+    db.refresh(medication)
+    assert medication.status == "discontinued"
+
+
+def test_resolve_discrepancy_update_medication_marks_active(db):
+    user = _create_user(db, email="markactive@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    medication = _create_medication_for_patient(db, patient)
+    discrepancy = create_medication_discrepancy(
+        db,
+        analysis.id,
+        _build_discrepancy_in(
+            discrepancy_type=DiscrepancyType.STATUS_CONFLICT, medication_id=medication.id
+        ),
+    )
+
+    resolve_discrepancy(
+        db,
+        discrepancy,
+        patient,
+        DiscrepancyResolutionIn(action=ResolutionAction.UPDATE_MEDICATION, status="active"),
+        user,
+    )
+    db.commit()
+
+    db.refresh(medication)
+    assert medication.status == "active"
+
+
+def test_resolve_discrepancy_update_medication_rejects_when_no_medication_linked(db):
+    user = _create_user(db, email="updatenomedication@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    discrepancy = create_medication_discrepancy(
+        db, analysis.id, _build_discrepancy_in(discrepancy_type=DiscrepancyType.DOSE_CONFLICT)
+    )
+
+    with pytest.raises(InvalidResolutionActionError):
+        resolve_discrepancy(
+            db,
+            discrepancy,
+            patient,
+            DiscrepancyResolutionIn(action=ResolutionAction.UPDATE_MEDICATION, dose="20 mg"),
+            user,
+        )
+
+
+def test_resolve_discrepancy_update_medication_rejects_when_no_fields_provided(db):
+    user = _create_user(db, email="updatenofields@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    medication = _create_medication_for_patient(db, patient)
+    discrepancy = create_medication_discrepancy(
+        db,
+        analysis.id,
+        _build_discrepancy_in(
+            discrepancy_type=DiscrepancyType.DOSE_CONFLICT, medication_id=medication.id
+        ),
+    )
+
+    with pytest.raises(InvalidResolutionActionError):
+        resolve_discrepancy(
+            db,
+            discrepancy,
+            patient,
+            DiscrepancyResolutionIn(action=ResolutionAction.UPDATE_MEDICATION),
+            user,
+        )
+
+
+def test_resolve_discrepancy_update_medication_rejects_wrong_type(db):
+    user = _create_user(db, email="updatewrongtype@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    medication = _create_medication_for_patient(db, patient)
+    discrepancy = create_medication_discrepancy(
+        db,
+        analysis.id,
+        _build_discrepancy_in(
+            discrepancy_type=DiscrepancyType.MISSING_FROM_MEDICATION_LIST,
+            medication_id=medication.id,
+        ),
+    )
+
+    with pytest.raises(InvalidResolutionActionError):
+        resolve_discrepancy(
+            db,
+            discrepancy,
+            patient,
+            DiscrepancyResolutionIn(action=ResolutionAction.UPDATE_MEDICATION, dose="20 mg"),
+            user,
+        )
+
+
+def test_resolve_discrepancy_add_medication_rejects_wrong_type(db):
+    user = _create_user(db, email="addwrongtype@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    medication = _create_medication_for_patient(db, patient)
+    discrepancy = create_medication_discrepancy(
+        db,
+        analysis.id,
+        _build_discrepancy_in(
+            discrepancy_type=DiscrepancyType.DOSE_CONFLICT, medication_id=medication.id
+        ),
+    )
+
+    with pytest.raises(InvalidResolutionActionError):
+        resolve_discrepancy(
+            db,
+            discrepancy,
+            patient,
+            DiscrepancyResolutionIn(
+                action=ResolutionAction.ADD_MEDICATION,
+                medication_name="Lisinopril",
+                dose="10 mg",
+                route="oral",
+                frequency="once daily",
+                status="active",
+            ),
+            user,
+        )
+
+
+def test_resolve_discrepancy_rejects_resolving_twice(db):
+    user = _create_user(db, email="resolvetwice@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    discrepancy = create_medication_discrepancy(db, analysis.id, _build_discrepancy_in())
+
+    resolve_discrepancy(
+        db, discrepancy, patient, DiscrepancyResolutionIn(action=ResolutionAction.DISMISS), user
+    )
+    db.commit()
+
+    with pytest.raises(DiscrepancyAlreadyResolvedError):
+        resolve_discrepancy(
+            db,
+            discrepancy,
+            patient,
+            DiscrepancyResolutionIn(action=ResolutionAction.DISMISS),
+            user,
+        )
+
+
+def test_resolve_discrepancy_preserves_original_finding_fields(db):
+    # "Do not lose historical discrepancies after reconciliation" - the
+    # fields the reconciliation engine originally computed must survive
+    # resolution unchanged, only new resolution-specific fields are added.
+    user = _create_user(db, email="preservehistory@example.com")
+    patient, analysis = _create_analysis_with_patient(db, user)
+    discrepancy = create_medication_discrepancy(db, analysis.id, _build_discrepancy_in())
+
+    resolve_discrepancy(
+        db, discrepancy, patient, DiscrepancyResolutionIn(action=ResolutionAction.DISMISS), user
+    )
+    db.commit()
+    db.refresh(discrepancy)
+
+    assert discrepancy.title == "Lisinopril status conflict"
+    assert discrepancy.ai_explanation == (
+        "Marked active in the medication list but discontinued in a visit note."
+    )
+    assert discrepancy.expected_value == "active"
+    assert discrepancy.observed_value == "discontinued"

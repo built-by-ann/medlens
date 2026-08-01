@@ -35,9 +35,28 @@ class MedicationDiscrepancy(Base):
 
     resolution_status = Column(String, nullable=False, default="open")
 
+    # Audit trail (Issue: Complete Medication Reconciliation Workflow). All
+    # four stay null for an unresolved ("open") discrepancy; resolving one
+    # (accept or dismiss) sets all four together, never independently - see
+    # resolve_discrepancy in medication_discrepancy_service.py, the only
+    # writer of these columns.
+    resolution_action = Column(String, nullable=True)
+    resolved_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolution_note = Column(Text, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     analysis = relationship("Analysis", back_populates="medication_discrepancies")
     medication = relationship("Medication", back_populates="discrepancies")
     medication_mention = relationship("MedicationMention", back_populates="discrepancies")
+    # One-directional - User has no reverse relationship to discrepancies it
+    # has resolved (mirrors how nothing else in this app models a user's
+    # "activity" as a collection; see docs/data-model.md).
+    resolved_by = relationship("User")

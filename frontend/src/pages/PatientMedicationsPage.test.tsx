@@ -227,6 +227,43 @@ describe('PatientMedicationsPage', () => {
     expect(screen.queryByRole('heading', { name: 'Lisinopril' })).not.toBeInTheDocument()
   })
 
+  it('filters the medication list by search term', async () => {
+    mockedListMedications.mockResolvedValue([
+      sampleMedication,
+      { ...sampleMedication, id: 2, medication_name: 'Atorvastatin', dose: '40 mg' },
+    ])
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Lisinopril' })
+    expect(screen.getByRole('heading', { name: 'Atorvastatin' })).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Search medications'), 'ator')
+
+    expect(screen.queryByRole('heading', { name: 'Lisinopril' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Atorvastatin' })).toBeInTheDocument()
+  })
+
+  it('shows a no-match message when the search term matches no medication', async () => {
+    mockedListMedications.mockResolvedValue([sampleMedication])
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Lisinopril' })
+    await user.type(screen.getByLabelText('Search medications'), 'nonexistent')
+
+    expect(screen.queryByRole('heading', { name: 'Lisinopril' })).not.toBeInTheDocument()
+    expect(screen.getByText('No medications match your search.')).toBeInTheDocument()
+  })
+
+  it('does not show the search box when there are no medications', async () => {
+    mockedListMedications.mockResolvedValue([])
+    renderPage()
+
+    await screen.findByText(/No medications added yet/)
+    expect(screen.queryByLabelText('Search medications')).not.toBeInTheDocument()
+  })
+
   it('shows the CSV import section within the patient-scoped medications page', async () => {
     mockedListMedications.mockResolvedValue([])
     renderPage()

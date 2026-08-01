@@ -4,8 +4,19 @@ import { DiscrepancySeverityBadge } from '@/components/analyses/DiscrepancySever
 import { ResolutionStatusBadge } from '@/components/analyses/ResolutionStatusBadge'
 import { documentTypeLabel } from '@/api/clinicalDocuments'
 import { discrepancyTypeLabel } from '@/utils/discrepancy'
+import {
+  getDiscrepancyActions,
+  type DiscrepancyActionDescriptor,
+} from '@/utils/discrepancyResolutionActions'
 import { cn } from '@/utils/cn'
 import type { MedicationDiscrepancy } from '@/types/api'
+
+function formatResolvedAt(resolvedAt: string): string {
+  return new Date(resolvedAt).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
 
 // A left border repeats the same severity signal as the badge, so severity
 // is never communicated by color alone. Uses the same fixed *-badge tokens
@@ -20,13 +31,26 @@ const SEVERITY_BORDER_STYLES: Record<MedicationDiscrepancy['severity'], string> 
 
 interface MedicationDiscrepancyCardProps {
   discrepancy: MedicationDiscrepancy
+  // Omitted entirely (rather than passed as a no-op) by callers that only
+  // ever render already-resolved discrepancies (none exist yet, but this
+  // keeps the card usable read-only without a caller having to invent a
+  // handler) - resolution actions simply don't render without it.
+  onResolveAction?: (target: {
+    discrepancyId: number
+    medicationName: string
+    action: DiscrepancyActionDescriptor
+  }) => void
 }
 
-export function MedicationDiscrepancyCard({ discrepancy }: MedicationDiscrepancyCardProps) {
+export function MedicationDiscrepancyCard({
+  discrepancy,
+  onResolveAction,
+}: MedicationDiscrepancyCardProps) {
   const medicationName =
     discrepancy.medication?.medication_name ??
     discrepancy.medication_mention?.medication_name ??
     'Unknown medication'
+  const isOpen = discrepancy.resolution_status === 'open'
 
   return (
     <Card className={cn('flex flex-col gap-3', SEVERITY_BORDER_STYLES[discrepancy.severity])}>
@@ -92,6 +116,49 @@ export function MedicationDiscrepancyCard({ discrepancy }: MedicationDiscrepancy
           </p>
         )}
       </div>
+
+      {!isOpen && (
+        <div className="border-t border-border pt-3 text-xs text-muted">
+          {discrepancy.resolved_at && (
+            <p>
+              {discrepancy.resolution_status === 'dismissed' ? 'Dismissed' : 'Resolved'}{' '}
+              {discrepancy.resolved_by && (
+                <>by {discrepancy.resolved_by.name ?? discrepancy.resolved_by.email} </>
+              )}
+              on {formatResolvedAt(discrepancy.resolved_at)}
+            </p>
+          )}
+          {discrepancy.resolution_note && (
+            <p className="mt-1 break-words">
+              <span className="font-medium">Note: </span>
+              {discrepancy.resolution_note}
+            </p>
+          )}
+        </div>
+      )}
+
+      {isOpen && onResolveAction && (
+        <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+          {getDiscrepancyActions(discrepancy).map((action) => (
+            <button
+              key={action.key}
+              type="button"
+              aria-label={`${action.label}: ${medicationName}`}
+              onClick={() =>
+                onResolveAction({ discrepancyId: discrepancy.id, medicationName, action })
+              }
+              className={cn(
+                'cursor-pointer rounded-md border px-3 py-1.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring',
+                action.key === 'dismiss'
+                  ? 'border-border text-muted hover:bg-surface-hover'
+                  : 'border-link text-link hover:bg-surface-hover',
+              )}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
     </Card>
   )
 }

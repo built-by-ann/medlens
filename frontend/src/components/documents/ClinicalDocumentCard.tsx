@@ -51,7 +51,14 @@ export function ClinicalDocumentCard({ document, onDelete }: ClinicalDocumentCar
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((current) => !current)}
+          aria-expanded={isExpanded}
+          aria-controls={contentId}
+          aria-label={`${isExpanded ? 'Hide' : 'View'} ${document.title}`}
+          className="-m-2 min-w-0 flex-1 cursor-pointer rounded-md p-2 text-left hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+        >
           <h4 className="truncate text-sm font-semibold text-foreground">{document.title}</h4>
           <p className="text-xs text-muted">
             {documentTypeLabel(document.document_type)} · {formatDate(document.created_at)}
@@ -60,17 +67,8 @@ export function ClinicalDocumentCard({ document, onDelete }: ClinicalDocumentCar
             {' · '}
             {analysisCountLabel(document.analysis_count)}
           </p>
-        </div>
+        </button>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setIsExpanded((current) => !current)}
-            aria-expanded={isExpanded}
-            aria-controls={contentId}
-            className="cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-link hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-          >
-            {isExpanded ? 'Hide' : 'View'}
-          </button>
           <button
             type="button"
             onClick={handleDelete}

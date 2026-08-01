@@ -10,16 +10,19 @@ import { AnalysisStatusBadge } from '@/components/analyses/AnalysisStatusBadge'
 import { MedicationDiscrepancyCard } from '@/components/analyses/MedicationDiscrepancyCard'
 import { AnalysisFailureNotice } from '@/components/analyses/AnalysisFailureNotice'
 import { DeleteAnalysisDialog } from '@/components/analyses/DeleteAnalysisDialog'
+import {
+  ResolveDiscrepancyDialog,
+  type ResolveDiscrepancyTarget,
+} from '@/components/analyses/ResolveDiscrepancyDialog'
 import { usePatient } from '@/hooks/usePatient'
 import { useAnalysisDetail } from '@/hooks/useAnalysisDetail'
 import { discrepancySeverityLabel } from '@/utils/discrepancy'
 import { patientAnalysesPath } from '@/routes/paths'
-import { cn } from '@/utils/cn'
-import { deleteAnalysis } from '@/api/analyses'
+import { deleteAnalysis, resolveDiscrepancy } from '@/api/analyses'
 import type { ApiError } from '@/api/client'
 import type {
-  AnalysisInconsistency,
   AnalysisMedicationMention,
+  DiscrepancyResolutionPayload,
   DiscrepancySeverity,
   MedicationDiscrepancy,
 } from '@/types/api'
@@ -86,54 +89,6 @@ function MedicationMentionItem({ mention }: { mention: AnalysisMedicationMention
   )
 }
 
-// Local-only: whether a follow-up question has been reviewed is not persisted
-// anywhere in the backend, so this checklist's checked state resets on reload.
-function FollowUpQuestionsChecklist({ items }: { items: AnalysisInconsistency[] }) {
-  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
-
-  function toggle(id: number) {
-    setCheckedIds((previous) => {
-      const next = new Set(previous)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  return (
-    <ul className="flex flex-col gap-2">
-      {items.map((item) => {
-        const checked = checkedIds.has(item.id)
-        const inputId = `follow-up-question-${item.id}`
-
-        return (
-          <li key={item.id} className="flex items-start gap-2">
-            <input
-              id={inputId}
-              type="checkbox"
-              checked={checked}
-              onChange={() => toggle(item.id)}
-              className="mt-0.5 h-4 w-4 rounded border-border text-secondary focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1"
-            />
-            <label
-              htmlFor={inputId}
-              className={cn(
-                'min-w-0 break-words text-sm text-foreground',
-                checked && 'text-muted line-through',
-              )}
-            >
-              {item.description}
-            </label>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
 export function AnalysisDetailPage() {
   const { patientId, analysisId } = useParams<{ patientId: string; analysisId: string }>()
   const id = Number(patientId)
@@ -151,11 +106,19 @@ export function AnalysisDetailPage() {
     isLoading: isAnalysisLoading,
     error: analysisError,
     retry: retryAnalysis,
+    replaceDiscrepancy,
   } = useAnalysisDetail(id, analysisIdNumber)
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const [resolveTarget, setResolveTarget] = useState<ResolveDiscrepancyTarget | null>(null)
+  const [isResolving, setIsResolving] = useState(false)
+  const [resolveError, setResolveError] = useState<string | null>(null)
+  // Cleared the moment any other action starts, so it can never linger
+  // stale next to an unrelated discrepancy's result.
+  const [resolveSuccessMessage, setResolveSuccessMessage] = useState<string | null>(null)
 
   if (isPatientLoading || isAnalysisLoading) {
     return <LoadingSpinner label="Loading analysis" />
@@ -188,12 +151,49 @@ export function AnalysisDetailPage() {
   const discrepancies = analysis.medication_discrepancies
   const severityGroups = groupBySeverity(discrepancies)
   const medicationMentions = analysis.medication_mentions
-  const followUpQuestions = analysis.possible_inconsistencies
   const patientName = `${patient.first_name} ${patient.last_name}`
 
   function openDeleteDialog() {
     setDeleteError(null)
     setIsDeleteDialogOpen(true)
+  }
+
+  function openResolveDialog(target: ResolveDiscrepancyTarget) {
+    setResolveError(null)
+    setResolveSuccessMessage(null)
+    setResolveTarget(target)
+  }
+
+  function closeResolveDialog() {
+    if (isResolving) return
+    setResolveTarget(null)
+    setResolveError(null)
+  }
+
+  async function handleConfirmResolve(payload: DiscrepancyResolutionPayload) {
+    if (isResolving || !resolveTarget) return
+
+    setIsResolving(true)
+    setResolveError(null)
+    try {
+      const updated = await resolveDiscrepancy(
+        id,
+        analysisIdNumber,
+        resolveTarget.discrepancyId,
+        payload,
+      )
+      replaceDiscrepancy(updated)
+      setResolveSuccessMessage(
+        payload.action === 'dismiss'
+          ? `Dismissed the finding for ${resolveTarget.medicationName}.`
+          : `Updated the medication list for ${resolveTarget.medicationName}.`,
+      )
+      setResolveTarget(null)
+    } catch (caughtError) {
+      setResolveError((caughtError as ApiError).message)
+    } finally {
+      setIsResolving(false)
+    }
   }
 
   function closeDeleteDialog() {
@@ -257,15 +257,14 @@ export function AnalysisDetailPage() {
       )}
 
       {/*
-        AI-generated content (summary, medications mentioned, follow-up
-        questions) gets its own violet-accented section, visually distinct
-        from the deterministic reconciliation findings below - the badges
-        and left border repeat that distinction so it never rests on color
-        alone. There is no "Key clinical observations" or "Mentioned
-        conditions" section here: the AI response schema (app/ai/schemas.py)
-        has no such structured fields, only summary/medication_mentions/
-        possible_inconsistencies, so nothing is fabricated to fill them in
-        (see docs/frontend.md).
+        AI-generated content (summary, medications mentioned) gets its own
+        violet-accented section, visually distinct from the deterministic
+        reconciliation findings below - the badges and left border repeat
+        that distinction so it never rests on color alone. There is no "Key
+        clinical observations" or "Mentioned conditions" section here: the AI
+        response schema (app/ai/schemas.py) has no such structured fields,
+        only summary/medication_mentions, so nothing is fabricated to fill
+        them in (see docs/frontend.md).
       */}
       <section aria-labelledby="ai-summary-heading" className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -298,15 +297,6 @@ export function AnalysisDetailPage() {
             </div>
           )}
 
-          {followUpQuestions.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Follow-up Questions</h3>
-              <div className="mt-2">
-                <FollowUpQuestionsChecklist items={followUpQuestions} />
-              </div>
-            </div>
-          )}
-
           <div className="border-t border-border pt-4">
             <h3 className="text-xs font-medium tracking-wide text-muted uppercase">
               Summary Metadata
@@ -330,6 +320,15 @@ export function AnalysisDetailPage() {
           </h2>
           <DeterministicBadge />
         </div>
+
+        {/* role="status" so screen readers announce a successful resolution
+            immediately - required feedback per the issue's accessibility
+            requirements, not just a visual confirmation. */}
+        {resolveSuccessMessage && (
+          <p role="status" className="text-sm font-medium text-success">
+            {resolveSuccessMessage}
+          </p>
+        )}
 
         <Card>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -360,7 +359,10 @@ export function AnalysisDetailPage() {
                 <ul className="flex flex-col gap-4">
                   {group.items.map((discrepancy) => (
                     <li key={discrepancy.id}>
-                      <MedicationDiscrepancyCard discrepancy={discrepancy} />
+                      <MedicationDiscrepancyCard
+                        discrepancy={discrepancy}
+                        onResolveAction={openResolveDialog}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -376,6 +378,14 @@ export function AnalysisDetailPage() {
         error={deleteError}
         onCancel={closeDeleteDialog}
         onConfirm={handleConfirmDelete}
+      />
+
+      <ResolveDiscrepancyDialog
+        target={resolveTarget}
+        isSubmitting={isResolving}
+        error={resolveError}
+        onCancel={closeResolveDialog}
+        onConfirm={handleConfirmResolve}
       />
     </div>
   )

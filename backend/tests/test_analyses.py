@@ -1325,3 +1325,415 @@ def test_recent_analyses_rejects_limit_out_of_range(client):
 
     response = client.get("/analyses/recent?limit=51", headers=_auth_headers(token))
     assert response.status_code == 422
+
+
+# --- POST /patients/{patient_id}/analyses/{analysis_id}/discrepancies/{discrepancy_id}/resolve ---
+
+
+def _get_discrepancies(client, token, patient_id, analysis_id):
+    response = client.get(
+        f"/patients/{patient_id}/analyses/{analysis_id}", headers=_auth_headers(token)
+    )
+    assert response.status_code == 200
+    return response.json()["medication_discrepancies"]
+
+
+def _resolve(client, token, patient_id, analysis_id, discrepancy_id, payload):
+    return client.post(
+        f"/patients/{patient_id}/analyses/{analysis_id}/discrepancies/{discrepancy_id}/resolve",
+        json=payload,
+        headers=_auth_headers(token),
+    )
+
+
+def test_resolve_discrepancy_accepts_add_medication(client):
+    # Patient has no medications on file, so the AI-extracted Lisinopril
+    # mention is "missing from the medication list" - the one discrepancy
+    # type add_medication is valid for.
+    token = _register_and_login(client, "resolveaddmedication@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+    assert discrepancy["discrepancy_type"] == "missing_from_medication_list"
+
+    response = _resolve(
+        client,
+        token,
+        patient["id"],
+        analysis_id,
+        discrepancy["id"],
+        {
+            "action": "add_medication",
+            "medication_name": "Lisinopril",
+            "dose": "10 mg",
+            "route": "oral",
+            "frequency": "once daily",
+            "status": "active",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resolution_status"] == "resolved"
+    assert body["resolution_action"] == "add_medication"
+    assert body["medication_id"] is not None
+
+    medications = client.get(
+        f"/patients/{patient['id']}/medications", headers=_auth_headers(token)
+    ).json()
+    assert len(medications) == 1
+    assert medications[0]["id"] == body["medication_id"]
+    assert medications[0]["medication_name"] == "Lisinopril"
+    assert medications[0]["source"] == "reconciliation"
+
+
+def test_resolve_discrepancy_accepts_update_medication_for_dose_conflict(client):
+    token = _register_and_login(client, "resolveupdatedose@example.com")
+    patient = _create_patient(client, token).json()
+    # Existing medication says 20 mg; the AI-extracted mention (VALID_RESPONSE)
+    # says 10 mg - a dose conflict, not "missing".
+    _create_medication(client, token, patient["id"], dose="20 mg")
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+    assert discrepancy["discrepancy_type"] == "dose_conflict"
+    assert discrepancy["medication_id"] is not None
+
+    response = _resolve(
+        client,
+        token,
+        patient["id"],
+        analysis_id,
+        discrepancy["id"],
+        {"action": "update_medication", "dose": "10 mg"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["resolution_status"] == "resolved"
+    assert response.json()["resolution_action"] == "update_medication"
+
+    medications = client.get(
+        f"/patients/{patient['id']}/medications", headers=_auth_headers(token)
+    ).json()
+    assert medications[0]["dose"] == "10 mg"
+
+
+def test_resolve_discrepancy_accepts_mark_discontinued(client):
+    token = _register_and_login(client, "resolvediscontinued@example.com")
+    patient = _create_patient(client, token).json()
+    _create_medication(client, token, patient["id"], status="active")
+    document = _create_document(client, token, patient["id"])
+    # VALID_RESPONSE's Lisinopril mention has status "active" too, so use a
+    # response that reports it discontinued to trigger discontinued_status_conflict.
+    response_text = json.dumps(
+        {
+            "medications": [
+                {
+                    "name": "Lisinopril",
+                    "dosage": "10 mg",
+                    "route": "oral",
+                    "frequency": "once daily",
+                    "status": "discontinued",
+                    "notes": None,
+                }
+            ],
+            "possible_inconsistencies": [],
+            "summary": "Lisinopril discontinued.",
+        }
+    )
+    analysis_id = _create_completed_analysis(
+        client, token, patient["id"], document["id"], response_text=response_text
+    )
+    discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+    assert discrepancy["discrepancy_type"] == "discontinued_status_conflict"
+
+    response = _resolve(
+        client,
+        token,
+        patient["id"],
+        analysis_id,
+        discrepancy["id"],
+        {"action": "update_medication", "status": "discontinued"},
+    )
+
+    assert response.status_code == 200
+    medications = client.get(
+        f"/patients/{patient['id']}/medications", headers=_auth_headers(token)
+    ).json()
+    assert medications[0]["status"] == "discontinued"
+
+
+def test_resolve_discrepancy_dismiss_leaves_medication_list_unchanged(client):
+    token = _register_and_login(client, "resolvedismiss@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+
+    response = _resolve(
+        client,
+        token,
+        patient["id"],
+        analysis_id,
+        discrepancy["id"],
+        {"action": "dismiss", "note": "Not clinically relevant."},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resolution_status"] == "dismissed"
+    assert body["resolution_action"] == "dismiss"
+    assert body["medication_id"] is None
+
+    medications = client.get(
+        f"/patients/{patient['id']}/medications", headers=_auth_headers(token)
+    ).json()
+    assert medications == []
+
+
+def test_resolve_discrepancy_response_includes_audit_trail(client):
+    token = _register_and_login(client, "resolveaudit@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+
+    response = _resolve(
+        client,
+        token,
+        patient["id"],
+        analysis_id,
+        discrepancy["id"],
+        {
+            "action": "add_medication",
+            "medication_name": "Lisinopril",
+            "dose": "10 mg",
+            "route": "oral",
+            "frequency": "once daily",
+            "status": "active",
+            "note": "Confirmed by phone.",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resolved_at"] is not None
+    assert body["resolution_note"] == "Confirmed by phone."
+    assert body["resolved_by"]["email"] == "resolveaudit@example.com"
+    assert body["resolved_by"]["name"] == "AI Test User"
+
+
+def test_resolve_discrepancy_preserves_original_finding_after_resolving(client):
+    # "The analysis should remain a permanent record" - resolving must not
+    # erase what the reconciliation engine originally found.
+    token = _register_and_login(client, "resolvepreserve@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+    original_title = discrepancy["title"]
+    original_mention_id = discrepancy["medication_mention_id"]
+
+    _resolve(
+        client,
+        token,
+        patient["id"],
+        analysis_id,
+        discrepancy["id"],
+        {"action": "dismiss"},
+    )
+
+    refetched = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+    assert refetched["title"] == original_title
+    assert refetched["medication_mention_id"] == original_mention_id
+    assert refetched["resolution_status"] == "dismissed"
+
+
+def test_resolve_discrepancy_resolved_state_persists_after_refresh(client):
+    token = _register_and_login(client, "resolvepersists@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+
+    _resolve(client, token, patient["id"], analysis_id, discrepancy["id"], {"action": "dismiss"})
+
+    # A second, independent GET (simulating a page refresh) must reflect it.
+    refetched = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+    assert refetched["resolution_status"] == "dismissed"
+
+
+def test_resolve_discrepancy_rejects_resolving_twice(client):
+    token = _register_and_login(client, "resolvetwiceroute@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+
+    first = _resolve(
+        client, token, patient["id"], analysis_id, discrepancy["id"], {"action": "dismiss"}
+    )
+    assert first.status_code == 200
+
+    second = _resolve(
+        client, token, patient["id"], analysis_id, discrepancy["id"], {"action": "dismiss"}
+    )
+    assert second.status_code == 409
+
+
+def test_resolve_discrepancy_rejects_action_invalid_for_discrepancy_type(client):
+    token = _register_and_login(client, "resolveinvalidaction@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+    assert discrepancy["discrepancy_type"] == "missing_from_medication_list"
+
+    # update_medication doesn't make sense here - there's no medication yet.
+    response = _resolve(
+        client,
+        token,
+        patient["id"],
+        analysis_id,
+        discrepancy["id"],
+        {"action": "update_medication", "dose": "10 mg"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_resolve_discrepancy_rejects_extra_fields(client):
+    token = _register_and_login(client, "resolveextrafields@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+    discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
+
+    response = _resolve(
+        client,
+        token,
+        patient["id"],
+        analysis_id,
+        discrepancy["id"],
+        {"action": "dismiss", "unexpected_field": "nope"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_resolve_discrepancy_requires_authentication(client):
+    response = client.post(
+        "/patients/1/analyses/1/discrepancies/1/resolve", json={"action": "dismiss"}
+    )
+    assert response.status_code == 401
+
+
+def test_resolve_discrepancy_returns_404_for_another_users_patient(client):
+    token_a = _register_and_login(client, "resolveownera@example.com")
+    token_b = _register_and_login(client, "resolveownerb@example.com")
+    patient = _create_patient(client, token_a).json()
+    document = _create_document(client, token_a, patient["id"])
+    analysis_id = _create_completed_analysis(client, token_a, patient["id"], document["id"])
+    discrepancy = _get_discrepancies(client, token_a, patient["id"], analysis_id)[0]
+
+    response = _resolve(
+        client, token_b, patient["id"], analysis_id, discrepancy["id"], {"action": "dismiss"}
+    )
+
+    assert response.status_code == 404
+
+
+def test_resolve_discrepancy_returns_404_for_unknown_analysis(client):
+    token = _register_and_login(client, "resolveunknownanalysis@example.com")
+    patient = _create_patient(client, token).json()
+
+    response = _resolve(client, token, patient["id"], 999999, 1, {"action": "dismiss"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Analysis not found"
+
+
+def test_resolve_discrepancy_returns_404_for_unknown_discrepancy(client):
+    token = _register_and_login(client, "resolveunknowndiscrepancy@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+    analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
+
+    response = _resolve(client, token, patient["id"], analysis_id, 999999, {"action": "dismiss"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Discrepancy not found"
+
+
+def test_resolve_discrepancy_returns_404_for_discrepancy_belonging_to_a_different_analysis(client):
+    token = _register_and_login(client, "resolvewronganalysis@example.com")
+    patient = _create_patient(client, token).json()
+    document_a = _create_document(client, token, patient["id"])
+    document_b = _create_document(client, token, patient["id"])
+    analysis_a_id = _create_completed_analysis(client, token, patient["id"], document_a["id"])
+    analysis_b_id = _create_completed_analysis(client, token, patient["id"], document_b["id"])
+    discrepancy_a = _get_discrepancies(client, token, patient["id"], analysis_a_id)[0]
+
+    response = _resolve(
+        client, token, patient["id"], analysis_b_id, discrepancy_a["id"], {"action": "dismiss"}
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Discrepancy not found"
+
+
+def test_resolve_discrepancy_handles_multiple_discrepancies_independently(client):
+    token = _register_and_login(client, "resolvemultiple@example.com")
+    patient = _create_patient(client, token).json()
+    _create_medication(client, token, patient["id"], dose="20 mg")
+    document = _create_document(client, token, patient["id"])
+    response_text = json.dumps(
+        {
+            "medications": [
+                {
+                    "name": "Lisinopril",
+                    "dosage": "10 mg",
+                    "route": "oral",
+                    "frequency": "once daily",
+                    "status": "active",
+                    "notes": None,
+                },
+                {
+                    "name": "Metformin",
+                    "dosage": "500 mg",
+                    "route": "oral",
+                    "frequency": "twice daily",
+                    "status": "active",
+                    "notes": None,
+                },
+            ],
+            "possible_inconsistencies": [],
+            "summary": "Two medications noted.",
+        }
+    )
+    analysis_id = _create_completed_analysis(
+        client, token, patient["id"], document["id"], response_text=response_text
+    )
+    discrepancies = _get_discrepancies(client, token, patient["id"], analysis_id)
+    assert len(discrepancies) == 2
+    by_type = {d["discrepancy_type"]: d for d in discrepancies}
+    dose_conflict = by_type["dose_conflict"]
+    missing = by_type["missing_from_medication_list"]
+
+    resolve_response = _resolve(
+        client,
+        token,
+        patient["id"],
+        analysis_id,
+        dose_conflict["id"],
+        {"action": "update_medication", "dose": "10 mg"},
+    )
+    assert resolve_response.status_code == 200
+
+    refetched = _get_discrepancies(client, token, patient["id"], analysis_id)
+    by_type_after = {d["discrepancy_type"]: d for d in refetched}
+    assert by_type_after["dose_conflict"]["resolution_status"] == "resolved"
+    # The Metformin discrepancy was never touched - still open.
+    assert by_type_after["missing_from_medication_list"]["resolution_status"] == "open"
+    assert by_type_after["missing_from_medication_list"]["id"] == missing["id"]

@@ -104,6 +104,12 @@ class AnalysisSummaryResponse(BaseModel):
     high_severity_findings: int
     medium_severity_findings: int
     low_severity_findings: int
+    # Unlike the four counts above (stored columns, fixed at analysis
+    # completion - see Analysis.total_findings), this is computed fresh on
+    # every request from the discrepancies' current resolution_status, so it
+    # goes down as a provider resolves/dismisses findings instead of staying
+    # frozen at whatever reconciliation originally found.
+    open_findings: int = Field(ge=0)
     provider: str | None
     model_name: str | None
 

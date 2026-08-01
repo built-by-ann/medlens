@@ -3,6 +3,8 @@ import type {
   AnalysisCreateResult,
   AnalysisDetail,
   AnalysisSummary,
+  DiscrepancyResolutionPayload,
+  MedicationDiscrepancy,
   RecentAnalysis,
 } from '@/types/api'
 
@@ -38,6 +40,20 @@ export async function getAnalysisDetail(
 
 export async function deleteAnalysis(patientId: number, analysisId: number): Promise<void> {
   await apiClient.delete(`/patients/${patientId}/analyses/${analysisId}`)
+}
+
+export async function resolveDiscrepancy(
+  patientId: number,
+  analysisId: number,
+  discrepancyId: number,
+  payload: DiscrepancyResolutionPayload,
+): Promise<MedicationDiscrepancy> {
+  const response = await apiClient.post<MedicationDiscrepancy>(
+    `/patients/${patientId}/analyses/${analysisId}/discrepancies/${discrepancyId}/resolve`,
+    payload,
+  )
+
+  return response.data
 }
 
 // Cross-patient, unlike every other function here - the Dashboard's Recent
