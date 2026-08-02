@@ -173,6 +173,16 @@ describe('DashboardPage', () => {
     expect(await screen.findByText('Jane Doe')).toBeInTheDocument()
   })
 
+  it('shows a "Recent patients" heading even with no patients, aligning with Recent Analyses', async () => {
+    mockedListPatients.mockResolvedValue([])
+    renderDashboard()
+
+    // Both columns' cards start below a heading in every state - keeps the
+    // two side-by-side cards the same height instead of one sitting flush
+    // with the top of the grid row.
+    expect(await screen.findByRole('heading', { name: 'Recent patients' })).toBeInTheDocument()
+  })
+
   it('shows a welcoming empty state with a create action when there are no patients at all', async () => {
     mockedListPatients.mockResolvedValue([])
     renderDashboard()
