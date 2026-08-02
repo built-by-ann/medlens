@@ -27,6 +27,54 @@ pytest -v
 
 The local PostgreSQL container must be running (`docker compose up --build` from `infra/`), since tests connect to it over `localhost:5432`.
 
+`pytest.ini`'s `pythonpath = .` (Issue #54) is what makes `from app... import ...` resolvable inside `tests/conftest.py` for the plain `pytest` command above. Without it, `app` is only importable when pytest happens to be invoked as `python -m pytest` instead - `python -m` prepends the current directory to `sys.path` as a side effect of `-m` itself, which masks the gap during local ad hoc use but doesn't help GitHub Actions or any other caller of the plain `pytest` command this file documents. Discovered when `.github/workflows/backend.yml` ran `pytest -v` for the first time and failed with `ModuleNotFoundError: No module named 'app'` before this line existed.
+
+---
+
+## Linting and Formatting (Issue #52)
+
+The backend has no `Makefile`/`uv`/`poetry` task runner - just `pip` and `requirements*.txt` - so the commands below are the recommended way to run the quality pipeline directly, the same way `pytest -v` already is above.
+
+```bash
+cd backend
+source .venv/bin/activate
+pip install -r requirements-dev.txt   # installs ruff alongside pytest/httpx/reportlab
+
+ruff check .                          # lint
+ruff check . --fix                    # lint, auto-fixing what's safely fixable
+ruff format .                         # format
+ruff format --check .                 # format, but only report - CI will use this form
+```
+
+These are the exact commands CI runs (see "Continuous Integration" below) - passing all four locally is the same bar CI holds a branch to.
+
+**Tool choice**: a single tool, Ruff, covers linting, import sorting, and formatting - there was no previous Black/isort/flake8 setup to reconcile or migrate off of; this is the project's first backend lint/format configuration. Using one tool instead of three avoids the class of bugs where a formatter and a linter disagree about the "correct" style and fight each other on every commit.
+
+**Configuration** lives in `backend/pyproject.toml` (the project has no other use for that file yet - no `[build-system]`/`[project]` table, just `[tool.ruff]`). Enabled rule sets: pycodestyle (`E`/`W`), Pyflakes (`F`), isort (`I`), pyupgrade (`UP`), flake8-bugbear (`B`), flake8-comprehensions (`C4`), flake8-simplify (`SIM`), and Ruff's own additional rules (`RUF`). Line length is 100, matching the frontend's Prettier `printWidth` (`frontend/.prettierrc.json`) so both halves of the project agree on one convention.
+
+**Intentionally ignored rules** (each documented again, in more detail, directly above its entry in `pyproject.toml`):
+
+- **`E501`** (line too long) - the formatter already wraps every line of code it can; what's left is either a long string that can't be safely rewrapped without changing its meaning (the natural-language AI prompt text in `app/ai/prompts.py`) or a long URL in a comment. Ruff's own docs recommend disabling `E501` for exactly this reason when its formatter is in use.
+- **`UP042`** (`class Foo(str, Enum)` → `class Foo(StrEnum)`) - every API schema enum (`AnalysisStatus`, `DiscrepancyType`, `DiscrepancySeverity`, `ResolutionStatus`) uses the `str, Enum` mixin today. `enum.StrEnum` isn't a guaranteed drop-in replacement - it changes how members format via `str()`/f-strings, which could silently alter API response bodies or log output. Issue #52 is lint/format only ("do not change application behavior"), so this stays off; it's a candidate for its own deliberate, tested issue later, not a side effect of this one.
+
+**`B008`** (function call in default argument) is *not* ignored, but is narrowed: FastAPI's dependency injection is `Depends(...)`/`Query(...)`/`File(...)`/`Form(...)` used as a parameter default - that's the framework's documented API, not the mutable-default-argument bug `B008` exists to catch. `[tool.ruff.lint.flake8-bugbear] extend-immutable-calls` allowlists exactly those FastAPI callables, so `B008` stays active for everything else (a plain `def f(x=some_call())` elsewhere in the codebase would still be flagged).
+
+No `noqa` comments were added or needed beyond the one already in `alembic/env.py` (`import app.models  # noqa: F401`, a deliberate side-effect import that registers every model on `Base.metadata` before Alembic reads it - see the comment above it).
+
+---
+
+## Continuous Integration (Issue #54)
+
+`.github/workflows/backend.yml` runs on every push and pull request to `main` or `develop` that touches `backend/**` (or the workflow file itself) - a frontend-only or docs-only change doesn't trigger it. It's a single `ubuntu-latest` job that checks out the repo, starts a `postgres:16` service container (same image and credentials as `infra/docker-compose.yml`'s local dev Postgres, reachable at `localhost:5432` exactly like `docs/testing.md`'s "Running Tests" section already describes), sets up Python 3.12 with `actions/setup-python`'s built-in pip cache (keyed off `backend/requirements.txt` and `backend/requirements-dev.txt`), runs `pip install -r requirements-dev.txt`, and then runs `ruff format --check .`, `ruff check .`, and `pytest -v` in that order - the same commands documented above, never invoked differently. Any one of those three failing fails the whole workflow (a step failure stops the job by default - no special configuration needed for that). There's no matrix or parallel job - a single Python version and a single job is enough for an application, not a published library supporting a range of runtimes.
+
+`DATABASE_URL` and `JWT_SECRET_KEY` are set directly in the workflow's `env:` block, since `app/core/config.py`'s `Settings()` reads them eagerly at import time and there's no `.env` file in CI (it's gitignored). Neither is a real secret in this context - the Postgres database and the whole VM are discarded when the job ends, and `JWT_SECRET_KEY` only needs to be *some* string for token signing to work inside that one run.
+
+**`GEMINI_API_KEY` is deliberately never set.** `test_summarize_uses_real_gemini_provider_by_default_when_key_missing` (`tests/test_analyses.py`) asserts a 503 when the key is missing - the one environmental flake mentioned throughout this project's history, which only ever failed on a local machine that happened to already have a real key exported in its shell. GitHub Actions never injects a secret into a job unless a workflow step explicitly references it via `secrets.<name>`; this workflow does not reference `secrets.GEMINI_API_KEY` (or any secret) anywhere, so the variable is simply absent in the job's environment - exactly the condition the test expects - with no extra handling, workaround, or weakening of the test required. (Secrets are also never exposed to `pull_request` runs from forked repositories at all, which would be a second, independent reason this stays safe if the project ever accepted outside contributions - but the first reason alone is sufficient here.)
+
+A red check on a PR always reproduces locally with the exact command named in that step's log - `ruff format --check .`, `ruff check .`, or `pytest -v` - run from `backend/` with the local Postgres running (`docker compose up --build` from `infra/`, per "Running Tests" above).
+
+**`docker build` is the workflow's final step (Issue #56).** After `pytest -v` passes, the job runs `docker build -t medlens-backend:ci .` from `backend/` - proving the production image (`backend/Dockerfile`) still builds on every push and PR, not just whenever someone happens to build it by hand before a deploy. This is deliberately the last step of the *same* `quality` job, not a second job or a second workflow file - Issue #56 asked for Docker validation to extend the existing pipeline, not duplicate it. The build needs no environment variables and never runs the resulting image (`Settings()`'s required `DATABASE_URL`/`JWT_SECRET_KEY` are only read when a container actually starts, which `docker build` doesn't do) - it only proves the image is buildable, the same narrow scope the local verification in `docs/deployment.md`'s Docker Image Builds section uses. See that section for the Dockerfile itself (multi-stage, non-root, `.dockerignore`) and `docs/design-decisions.md` (Decision 18) for why.
+
 ---
 
 ## Test Database

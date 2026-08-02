@@ -1,7 +1,7 @@
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 interface BackButtonProps {
-  /** Logical parent route to fall back to when there's no in-app history to return to. */
+  /** Route this button always navigates to. */
   to: string
   /** Named after the destination, not the action: renders as "Back to {label}". */
   label: string
@@ -11,31 +11,25 @@ interface BackButtonProps {
  * A single "Back to {label}" control shared by every patient-related page,
  * so navigation doesn't get hardcoded independently on each one.
  *
- * Prefers real browser back navigation (`navigate(-1)`) so the user lands
- * exactly where they came from, but falls back to the logical parent route
- * (`to`) when there's nothing to go back to - most notably a direct link or
- * a fresh page load, where a `-1` would leave the app entirely. React
- * Router assigns the location key "default" only to that initial entry, so
- * checking for it is how this distinguishes "arrived via in-app navigation"
- * from "arrived from outside" without needing real `window.history` depth,
- * which isn't reliably readable from script.
+ * Always navigates to the given logical-parent route (`to`). An earlier
+ * version preferred real browser-history back navigation (`navigate(-1)`)
+ * so the user would land exactly where they came from, but that meant the
+ * actual destination depended on this session's in-app navigation path,
+ * while the visible label always named the fixed logical parent - the two
+ * silently disagreed whenever a user's path diverged from a straight
+ * drill-down (e.g. Overview -> Documents -> "View Patient" back to
+ * Overview -> clicking "Back to Patients" here actually landed back on
+ * Documents, since that was the real previous history entry). Always
+ * honoring `to` keeps the label truthful on every click, independent of
+ * how the page was reached.
  */
 export function BackButton({ to, label }: BackButtonProps) {
   const navigate = useNavigate()
-  const location = useLocation()
-
-  function handleClick() {
-    if (location.key === 'default') {
-      navigate(to)
-    } else {
-      navigate(-1)
-    }
-  }
 
   return (
     <button
       type="button"
-      onClick={handleClick}
+      onClick={() => navigate(to)}
       className="self-start text-sm text-link hover:underline"
     >
       <span aria-hidden="true">←</span> Back to {label}

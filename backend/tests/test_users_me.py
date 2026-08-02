@@ -39,9 +39,7 @@ def test_me_rejects_missing_token(client):
 
 
 def test_me_rejects_malformed_token(client):
-    response = client.get(
-        "/users/me", headers={"Authorization": "Bearer not-a-real-jwt"}
-    )
+    response = client.get("/users/me", headers={"Authorization": "Bearer not-a-real-jwt"})
 
     assert response.status_code == 401
 
@@ -53,9 +51,7 @@ def test_me_rejects_expired_token(client):
         algorithm=settings.jwt_algorithm,
     )
 
-    response = client.get(
-        "/users/me", headers={"Authorization": f"Bearer {expired_token}"}
-    )
+    response = client.get("/users/me", headers={"Authorization": f"Bearer {expired_token}"})
 
     assert response.status_code == 401
 
@@ -67,9 +63,7 @@ def test_me_rejects_token_for_unknown_user(client):
         algorithm=settings.jwt_algorithm,
     )
 
-    response = client.get(
-        "/users/me", headers={"Authorization": f"Bearer {ghost_token}"}
-    )
+    response = client.get("/users/me", headers={"Authorization": f"Bearer {ghost_token}"})
 
     assert response.status_code == 401
 

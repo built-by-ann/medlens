@@ -26,7 +26,7 @@ def get_current_user(
     try:
         payload = decode_access_token(token)
     except jwt.PyJWTError:
-        raise credentials_exception
+        raise credentials_exception from None
 
     user_id = payload.get("sub")
 
@@ -36,7 +36,7 @@ def get_current_user(
     try:
         user = get_user_by_id(db, int(user_id))
     except (ValueError, TypeError):
-        raise credentials_exception
+        raise credentials_exception from None
 
     if user is None:
         raise credentials_exception

@@ -64,6 +64,7 @@ function makeRecentAnalysis(overrides: Partial<RecentAnalysis> = {}): RecentAnal
     high_severity_findings: 1,
     medium_severity_findings: 0,
     low_severity_findings: 0,
+    open_findings: 0,
     provider: 'gemini',
     model_name: 'gemini-2.0-flash',
     patient: { id: 1, first_name: 'Jane', last_name: 'Doe' },

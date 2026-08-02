@@ -62,7 +62,9 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
         }
         className="flex flex-col gap-3 rounded-t-lg p-6 hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
       >
-        {patientName && <span className="text-sm font-semibold text-foreground">{patientName}</span>}
+        {patientName && (
+          <span className="text-sm font-semibold text-foreground">{patientName}</span>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <AnalysisStatusBadge status={analysis.status} />
@@ -80,7 +82,7 @@ export function RecentAnalysisCard({ analysis, onDelete, patientName }: RecentAn
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <SummaryStat label="Documents" value={analysis.document_count} />
           <SummaryStat label="Findings" value={analysis.total_findings} />
-          <SummaryStat label="High severity" value={analysis.high_severity_findings} />
+          <SummaryStat label="Open" value={analysis.open_findings} />
           {completedAt && <SummaryStat label="Completed" value={completedAt} />}
         </dl>
 

@@ -6,6 +6,7 @@ from app.ai.schemas import ClinicalNoteSummaryRequest, ClinicalNoteSummaryRespon
 from app.ai.service import AISummaryService, get_ai_summary_service
 from app.api.deps import get_current_user, get_owned_patient
 from app.db.session import get_db
+from app.models.analysis import Analysis
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.analysis import (
@@ -13,6 +14,10 @@ from app.schemas.analysis import (
     AnalysisDetailResponse,
     AnalysisSummaryResponse,
     RecentAnalysisResponse,
+)
+from app.schemas.medication_discrepancy import (
+    DiscrepancyResolutionIn,
+    MedicationDiscrepancyDetailResponse,
 )
 from app.schemas.patient import PatientSummaryResponse
 from app.services.analysis_result_service import persist_analysis_result
@@ -27,6 +32,12 @@ from app.services.analysis_service import (
     mark_analysis_processing,
     ordered_clinical_documents,
 )
+from app.services.medication_discrepancy_service import (
+    DiscrepancyAlreadyResolvedError,
+    InvalidResolutionActionError,
+    get_discrepancy_for_analysis,
+    resolve_discrepancy,
+)
 
 router = APIRouter(prefix="/patients/{patient_id}/analyses", tags=["analyses"])
 
@@ -37,6 +48,7 @@ recent_analyses_router = APIRouter(prefix="/analyses", tags=["analyses"])
 
 NOT_FOUND_DETAIL = "Clinical document not found"
 ANALYSIS_NOT_FOUND_DETAIL = "Analysis not found"
+DISCREPANCY_NOT_FOUND_DETAIL = "Discrepancy not found"
 
 
 def _safe_error_message(error: Exception) -> str:
@@ -44,6 +56,14 @@ def _safe_error_message(error: Exception) -> str:
         return str(error)
 
     return f"Analysis failed due to an internal error ({type(error).__name__})."
+
+
+def _count_open_findings(analysis: Analysis) -> int:
+    return sum(
+        1
+        for discrepancy in analysis.medication_discrepancies
+        if discrepancy.resolution_status == "open"
+    )
 
 
 @router.post(
@@ -67,7 +87,7 @@ def summarize_clinical_documents(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=NOT_FOUND_DETAIL,
-        )
+        ) from None
 
     try:
         mark_analysis_processing(db, analysis)
@@ -95,7 +115,7 @@ def summarize_clinical_documents(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=message,
-        )
+        ) from error
 
     return ClinicalNoteSummaryResponse(
         analysis_id=analysis.id,
@@ -127,6 +147,7 @@ def list_analyses(
             high_severity_findings=analysis.high_severity_findings,
             medium_severity_findings=analysis.medium_severity_findings,
             low_severity_findings=analysis.low_severity_findings,
+            open_findings=_count_open_findings(analysis),
             provider=analysis.provider,
             model_name=analysis.model_name,
         )
@@ -193,6 +214,47 @@ def delete_analysis_detail(
         )
 
 
+@router.post(
+    "/{analysis_id}/discrepancies/{discrepancy_id}/resolve",
+    response_model=MedicationDiscrepancyDetailResponse,
+)
+def resolve_discrepancy_route(
+    analysis_id: int,
+    discrepancy_id: int,
+    resolution_in: DiscrepancyResolutionIn,
+    patient: Patient = Depends(get_owned_patient),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MedicationDiscrepancyDetailResponse:
+    analysis = get_analysis_for_patient(db, patient.id, analysis_id)
+
+    if analysis is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ANALYSIS_NOT_FOUND_DETAIL,
+        )
+
+    discrepancy = get_discrepancy_for_analysis(db, analysis.id, discrepancy_id)
+
+    if discrepancy is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=DISCREPANCY_NOT_FOUND_DETAIL,
+        )
+
+    try:
+        resolved = resolve_discrepancy(db, discrepancy, patient, resolution_in, current_user)
+    except DiscrepancyAlreadyResolvedError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from None
+    except InvalidResolutionActionError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from None
+
+    db.commit()
+    db.refresh(resolved)
+
+    return resolved
+
+
 @recent_analyses_router.get("/recent", response_model=list[RecentAnalysisResponse])
 def list_recent_analyses(
     limit: int = Query(default=10, ge=1, le=50),
@@ -215,6 +277,7 @@ def list_recent_analyses(
             high_severity_findings=analysis.high_severity_findings,
             medium_severity_findings=analysis.medium_severity_findings,
             low_severity_findings=analysis.low_severity_findings,
+            open_findings=_count_open_findings(analysis),
             provider=analysis.provider,
             model_name=analysis.model_name,
             patient=PatientSummaryResponse(

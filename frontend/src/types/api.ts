@@ -33,6 +33,10 @@ export interface AnalysisSummary {
   high_severity_findings: number
   medium_severity_findings: number
   low_severity_findings: number
+  // Unlike the four counts above (fixed at analysis completion), this is
+  // recomputed on every request from the discrepancies' current
+  // resolution_status - it drops as a provider resolves/dismisses findings.
+  open_findings: number
   provider: string | null
   model_name: string | null
 }
@@ -91,6 +95,35 @@ export type DiscrepancySeverity = 'low' | 'medium' | 'high'
 
 export type ResolutionStatus = 'open' | 'reviewed' | 'resolved' | 'dismissed'
 
+// What a provider actually did to resolve a discrepancy - distinct from
+// ResolutionStatus (the coarser open/resolved/dismissed state that
+// results). Which actions are valid depends on the discrepancy's
+// DiscrepancyType - see discrepancyResolutionActions.ts.
+export type ResolutionAction = 'add_medication' | 'update_medication' | 'dismiss'
+
+// Who resolved a discrepancy - a minimal, purpose-built view of the
+// resolving user for this one nested use, not a general-purpose user type.
+export interface ResolvedBy {
+  id: number
+  name: string | null
+  email: string
+}
+
+// POST .../discrepancies/{id}/resolve request body. Every medication field
+// is optional at the type level since which ones are required depends on
+// `action` (add_medication needs all five; update_medication needs at
+// least one; dismiss needs none) - see discrepancyResolutionActions.ts,
+// which is what actually builds one of these per action/type combination.
+export interface DiscrepancyResolutionPayload {
+  action: ResolutionAction
+  medication_name?: string
+  dose?: string
+  route?: string
+  frequency?: string
+  status?: string
+  note?: string
+}
+
 export interface ClinicalDocumentSummary {
   id: number
   title: string
@@ -123,6 +156,11 @@ export interface MedicationDiscrepancy {
   expected_value: string | null
   observed_value: string | null
   resolution_status: ResolutionStatus
+  // Audit trail: all four stay null until resolution_status leaves "open".
+  resolution_action: ResolutionAction | null
+  resolved_at: string | null
+  resolution_note: string | null
+  resolved_by: ResolvedBy | null
   created_at: string
   updated_at: string | null
   // Issue #46: supporting evidence nested inline. Either, both, or neither

@@ -382,6 +382,65 @@ Cons
 
 ---
 
+# Decision 18: Multi-Stage, Non-Root Dockerfiles with .dockerignore as a Security Fix
+
+**Decision**
+
+Rebuild `backend/Dockerfile` and the newly-added `frontend/Dockerfile` as multi-stage builds (a build stage with the toolchain, a slim runtime stage with only what's needed to run), have the backend's runtime stage run as a dedicated non-root user, and add a `.dockerignore` to both build contexts.
+
+**Reasoning**
+
+Auditing the existing setup for Issue #56 found that `backend/Dockerfile`'s single-stage `COPY . .` had no `.dockerignore` excluding it - a real `docker build` would copy the developer's actual local secrets (`backend/.env`: `DATABASE_URL`, `JWT_SECRET_KEY`, `GEMINI_API_KEY`) directly into an image layer, along with 182 MB of `.venv` and Python/pytest/ruff caches. This is treated as a security fix, not a cleanup nice-to-have: an image is something that gets pushed to a registry and potentially run outside the machine it was built on, and a leaked `.env` baked into a layer stays recoverable from that layer's history even if a later layer overwrites the file. `frontend/Dockerfile` gets the same treatment for the same reason (`frontend/.env`, `node_modules`), and both `.dockerignore` files additionally exclude `tests/`/test-only artifacts and dev caches purely for image size, a secondary concern to the leak itself.
+
+Multi-stage was chosen over the previous single-stage backend Dockerfile because splitting "install dependencies" from "run the application" means the final image never contains pip's build cache or any transient install artifacts - `pip install --prefix=/install` in a `builder` stage, then only `/install` (not the whole stage) is copied into the runtime stage. The backend's runtime stage also drops root: nothing in this application writes to the filesystem at runtime (confirmed by inspection - all persistence goes through the database, not local files), so there is no reason a compromised dependency or a request-handling bug should have root inside the container.
+
+The frontend's runtime stage uses `nginx:alpine` rather than `npm run preview` (Vite's own preview server, explicitly documented as not intended for production) or a Node-based static file server, which would otherwise mean shipping all of Node and `node_modules` in the runtime image just to serve static files a real web server is already built to serve. A small `frontend/nginx.conf` adds one SPA-routing rule (`try_files $uri /index.html`) so a direct load or refresh on a client-side route like `/patients/5` doesn't 404 - without it, nginx has no way to know `/patients/5` isn't a real file and should fall through to the React app.
+
+**Trade-offs**
+
+Pros
+
+- A real, previously-exploitable secret-leak path is closed, not just a size optimization
+- The final backend image contains no build tooling, no test suite, and no dev caches - smaller and with a narrower attack surface
+- The backend runtime user has no more privilege than the application actually needs
+- The frontend's runtime image (nginx + static files) is a fraction of the size of the build stage (Node + `node_modules` + source)
+
+Cons
+
+- Two-stage Dockerfiles are slightly harder to read than the original single-stage version, for a project whose current scale doesn't strictly require multi-stage's size benefits
+- `frontend/nginx.conf` is a second thing to keep in sync if the app ever needs more than one SPA-routing rule (a custom 404 page, cache headers, etc.)
+- `VITE_API_BASE_URL` must be supplied as a Docker build argument, not a container-runtime environment variable like every other config value in this project - a real deployment has to know to rebuild the image (not just restart the container) to point it at a different backend URL
+
+---
+
+# Decision 19: Automatic Migrations on Backend Startup, Not a Separate Migration Step
+
+**Decision**
+
+`backend/Dockerfile`'s `CMD` runs `alembic upgrade head` before starting `uvicorn`, on every container start - not just the first one, and not as a separate script, job, or manual step a deployer has to remember. `backend/alembic/env.py` was changed to read `DATABASE_URL` from the environment when present, overriding `alembic.ini`'s hardcoded `localhost:5432` default.
+
+**Reasoning**
+
+Deploying to a real EC2 instance for Issue #57 surfaced a gap Issue #56's own build-only validation couldn't have caught: nothing anywhere ran migrations against a genuinely fresh database. Verifying the deployment against a clean Postgres volume hit `relation "users" does not exist` on the first registration attempt - `alembic.ini`'s static `sqlalchemy.url` (correct only when `alembic` runs directly on a developer's host, where the local dev Postgres really is at `localhost:5432`) meant even running `alembic upgrade head` by hand inside the container would have failed to connect at all, since Postgres is a separate container reachable by its Compose service name, not `localhost`.
+
+Running migrations automatically as part of container startup, rather than as a manual step in the deployment runbook, was chosen because a manual step is a manual step someone eventually forgets - and for a single-instance deployment with no concurrent backend replicas, there's no race condition to worry about from running `alembic upgrade head` on every start (a second, third, or hundredth run against an already-current schema is a documented no-op). This is different advice than a multi-replica deployment would need, where multiple containers racing to run migrations simultaneously on startup is a real hazard - but this project is explicitly one EC2 instance, one backend container, by this same issue's own scope.
+
+**Trade-offs**
+
+Pros
+
+- A fresh deployment (or a fresh database volume) works correctly on the very first `docker compose up`, with no separate step to document, remember, or forget
+- A schema change ships as part of the same `git pull && docker compose build && docker compose up -d` as any other code change (see `docs/deployment.md`'s Updating the application) - no second command sequence for migrations specifically
+- `alembic/env.py`'s `DATABASE_URL` override is backward compatible - a developer running `alembic upgrade head` directly from their host, with no `DATABASE_URL` exported, still gets `alembic.ini`'s original default, unchanged
+
+Cons
+
+- A failed migration now blocks the entire container from starting (it fails before `uvicorn` ever runs), rather than surfacing as a distinguishable error from a running application - correct for a broken schema (the app shouldn't serve traffic against one), but means `docker compose logs backend` is the only way to see what happened, not a live error response
+- This approach doesn't extend safely to a multi-replica deployment without additional coordination (a leader-election or a dedicated one-off migration job) - acceptable today given this project's explicit single-instance scope, but a real limitation if that scope ever changes
+- No automatic rollback of a migration on deployment rollback (see `docs/deployment.md`'s Rollback procedure) - reversing a specific migration remains a deliberate, manual `alembic downgrade`, never bundled into the generic rollback steps
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:

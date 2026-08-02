@@ -7,7 +7,9 @@ const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
   cn(
     'rounded-md px-3 py-2 text-sm font-medium',
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring',
-    isActive ? 'bg-primary text-primary-foreground' : 'text-header-foreground hover:bg-surface-hover',
+    isActive
+      ? 'bg-primary text-primary-foreground'
+      : 'text-header-foreground hover:bg-surface-hover',
   )
 
 export function TopNav() {

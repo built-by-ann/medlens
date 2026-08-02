@@ -19,6 +19,7 @@ function makeAnalysis(overrides: Partial<AnalysisSummary> = {}): AnalysisSummary
     high_severity_findings: 1,
     medium_severity_findings: 1,
     low_severity_findings: 1,
+    open_findings: 2,
     provider: null,
     model_name: null,
     ...overrides,

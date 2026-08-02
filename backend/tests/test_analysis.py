@@ -112,9 +112,7 @@ def test_create_analysis_succeeds(db):
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
 
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     assert analysis.id is not None
     assert analysis.patient_id == patient.id
@@ -135,9 +133,7 @@ def test_create_analysis_defaults_to_pending_status(db):
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
 
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     assert analysis.status == "pending"
 
@@ -259,9 +255,7 @@ def test_analysis_relationship_to_patient(db):
     user = _create_user(db, email="relpatient@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     db.refresh(patient)
     assert analysis.patient.id == patient.id
@@ -289,12 +283,8 @@ def test_clinical_document_can_belong_to_multiple_analyses(db):
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
 
-    analysis_a = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
-    analysis_b = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis_a = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
+    analysis_b = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     db.refresh(document)
     assert {analysis.id for analysis in document.analyses} == {analysis_a.id, analysis_b.id}
@@ -304,9 +294,7 @@ def test_analysis_relationship_to_medication_discrepancy(db):
     user = _create_user(db, email="reldiscrepancy@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     discrepancy = MedicationDiscrepancy(
         analysis_id=analysis.id,
@@ -326,9 +314,7 @@ def test_deleting_analysis_cascades_to_discrepancies(db):
     user = _create_user(db, email="cascadedelete@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     discrepancy = MedicationDiscrepancy(
         analysis_id=analysis.id,
@@ -351,9 +337,7 @@ def test_deleting_analysis_cascades_to_medication_mentions_and_inconsistencies(d
     user = _create_user(db, email="cascadedeletementions@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     mention = AnalysisMedicationMention(analysis_id=analysis.id, medication_name="Metformin")
     inconsistency = AnalysisInconsistency(analysis_id=analysis.id, description="Some conflict.")
@@ -373,9 +357,7 @@ def test_deleting_clinical_document_removes_association_but_keeps_analysis(db):
     user = _create_user(db, email="deletedoc@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
     analysis_id = analysis.id
 
     db.delete(document)
@@ -390,9 +372,7 @@ def test_analysis_serializes_through_response_schema(db):
     user = _create_user(db, email="serializeanalysis@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     response = AnalysisDetailResponse.model_validate(analysis)
 
@@ -410,9 +390,7 @@ def test_mark_analysis_processing_sets_status_and_started_at(db):
     user = _create_user(db, email="processing@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     updated = mark_analysis_processing(db, analysis)
 
@@ -425,9 +403,7 @@ def test_mark_analysis_completed_sets_status_and_summary_fields(db):
     user = _create_user(db, email="completed@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
     mark_analysis_processing(db, analysis)
 
     updated = mark_analysis_completed(db, analysis, _completed_summary())
@@ -448,9 +424,7 @@ def test_mark_analysis_completed_clears_previous_error_message(db):
     user = _create_user(db, email="clearserror@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     mark_analysis_failed(db, analysis, "Temporary provider outage")
     assert analysis.error_message == "Temporary provider outage"
@@ -475,9 +449,7 @@ def test_analysis_completed_summary_allows_missing_provider_and_model(db):
     user = _create_user(db, email="noprovidermodel@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     summary_in = _completed_summary(provider=None, model_name=None)
     updated = mark_analysis_completed(db, analysis, summary_in)
@@ -490,9 +462,7 @@ def test_mark_analysis_failed_sets_status_and_error_message(db):
     user = _create_user(db, email="failed@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
     mark_analysis_processing(db, analysis)
 
     updated = mark_analysis_failed(db, analysis, "AI provider timeout")
@@ -510,9 +480,7 @@ def test_analysis_timestamps_progress_through_lifecycle(db):
     user = _create_user(db, email="timestamps@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     assert analysis.started_at is None
     assert analysis.completed_at is None
@@ -540,9 +508,7 @@ def test_get_analysis_for_patient_returns_owned_analysis(db):
     user = _create_user(db, email="getanalysisowner@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     fetched = get_analysis_for_patient(db, patient.id, analysis.id)
 
@@ -570,9 +536,7 @@ def test_get_analysis_for_patient_returns_none_for_a_different_patient_of_the_sa
     patient_a = _create_patient(db, user, first_name="A")
     patient_b = _create_patient(db, user, first_name="B")
     document = _create_clinical_document(db, patient_a)
-    analysis = create_analysis(
-        db, patient_a, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient_a, AnalysisCreate(clinical_document_ids=[document.id]))
 
     fetched = get_analysis_for_patient(db, patient_b.id, analysis.id)
 
@@ -597,9 +561,7 @@ def test_get_analysis_for_patient_loads_mentions_and_inconsistencies(db):
     user = _create_user(db, email="getanalysisloaded@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     mention_c = AnalysisMedicationMention(analysis_id=analysis.id, medication_name="Metformin")
     mention_a = AnalysisMedicationMention(analysis_id=analysis.id, medication_name="Atorvastatin")
@@ -627,9 +589,7 @@ def test_delete_analysis_removes_owned_analysis(db):
     user = _create_user(db, email="deleteanalysisowner@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
     analysis_id = analysis.id
 
     deleted = delete_analysis(db, patient.id, analysis_id)
@@ -642,9 +602,7 @@ def test_delete_analysis_removes_child_mentions_and_inconsistencies(db):
     user = _create_user(db, email="deleteanalysischildren@example.com")
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
 
     mention = AnalysisMedicationMention(analysis_id=analysis.id, medication_name="Metformin")
     inconsistency = AnalysisInconsistency(analysis_id=analysis.id, description="Some conflict.")
@@ -681,9 +639,7 @@ def test_delete_analysis_returns_false_for_a_different_patient_of_the_same_user(
     patient_a = _create_patient(db, user, first_name="A")
     patient_b = _create_patient(db, user, first_name="B")
     document = _create_clinical_document(db, patient_a)
-    analysis = create_analysis(
-        db, patient_a, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient_a, AnalysisCreate(clinical_document_ids=[document.id]))
 
     deleted = delete_analysis(db, patient_b.id, analysis.id)
 
@@ -705,9 +661,7 @@ def test_delete_analysis_leaves_unrelated_resources_intact(db):
     patient = _create_patient(db, user)
     document = _create_clinical_document(db, patient)
     medication = _create_medication(db, patient)
-    analysis = create_analysis(
-        db, patient, AnalysisCreate(clinical_document_ids=[document.id])
-    )
+    analysis = create_analysis(db, patient, AnalysisCreate(clinical_document_ids=[document.id]))
     document_id = document.id
     medication_id = medication.id
     user_id = user.id
@@ -740,9 +694,7 @@ def test_list_analyses_for_patient_returns_only_own_analyses(db):
     owned_analysis = create_analysis(
         db, owner_patient, AnalysisCreate(clinical_document_ids=[owner_document.id])
     )
-    create_analysis(
-        db, other_patient, AnalysisCreate(clinical_document_ids=[other_document.id])
-    )
+    create_analysis(db, other_patient, AnalysisCreate(clinical_document_ids=[other_document.id]))
 
     analyses = list_analyses_for_patient(db, owner_patient.id, limit=10)
 

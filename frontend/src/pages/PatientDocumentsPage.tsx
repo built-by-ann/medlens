@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
+import { Input } from '@/components/common/Input'
 import { PatientPageNav } from '@/components/patients/PatientPageNav'
 import { ClinicalDocumentList } from '@/components/documents/ClinicalDocumentList'
 import { EmptyDocumentsState } from '@/components/documents/EmptyDocumentsState'
+import { filterClinicalDocuments } from '@/components/documents/filterClinicalDocuments'
 import { usePatient } from '@/hooks/usePatient'
 import { usePatientClinicalDocuments } from '@/hooks/usePatientClinicalDocuments'
 import { createAnalysisPath, patientDetailPath, patientUploadPath } from '@/routes/paths'
@@ -12,6 +15,7 @@ import { createAnalysisPath, patientDetailPath, patientUploadPath } from '@/rout
 export function PatientDocumentsPage() {
   const { patientId } = useParams<{ patientId: string }>()
   const id = Number(patientId)
+  const [documentsQuery, setDocumentsQuery] = useState('')
 
   const {
     patient,
@@ -26,6 +30,8 @@ export function PatientDocumentsPage() {
     retry: retryDocuments,
     removeDocument,
   } = usePatientClinicalDocuments(id)
+
+  const filteredDocuments = filterClinicalDocuments(documents, documentsQuery)
 
   if (isPatientLoading) {
     return <LoadingSpinner label="Loading patient" />
@@ -91,7 +97,22 @@ export function PatientDocumentsPage() {
       )}
 
       {!areDocumentsLoading && !documentsError && documents.length > 0 && (
-        <ClinicalDocumentList documents={documents} onDelete={removeDocument} />
+        <>
+          <Input
+            type="search"
+            label="Search documents"
+            value={documentsQuery}
+            onChange={(event) => setDocumentsQuery(event.target.value)}
+            placeholder="Search by title or document type"
+            className="sm:max-w-xs"
+          />
+
+          {filteredDocuments.length === 0 ? (
+            <p className="text-sm text-muted">No documents match your search.</p>
+          ) : (
+            <ClinicalDocumentList documents={filteredDocuments} onDelete={removeDocument} />
+          )}
+        </>
       )}
     </div>
   )

@@ -173,7 +173,7 @@ describe('PatientDocumentsPage', () => {
     expect(await screen.findByText(/Not yet analyzed/)).toBeInTheDocument()
   })
 
-  it('expands a document to view its extracted text', async () => {
+  it('expands a document by clicking anywhere on its title and metadata', async () => {
     mockedListClinicalDocuments.mockResolvedValue([makeDocument()])
     const user = userEvent.setup()
     renderPage()
@@ -181,9 +181,15 @@ describe('PatientDocumentsPage', () => {
     await screen.findByText('March Visit Note')
     expect(screen.queryByText('Patient takes Lisinopril 10 mg.')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'View' }))
+    const toggle = screen.getByRole('button', { name: 'View March Visit Note' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
 
     expect(screen.getByText('Patient takes Lisinopril 10 mg.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Hide March Visit Note' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
   })
 
   it('deletes a document', async () => {
@@ -197,6 +203,43 @@ describe('PatientDocumentsPage', () => {
 
     await waitFor(() => expect(mockedDeleteClinicalDocument).toHaveBeenCalledWith(7, 1))
     expect(screen.queryByText('March Visit Note')).not.toBeInTheDocument()
+  })
+
+  it('filters the document list by search term', async () => {
+    mockedListClinicalDocuments.mockResolvedValue([
+      makeDocument({ id: 1, title: 'March Visit Note', document_type: 'visit_note' }),
+      makeDocument({ id: 2, title: 'Discharge Summary', document_type: 'discharge_summary' }),
+    ])
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('March Visit Note')
+    expect(screen.getByText('Discharge Summary')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Search documents'), 'discharge')
+
+    expect(screen.queryByText('March Visit Note')).not.toBeInTheDocument()
+    expect(screen.getByText('Discharge Summary')).toBeInTheDocument()
+  })
+
+  it('shows a no-match message when the search term matches no document', async () => {
+    mockedListClinicalDocuments.mockResolvedValue([makeDocument()])
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByText('March Visit Note')
+    await user.type(screen.getByLabelText('Search documents'), 'nonexistent')
+
+    expect(screen.queryByText('March Visit Note')).not.toBeInTheDocument()
+    expect(screen.getByText('No documents match your search.')).toBeInTheDocument()
+  })
+
+  it('does not show the search box when there are no documents', async () => {
+    mockedListClinicalDocuments.mockResolvedValue([])
+    renderPage()
+
+    await screen.findByText('No documents uploaded')
+    expect(screen.queryByLabelText('Search documents')).not.toBeInTheDocument()
   })
 
   it('shows a helpful empty state with an upload action when there are no documents', async () => {
