@@ -9,7 +9,7 @@ from app.ai.providers.base import AIProvider, AIProviderError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "gemini-2.0-flash"
+DEFAULT_MODEL = "gemini-2.5-flash"
 DEFAULT_TIMEOUT_MS = 30_000
 
 # Constrains Gemini to emit valid JSON using the SDK's structured output
@@ -93,11 +93,36 @@ class GeminiProvider(AIProvider):
     ) -> None:
         duration_ms = (time.monotonic() - started_at) * 1000
         error_type = type(error).__name__ if error is not None else (reason or "unknown")
+        detail = self._error_detail(error, reason)
 
+        # Server-side only - never included in the AIProviderError message
+        # raised above, which is what reaches the frontend (see
+        # _safe_error_message, app/api/routes/analyses.py). detail describes
+        # the API's own response to the request (e.g. "RESOURCE_EXHAUSTED",
+        # "models/gemini-2.0-flash is not found"), never the request itself:
+        # the Gemini SDK sends the API key as a request header, never in a
+        # URL or an exception message, and neither the prompt nor any
+        # clinical text is ever passed to this method or logged anywhere.
         logger.warning(
-            "AI request failed provider=%s model=%s duration_ms=%.1f error_type=%s",
+            "AI request failed provider=%s model=%s duration_ms=%.1f error_type=%s detail=%s",
             self.name,
             self.model,
             duration_ms,
             error_type,
+            detail,
         )
+
+    @staticmethod
+    def _error_detail(error: Exception | None, reason: str | None) -> str:
+        if error is None:
+            return reason or "unknown"
+
+        if isinstance(error, genai_errors.APIError):
+            # message/status are the API's own structured description of the
+            # failure (e.g. "RESOURCE_EXHAUSTED", "models/x is not found for
+            # API version..."); .details/response_json aren't used here,
+            # since they're a broader, less predictable payload than these
+            # two fields need to be.
+            return error.message or error.status or str(error)
+
+        return str(error)

@@ -944,7 +944,7 @@ Success response
 {
   "analysis_id": 7,
   "provider": "gemini",
-  "model": "gemini-2.0-flash",
+  "model": "gemini-2.5-flash",
   "medications": [
     {
       "name": "Lisinopril",
@@ -1006,7 +1006,7 @@ Success response
     "low_severity_findings": 0,
     "open_findings": 1,
     "provider": "gemini",
-    "model_name": "gemini-2.0-flash"
+    "model_name": "gemini-2.5-flash"
   }
 ]
 ```
@@ -1039,7 +1039,7 @@ Success response
   "patient_id": 1,
   "status": "completed",
   "provider": "gemini",
-  "model_name": "gemini-2.0-flash",
+  "model_name": "gemini-2.5-flash",
   "summary": "...",
   "started_at": "2026-07-12T19:59:14.696845Z",
   "completed_at": "2026-07-12T19:59:16.112249Z",
@@ -1283,7 +1283,7 @@ Success response
     "low_severity_findings": 0,
     "open_findings": 1,
     "provider": "gemini",
-    "model_name": "gemini-2.0-flash",
+    "model_name": "gemini-2.5-flash",
     "patient": {
       "id": 1,
       "first_name": "Jane",

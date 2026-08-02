@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from google.genai import errors as genai_errors
 
@@ -28,6 +30,12 @@ class FakeModels:
 class FakeClient:
     def __init__(self, models):
         self.models = models
+
+
+def test_default_model_is_gemini_2_5_flash():
+    provider = GeminiProvider(api_key="fake-key")
+
+    assert provider.model == "gemini-2.5-flash"
 
 
 def test_generate_summary_raises_when_api_key_missing():
@@ -94,6 +102,36 @@ def test_generate_summary_wraps_api_error(monkeypatch):
         provider.generate_summary("some prompt")
 
 
+def test_generate_summary_logs_api_error_message_server_side_only(monkeypatch, caplog):
+    # 404 "model not found" is the real shape of the production incident
+    # this logging change was made for: the model in DEFAULT_MODEL/
+    # GEMINI_MODEL retired server-side, and the only thing the previous log
+    # line recorded was error_type=ClientError - not enough to diagnose
+    # without reproducing the request by hand.
+    fake_models = FakeModels(
+        error=genai_errors.ClientError(
+            404, {"message": "models/gemini-2.0-flash is not found", "status": "NOT_FOUND"}, None
+        )
+    )
+    monkeypatch.setattr(
+        "app.ai.providers.gemini_provider.genai.Client",
+        lambda **kwargs: FakeClient(fake_models),
+    )
+
+    provider = GeminiProvider(api_key="fake-key")
+
+    with caplog.at_level(logging.WARNING), pytest.raises(AIProviderError) as exc_info:
+        provider.generate_summary("some prompt")
+
+    assert "models/gemini-2.0-flash is not found" in caplog.text
+    assert "error_type=ClientError" in caplog.text
+    # The API's failure description is server-side-log-only - it must never
+    # reach the caller (see _safe_error_message, app/api/routes/analyses.py),
+    # which only ever sees the generic wrapped message below.
+    assert "models/gemini-2.0-flash is not found" not in str(exc_info.value)
+    assert str(exc_info.value) == "Gemini request failed: ClientError"
+
+
 def test_generate_summary_wraps_unexpected_exception(monkeypatch):
     fake_models = FakeModels(error=RuntimeError("connection reset"))
     monkeypatch.setattr(
@@ -105,6 +143,22 @@ def test_generate_summary_wraps_unexpected_exception(monkeypatch):
 
     with pytest.raises(AIProviderError):
         provider.generate_summary("some prompt")
+
+
+def test_generate_summary_logs_unexpected_exception_message_server_side_only(monkeypatch, caplog):
+    fake_models = FakeModels(error=RuntimeError("connection reset"))
+    monkeypatch.setattr(
+        "app.ai.providers.gemini_provider.genai.Client",
+        lambda **kwargs: FakeClient(fake_models),
+    )
+
+    provider = GeminiProvider(api_key="fake-key")
+
+    with caplog.at_level(logging.WARNING), pytest.raises(AIProviderError) as exc_info:
+        provider.generate_summary("some prompt")
+
+    assert "connection reset" in caplog.text
+    assert "connection reset" not in str(exc_info.value)
 
 
 def test_generate_summary_raises_on_empty_response(monkeypatch):
