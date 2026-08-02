@@ -33,3 +33,4 @@ def test_settings_applies_defaults_when_optional_values_unset(monkeypatch):
     assert settings.app_env == "development"
     assert settings.jwt_algorithm == "HS256"
     assert settings.jwt_access_token_expire_minutes == 30
+    assert settings.gemini_model == "gemini-2.5-flash"

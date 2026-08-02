@@ -17,6 +17,13 @@ services:
       # section.
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-dev-secret-key-not-used-anywhere-real}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Settings.gemini_model (app/core/config.py) already defaults to
+      # gemini-2.5-flash when this is unset, so the default below is
+      # redundant with that - kept explicit anyway so a Gemini model
+      # retirement (the incident this default was changed for) can be fixed
+      # here, in infra/.env, without touching application code or rebuilding
+      # any image - just a container restart.
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       # development (the default) auto-allows any localhost/127.0.0.1
       # origin for CORS in addition to CORS_ALLOWED_ORIGINS (see
       # app/main.py) - correct for local Docker use, but a real deployment

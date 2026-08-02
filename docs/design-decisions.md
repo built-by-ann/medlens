@@ -441,6 +441,33 @@ Cons
 
 ---
 
+# Decision 20: Structured Failure Detail in AI Provider Logs, Kept Server-Side Only
+
+**Decision**
+
+`GeminiProvider._log_failure` now logs a `detail` field alongside the existing `error_type` - the Gemini API's own `message`/`status` for an `APIError` (e.g. `"models/gemini-2.0-flash is not found"`, `"RESOURCE_EXHAUSTED"`), or `str(error)` for any other exception. This is added only to the `logger.warning(...)` call; the `AIProviderError` message raised to the caller (and, from there, returned to the frontend as the `503` response's `detail`) is unchanged.
+
+**Reasoning**
+
+Google retired `gemini-2.0-flash` (the application's configured model at the time) server-side, breaking every AI-dependent request in production. Diagnosing it took longer than it should have, because the only thing the failure log ever recorded was `error_type=ClientError` - true, but equally true of a network blip, an invalid API key, or a malformed request. The Gemini SDK's own `APIError` already carries a specific, human-readable description of what actually went wrong (`.message`/`.status`); it was simply never read.
+
+Keeping `detail` out of the user-facing `AIProviderError` message is deliberate, not an oversight: `_safe_error_message` (`app/api/routes/analyses.py`) already passes an `AIProviderError`'s `str()` straight through to the API response's `detail` field (see `docs/api.md`'s `503` documentation), so anything added to that exception's message reaches the frontend, and from there, whoever is looking at the browser's network tab. A raw Gemini API error string is exactly the kind of "provider internals" that shouldn't be exposed - not because a model name is secret, but because a third-party API's internal error vocabulary is not a contract this application should commit to exposing to its own users. The fix is additive purely to the log line, which only server operators can read.
+
+**Trade-offs**
+
+Pros
+
+- A future provider-side failure (a retired model, a quota change, an invalid request shape) is diagnosable directly from `docker compose logs backend`, without reproducing the request by hand or reading Google's own status page first
+- The user-facing `503` response is provably unchanged - covered by a test asserting the logged `detail` and the raised exception's message never contain the same string (`tests/test_gemini_provider.py`)
+- No new dependency, no new log destination - the existing `logging` module and existing log line, extended with one more field
+
+Cons
+
+- `detail` is one more thing to trust `APIError.message` to never contain - a hard boundary to prove permanently at the library level, only reasoned about here (Google's SDK sends the API key via header, never in a URL or an exception message, and a validation/safety-block error surfaces through an empty response, not this exception path - see `docs/ai.md`'s Logging section) rather than mechanically enforced
+- `str(error)` for a non-`APIError` exception is unstructured and could, for some unanticipated exception type, be more verbose than intended - accepted as a reasonable trade-off for visibility into failure modes this code can't fully enumerate in advance
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:
