@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/PageHeader'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ErrorState } from '@/components/common/ErrorState'
+import { Card } from '@/components/common/Card'
 import { PatientSearch } from '@/components/patients/PatientSearch'
 import { PatientList } from '@/components/patients/PatientList'
 import { EmptyPatientState } from '@/components/patients/EmptyPatientState'
@@ -179,9 +180,22 @@ export function DashboardPage() {
           )}
 
           {!areAnalysesLoading && !analysesError && recentAnalyses.length === 0 && (
-            <p className="text-sm text-muted">
-              No analyses yet. Start one from Quick Actions above once you have a patient on file.
-            </p>
+            <Card className="flex flex-col items-center gap-3 py-10 text-center">
+              <h3 className="text-sm font-semibold text-foreground">No analyses yet</h3>
+              <p className="max-w-md text-sm text-muted">
+                {canStartAnalysis
+                  ? 'Start an analysis to compare medication information across a patient’s clinical documents.'
+                  : 'Add your first patient, then start an analysis to compare medication information across their clinical documents.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsStartAnalysisOpen(true)}
+                disabled={!canStartAnalysis}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Start an analysis
+              </button>
+            </Card>
           )}
 
           {!areAnalysesLoading && !analysesError && recentAnalyses.length > 0 && (
