@@ -80,7 +80,10 @@ export function PatientMedicationsPage() {
             )}
 
             {!areMedicationsLoading && !medicationsError && medications.length === 0 && (
-              <EmptyMedicationState />
+              <EmptyMedicationState
+                message="Add a medication using the form below to start this patient's medication list."
+                addMedicationHref="#add-medication-heading"
+              />
             )}
 
             {!areMedicationsLoading && !medicationsError && medications.length > 0 && (

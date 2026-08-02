@@ -207,7 +207,11 @@ describe('PatientOverviewPage', () => {
     mockedGetPatient.mockResolvedValue(patient)
     renderOverviewPage()
 
-    expect(await screen.findByText('No medications recorded yet.')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'No medications added yet' }),
+    ).toBeInTheDocument()
+    const addLink = screen.getByRole('link', { name: 'Add your first medication' })
+    expect(addLink).toHaveAttribute('href', '/patients/1/medications')
     const link = screen.getByRole('link', { name: 'View all medications' })
     expect(link).toHaveTextContent('View All')
     expect(link).toHaveAttribute('href', '/patients/1/medications')

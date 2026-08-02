@@ -241,7 +241,10 @@ export function PatientOverviewPage() {
             )}
 
             {!areMedicationsLoading && !medicationsError && medications.length === 0 && (
-              <EmptyMedicationState message="No medications recorded yet." />
+              <EmptyMedicationState
+                message="Keep this patient's medication list up to date so MedLens can compare it against their clinical documents."
+                addMedicationHref={patientMedicationsPath(patient.id)}
+              />
             )}
 
             {!areMedicationsLoading && !medicationsError && medications.length > 0 && (
