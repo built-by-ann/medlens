@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30
 
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-2.5-flash"
 
     # Comma-separated list of explicitly allowed frontend origins (e.g. a
     # deployed frontend's URL). Local Vite dev servers do not need to be

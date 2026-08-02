@@ -129,7 +129,7 @@ The Gemini API key and model are read from environment variables, never hardcode
 
 ```text
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
 `GEMINI_API_KEY` is optional at the application level. The backend starts normally without it. A request to `POST /ai/summarize` made while the key is missing fails gracefully with a `503` response rather than a crash.
@@ -164,7 +164,7 @@ Success response
 {
   "analysis_id": 7,
   "provider": "gemini",
-  "model": "gemini-2.0-flash",
+  "model": "gemini-2.5-flash",
   "medications": [
     {
       "name": "Lisinopril",
@@ -219,6 +219,12 @@ Error responses
 ## Logging
 
 The Gemini provider logs which provider and model were used, request duration, and success or failure. `AISummaryService` logs a validation failure with the provider, model, and the number of validation errors. In every case, only the standard `logging` module and these metadata fields are used. Clinical note contents, prompts, raw model responses, and the detailed contents of a `pydantic.ValidationError` are never logged, since validation error details can echo back fragments of the model's response.
+
+**A failed request's log line also includes `detail`** - the Gemini API's own description of why the request failed (`APIError.message`/`.status`, e.g. `"models/gemini-2.0-flash is not found"`, `"RESOURCE_EXHAUSTED"`), or `str(error)` for any other exception type. Originally this log line recorded only `error_type` (the Python exception class name, e.g. `ClientError`) - enough to know *that* a request failed, not *why*, which is exactly what made diagnosing a real production incident slower than it needed to be (see "A Note on Model Retirement" below). `detail` is server-side-log-only: it is never included in the `AIProviderError` message returned to the API layer, so it never reaches the frontend (see `_safe_error_message`, `app/api/routes/analyses.py`) - the user-facing `503` stays exactly as generic as it already was. It is also never the API key (the Gemini SDK sends it as a request header, `x-goog-api-key`, never in a URL or an exception message) and never the prompt or clinical text (neither is ever passed into the logging path at all).
+
+### A Note on Model Retirement
+
+Google periodically retires older Gemini model versions, at which point every request naming that model starts failing with a `404`-shaped `APIError` (`"models/<name> is not found"`) - not a bug in this application, but an upstream lifecycle event outside its control. `GEMINI_MODEL` (Configuration, above) is a plain environment variable specifically so recovering from this never requires a code change or an image rebuild: update `infra/.env` (or `backend/.env` locally) and restart the backend container. `gemini-2.0-flash` was retired this way in production; the application default (`Settings.gemini_model` / `GeminiProvider.DEFAULT_MODEL`) was updated to `gemini-2.5-flash` at the same time the `detail` logging above was added, so a future retirement surfaces its actual cause (`"models/gemini-2.5-flash is not found"`, in the server logs) rather than only `error_type=ClientError`.
 
 ---
 
