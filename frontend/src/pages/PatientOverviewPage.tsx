@@ -188,13 +188,15 @@ export function PatientOverviewPage() {
               <h2 id="recent-analyses-heading" className="text-lg font-semibold text-foreground">
                 Recent analyses
               </h2>
-              <Link
-                to={patientAnalysesPath(patient.id)}
-                aria-label="View all analyses"
-                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-              >
-                View All
-              </Link>
+              {analyses.length > 0 && (
+                <Link
+                  to={patientAnalysesPath(patient.id)}
+                  aria-label="View all analyses"
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+                >
+                  View All
+                </Link>
+              )}
             </div>
 
             {areAnalysesLoading && <LoadingSpinner label="Loading analyses" />}
@@ -221,13 +223,15 @@ export function PatientOverviewPage() {
               <h2 id="medications-heading" className="text-lg font-semibold text-foreground">
                 Medications
               </h2>
-              <Link
-                to={patientMedicationsPath(patient.id)}
-                aria-label="View all medications"
-                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-              >
-                View All
-              </Link>
+              {medications.length > 0 && (
+                <Link
+                  to={patientMedicationsPath(patient.id)}
+                  aria-label="View all medications"
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+                >
+                  View All
+                </Link>
+              )}
             </div>
 
             {areMedicationsLoading && <LoadingSpinner label="Loading medications" />}

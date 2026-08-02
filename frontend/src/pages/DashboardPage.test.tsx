@@ -378,6 +378,29 @@ describe('DashboardPage', () => {
       expect(await screen.findByText(/No analyses yet/)).toBeInTheDocument()
     })
 
+    it('disables its own "Start an analysis" button when there are no patients yet, matching Quick Actions', async () => {
+      mockedListPatients.mockResolvedValue([])
+      renderDashboard()
+
+      expect(
+        await screen.findByText(/Add your first patient, then start an analysis/),
+      ).toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: 'Start an analysis' })).toBeDisabled()
+    })
+
+    it('enables its own "Start an analysis" button once a patient exists, opening the same picker as Quick Actions', async () => {
+      mockedListPatients.mockResolvedValue([olderPatient])
+      const user = userEvent.setup()
+      renderDashboard()
+
+      const button = await screen.findByRole('button', { name: 'Start an analysis' })
+      expect(button).toBeEnabled()
+
+      await user.click(button)
+
+      expect(screen.getByRole('dialog', { name: 'Start an analysis' })).toBeInTheDocument()
+    })
+
     it('shows an error state with its own retry action', async () => {
       mockedListPatients.mockResolvedValue([])
       mockedGetRecentAnalyses.mockRejectedValueOnce({ status: 500, message: 'Server error.' })

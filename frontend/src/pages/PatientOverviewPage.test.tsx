@@ -203,7 +203,7 @@ describe('PatientOverviewPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/patients')
   })
 
-  it('shows the empty medications state and a "View All" link to the full Medications page', async () => {
+  it('shows the empty medications state with a link to add the first one', async () => {
     mockedGetPatient.mockResolvedValue(patient)
     renderOverviewPage()
 
@@ -212,10 +212,25 @@ describe('PatientOverviewPage', () => {
     ).toBeInTheDocument()
     const addLink = screen.getByRole('link', { name: 'Add your first medication' })
     expect(addLink).toHaveAttribute('href', '/patients/1/medications')
-    const link = screen.getByRole('link', { name: 'View all medications' })
+    expect(mockedListMedications).toHaveBeenCalledWith(1)
+  })
+
+  it('does not show a "View All" link when there are no medications to view', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    renderOverviewPage()
+
+    await screen.findByRole('heading', { name: 'No medications added yet' })
+    expect(screen.queryByRole('link', { name: 'View all medications' })).not.toBeInTheDocument()
+  })
+
+  it('shows a "View All" link to the full Medications page when medications exist', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    mockedListMedications.mockResolvedValue([sampleMedication])
+    renderOverviewPage()
+
+    const link = await screen.findByRole('link', { name: 'View all medications' })
     expect(link).toHaveTextContent('View All')
     expect(link).toHaveAttribute('href', '/patients/1/medications')
-    expect(mockedListMedications).toHaveBeenCalledWith(1)
   })
 
   it('shows the patient medication list, reusing the shared medication card', async () => {
@@ -406,6 +421,14 @@ describe('PatientOverviewPage', () => {
 
     expect(await screen.findByText('No analyses yet')).toBeInTheDocument()
     expect(mockedListAnalyses).toHaveBeenCalledWith(1, 3)
+  })
+
+  it('does not show a "View All" link when there are no analyses to view', async () => {
+    mockedGetPatient.mockResolvedValue(patient)
+    renderOverviewPage()
+
+    await screen.findByText('No analyses yet')
+    expect(screen.queryByRole('link', { name: 'View all analyses' })).not.toBeInTheDocument()
   })
 
   it('shows a preview of recent analyses with a link to the full history', async () => {
