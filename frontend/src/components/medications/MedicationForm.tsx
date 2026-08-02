@@ -49,7 +49,9 @@ export function MedicationForm({ onAdd }: MedicationFormProps) {
 
   return (
     <Card className="flex flex-col gap-4">
-      <h3 className="text-sm font-semibold text-foreground">Add a medication</h3>
+      <h3 id="add-medication-heading" className="text-sm font-semibold text-foreground">
+        Add a medication
+      </h3>
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         {formError && <FormError message={formError} />}
         <MedicationFields
