@@ -7,6 +7,7 @@ from app.schemas.auth import Token, UserLogin
 from app.schemas.user import UserCreate, UserResponse
 from app.services.user_service import (
     EmailAlreadyRegisteredError,
+    UsernameAlreadyRegisteredError,
     authenticate_user,
     create_user,
 )
@@ -26,6 +27,11 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> UserResponse
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A user with this email is already registered",
+        ) from None
+    except UsernameAlreadyRegisteredError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This username is already taken",
         ) from None
 
 

@@ -101,17 +101,20 @@ Request body
 {
   "email": "user@example.com",
   "password": "securepassword",
+  "username": "jane_doe",
   "name": "Jane Doe"
 }
 ```
 
-`name` is optional.
+`name` is optional. `username` is required (Issue #191) — every account created from this point forward has one; see `docs/data-model.md`'s `User` entity for why the underlying column is nullable despite that.
 
 Validation rules
 
 - `email` must be a valid email address.
 - `password` must be at least 8 characters long.
 - `email` must not already belong to a registered user.
+- `username` must be 3–30 characters long, containing only letters, numbers, underscores, and periods (`a-z`, `A-Z`, `0-9`, `_`, `.`).
+- `username` must not already belong to a registered user — checked **case-insensitively**: `jdoe` and `JDoe` are treated as the same username for this check, even though the value is stored and returned exactly as submitted.
 
 Success response
 
@@ -122,6 +125,7 @@ Success response
   "id": 1,
   "email": "user@example.com",
   "name": "Jane Doe",
+  "username": "jane_doe",
   "created_at": "2026-07-03T19:13:05.755361Z"
 }
 ```
@@ -130,8 +134,8 @@ The stored password hash is never included in the response.
 
 Possible error responses
 
-- `409 Conflict` — the email is already registered.
-- `422 Unprocessable Entity` — invalid email format, password shorter than 8 characters, or missing required fields.
+- `409 Conflict` — the email is already registered (`"A user with this email is already registered"`), or the username is already taken, case-insensitively (`"This username is already taken"`).
+- `422 Unprocessable Entity` — invalid email format, password shorter than 8 characters, `username` missing or failing its format rules above, or another required field missing.
 
 ---
 
@@ -200,15 +204,69 @@ Success response
   "id": 1,
   "email": "user@example.com",
   "name": "Jane Doe",
+  "username": "jane_doe",
   "created_at": "2026-07-03T19:13:05.755361Z"
 }
 ```
+
+`username` is `null` for any account created before Issue #191 that hasn't set one since — see `docs/data-model.md`.
 
 401 responses
 
 - Missing `Authorization` header — `{"detail": "Not authenticated"}`
 - Invalid, malformed, or expired token — `{"detail": "Could not validate credentials"}`
 - Token is well-formed and correctly signed but references a user id that no longer exists — `{"detail": "Could not validate credentials"}`
+
+---
+
+### PATCH /users/me
+
+Purpose
+
+Partially updates the authenticated user's own profile. Only the fields included in the request body are changed; this is a profile-editing endpoint, not a credential change — there is no way to change a password here, and authentication always continues to use email/password (Issue #191), regardless of whether a username is set.
+
+Authentication requirements
+
+Requires a valid Bearer token in the `Authorization` header, as described above.
+
+Request body
+
+```json
+{
+  "username": "new_username"
+}
+```
+
+Any subset of `email`, `name`, and `username` may be included. Extra/unrecognized fields are rejected outright rather than silently ignored.
+
+Validation rules
+
+- `email`, if included, must be a valid email address, and must not already belong to a different user.
+- `username`, if included:
+  - `null` clears it (an account can always go back to having no username).
+  - A non-null value must pass the same 3–30 character, `a-z`/`A-Z`/`0-9`/`_`/`.`-only rules `POST /auth/register` enforces.
+  - A non-null value must not already belong to a *different* user, checked case-insensitively — re-submitting your own current username with different casing (e.g. `jdoe` → `JDoe`) is allowed, the same way re-submitting your own current email is.
+- Fields left out of the request body are unchanged.
+
+Success response
+
+`200 OK` — the same shape as `GET /users/me`, reflecting the update:
+
+```json
+{
+  "id": 1,
+  "email": "user@example.com",
+  "name": "Jane Doe",
+  "username": "new_username",
+  "created_at": "2026-07-03T19:13:05.755361Z"
+}
+```
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `409 Conflict`: the given `email` already belongs to another user (`"A user with this email is already registered"`), or the given `username` already belongs to another user, case-insensitively (`"This username is already taken"`).
+- `422 Unprocessable Entity`: `email` is not a valid email address, `username` fails its format rules, or the request body contains a field this endpoint doesn't recognize.
 
 ---
 
@@ -1221,12 +1279,13 @@ Success response
   "resolved_by": {
     "id": 1,
     "name": "Jane Doe",
+    "username": "jane_doe",
     "email": "jane@example.com"
   }
 }
 ```
 
-`resolution_status` becomes `"resolved"` for `add_medication`/`update_medication`, or `"dismissed"` for `dismiss` - the same `ResolutionStatus` enum `docs/data-model.md` already documents, reused unchanged rather than introducing a parallel status. `resolution_action`, `resolved_at`, `resolution_note`, and `resolved_by` are the audit trail added by this endpoint; all four are `null`/absent until a discrepancy is resolved, and none of the fields the original reconciliation run computed (`title`, `ai_explanation`, `expected_value`, `observed_value`, ...) are ever changed by resolving - the finding itself remains a permanent, unaltered record.
+`resolution_status` becomes `"resolved"` for `add_medication`/`update_medication`, or `"dismissed"` for `dismiss` - the same `ResolutionStatus` enum `docs/data-model.md` already documents, reused unchanged rather than introducing a parallel status. `resolution_action`, `resolved_at`, `resolution_note`, and `resolved_by` are the audit trail added by this endpoint; all four are `null`/absent until a discrepancy is resolved, and none of the fields the original reconciliation run computed (`title`, `ai_explanation`, `expected_value`, `observed_value`, ...) are ever changed by resolving - the finding itself remains a permanent, unaltered record. `resolved_by.username` (Issue #191) is `null` for a resolver whose account predates usernames and hasn't set one since - the frontend falls back to `name`, then `email`, when it is.
 
 Possible error responses
 
@@ -1344,11 +1403,17 @@ Returned when a requested resource does not exist, or exists but does not belong
 
 ### 409 Conflict
 
-Returned by `POST /auth/register` when the given email is already registered.
+Returned by `POST /auth/register` and `PATCH /users/me` when the given email is already registered, or the given username is already taken (case-insensitively) by a different user.
 
 ```json
 {
   "detail": "A user with this email is already registered"
+}
+```
+
+```json
+{
+  "detail": "This username is already taken"
 }
 ```
 

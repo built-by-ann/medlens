@@ -6,7 +6,12 @@ from app.core.config import settings
 def _register(client, email="login.user@example.com", password="correcthorse123"):
     response = client.post(
         "/auth/register",
-        json={"email": email, "password": password, "name": "Login User"},
+        json={
+            "email": email,
+            "password": password,
+            "username": email.split("@")[0].replace("-", "_")[:30],
+            "name": "Login User",
+        },
     )
     assert response.status_code == 201
     return response.json()

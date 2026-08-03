@@ -8,7 +8,12 @@ from app.core.config import settings
 def _register_and_login(client, email="me.user@example.com", password="correcthorse123"):
     client.post(
         "/auth/register",
-        json={"email": email, "password": password, "name": "Me User"},
+        json={
+            "email": email,
+            "password": password,
+            "username": email.split("@")[0].replace("-", "_")[:30],
+            "name": "Me User",
+        },
     )
 
     login_response = client.post(
@@ -168,7 +173,7 @@ def test_update_me_rejects_unexpected_field(client):
 
     response = client.patch(
         "/users/me",
-        json={"name": "Fine", "username": "not-a-real-field"},
+        json={"name": "Fine", "not_a_real_field": "value"},
         headers={"Authorization": f"Bearer {token}"},
     )
 
@@ -179,3 +184,126 @@ def test_update_me_rejects_missing_token(client):
     response = client.patch("/users/me", json={"name": "No Auth"})
 
     assert response.status_code == 401
+
+
+# --- PATCH /users/me (username, Issue #191) ---
+
+
+def test_update_me_sets_username(client):
+    token = _register_and_login(client, email="setusername@example.com")
+
+    response = client.patch(
+        "/users/me",
+        json={"username": "new_username"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["username"] == "new_username"
+
+
+def test_update_me_leaves_username_unchanged_when_not_sent(client):
+    token = _register_and_login(client, email="keepusername@example.com")
+    client.patch(
+        "/users/me",
+        json={"username": "keep_this_one"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = client.patch(
+        "/users/me",
+        json={"name": "Only Name Changed"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.json()["username"] == "keep_this_one"
+
+
+def test_update_me_allows_recasing_own_username(client):
+    token = _register_and_login(client, email="recase@example.com")
+    client.patch(
+        "/users/me",
+        json={"username": "recase_user"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = client.patch(
+        "/users/me",
+        json={"username": "Recase_User"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["username"] == "Recase_User"
+
+
+def test_update_me_rejects_username_already_taken_by_another_user(client):
+    other_token = _register_and_login(client, email="usernameowner@example.com")
+    client.patch(
+        "/users/me",
+        json={"username": "claimed_name"},
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    token = _register_and_login(client, email="usernamerequester@example.com")
+
+    response = client.patch(
+        "/users/me",
+        json={"username": "claimed_name"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+
+
+def test_update_me_rejects_username_already_taken_case_insensitively(client):
+    other_token = _register_and_login(client, email="caseowner@example.com")
+    client.patch(
+        "/users/me",
+        json={"username": "CaseSensitive"},
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    token = _register_and_login(client, email="caserequester@example.com")
+
+    response = client.patch(
+        "/users/me",
+        json={"username": "casesensitive"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+
+
+def test_update_me_rejects_username_too_short(client):
+    token = _register_and_login(client, email="tooshort@example.com")
+
+    response = client.patch(
+        "/users/me",
+        json={"username": "ab"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_me_rejects_username_too_long(client):
+    token = _register_and_login(client, email="toolong@example.com")
+
+    response = client.patch(
+        "/users/me",
+        json={"username": "a" * 31},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_me_rejects_username_with_invalid_characters(client):
+    token = _register_and_login(client, email="invalidchars@example.com")
+
+    response = client.patch(
+        "/users/me",
+        json={"username": "not valid!"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422

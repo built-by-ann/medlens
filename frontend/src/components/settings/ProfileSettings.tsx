@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ChangeEvent } from 'react'
 import { Card } from '@/components/common/Card'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
@@ -12,6 +12,7 @@ import {
   validateProfileForm,
   type ProfileFormValues,
 } from '@/components/settings/profileFormValidation'
+import { usernameFormatError } from '@/utils/validation'
 import type { ApiError } from '@/api/client'
 
 export function ProfileSettings() {
@@ -22,6 +23,7 @@ export function ProfileSettings() {
   const initialValues: ProfileFormValues = {
     firstName,
     lastName,
+    username: user?.username ?? '',
     email: user?.email ?? '',
   }
 
@@ -41,8 +43,14 @@ export function ProfileSettings() {
       setIsSaved(false)
 
       try {
+        const trimmedUsername = values.username.trim()
         const updated = await updateUser({
           name: joinName(values.firstName, values.lastName),
+          // An empty field means "clear it" (existing accounts may have no
+          // username at all, see Issue #191) - never send '', which would
+          // fail the backend's own min-length check for a value that was
+          // actually meant to mean "unset."
+          username: trimmedUsername || null,
           email: values.email.trim(),
         })
 
@@ -51,10 +59,12 @@ export function ProfileSettings() {
       } catch (error) {
         const apiError = error as ApiError
 
-        // A duplicate email is specifically about the email field, mirroring
-        // how SignupPage attaches its own 409 - every other failure is a
-        // generic form-level message instead.
-        if (apiError.status === 409) {
+        // A duplicate email or username is specifically about that one
+        // field, mirroring how SignupPage attaches its own 409 - every
+        // other failure is a generic form-level message instead.
+        if (apiError.status === 409 && apiError.message.toLowerCase().includes('username')) {
+          setFieldError('username', apiError.message)
+        } else if (apiError.status === 409) {
           setFieldError('email', apiError.message)
         } else {
           setFormError(apiError.message)
@@ -62,6 +72,16 @@ export function ProfileSettings() {
       }
     },
   })
+
+  // Same live-validation behavior as SignupPage's username field - see its
+  // own comment for why this one field validates on every keystroke
+  // instead of only on submit.
+  function handleUsernameChange(event: ChangeEvent<HTMLInputElement>) {
+    updateField('username')(event)
+
+    const trimmed = event.target.value.trim()
+    setFieldError('username', trimmed ? (usernameFormatError(trimmed) ?? '') : '')
+  }
 
   return (
     <Card className="flex flex-col gap-4">
@@ -103,15 +123,14 @@ export function ProfileSettings() {
 
         <Input
           label="Username"
-          value=""
-          disabled
-          placeholder="Not available yet"
-          aria-describedby="username-unavailable-note"
+          name="username"
+          autoComplete="username"
+          value={values.username}
+          onChange={handleUsernameChange}
+          error={errors.username}
+          disabled={isSubmitting}
+          placeholder="Choose a username"
         />
-        <p id="username-unavailable-note" className="text-xs text-muted">
-          A separate username isn't supported yet - MedLens accounts are identified by email.
-          Requires a backend update (see docs/frontend.md).
-        </p>
 
         <Input
           label="Email Address"

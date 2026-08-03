@@ -1,7 +1,12 @@
 def _register_and_login(client, email, password="correcthorse123"):
     client.post(
         "/auth/register",
-        json={"email": email, "password": password, "name": "Med Test User"},
+        json={
+            "email": email,
+            "password": password,
+            "username": email.split("@")[0].replace("-", "_")[:30],
+            "name": "Med Test User",
+        },
     )
 
     login_response = client.post("/auth/login", json={"email": email, "password": password})

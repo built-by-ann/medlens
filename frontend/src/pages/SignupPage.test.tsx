@@ -29,6 +29,7 @@ function renderSignupPage() {
 
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Full Name'), 'Jane Doe')
+  await user.type(screen.getByLabelText('Username'), 'jane_doe')
   await user.type(screen.getByLabelText('Email'), 'jane@example.com')
   await user.type(screen.getByLabelText('Password'), 'correcthorse123')
   await user.type(screen.getByLabelText('Confirm Password'), 'correcthorse123')
@@ -47,6 +48,7 @@ describe('SignupPage', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }))
 
     expect(await screen.findByText('Full name is required.')).toBeInTheDocument()
+    expect(screen.getByText('Username is required.')).toBeInTheDocument()
     expect(screen.getByText('Email is required.')).toBeInTheDocument()
     expect(screen.getByText('Password is required.')).toBeInTheDocument()
     expect(screen.getByText('Please confirm your password.')).toBeInTheDocument()
@@ -58,6 +60,7 @@ describe('SignupPage', () => {
     renderSignupPage()
 
     await user.type(screen.getByLabelText('Full Name'), 'Jane Doe')
+    await user.type(screen.getByLabelText('Username'), 'jane_doe')
     await user.type(screen.getByLabelText('Email'), 'jane@example.com')
     await user.type(screen.getByLabelText('Password'), 'short')
     await user.type(screen.getByLabelText('Confirm Password'), 'short')
@@ -72,6 +75,7 @@ describe('SignupPage', () => {
     renderSignupPage()
 
     await user.type(screen.getByLabelText('Full Name'), 'Jane Doe')
+    await user.type(screen.getByLabelText('Username'), 'jane_doe')
     await user.type(screen.getByLabelText('Email'), 'jane@example.com')
     await user.type(screen.getByLabelText('Password'), 'correcthorse123')
     await user.type(screen.getByLabelText('Confirm Password'), 'somethingelse')
@@ -81,10 +85,62 @@ describe('SignupPage', () => {
     expect(mockedRegisterUser).not.toHaveBeenCalled()
   })
 
+  describe('username field', () => {
+    it('validates format in real time, as the user types, not only on submit', async () => {
+      const user = userEvent.setup()
+      renderSignupPage()
+
+      await user.type(screen.getByLabelText('Username'), 'ab')
+
+      expect(await screen.findByText(/between 3 and 30 characters/)).toBeInTheDocument()
+      // Never submitted - this is purely a live-typing check.
+      expect(mockedRegisterUser).not.toHaveBeenCalled()
+    })
+
+    it('clears the live validation error once the value becomes valid', async () => {
+      const user = userEvent.setup()
+      renderSignupPage()
+
+      const usernameInput = screen.getByLabelText('Username')
+      await user.type(usernameInput, 'ab')
+      expect(await screen.findByText(/between 3 and 30 characters/)).toBeInTheDocument()
+
+      await user.type(usernameInput, 'c')
+
+      expect(screen.queryByText(/between 3 and 30 characters/)).not.toBeInTheDocument()
+    })
+
+    it('flags disallowed characters as the user types', async () => {
+      const user = userEvent.setup()
+      renderSignupPage()
+
+      await user.type(screen.getByLabelText('Username'), 'not valid!')
+
+      expect(
+        await screen.findByText(/letters, numbers, underscores, and periods/),
+      ).toBeInTheDocument()
+    })
+
+    it('rejects an empty username on submit', async () => {
+      const user = userEvent.setup()
+      renderSignupPage()
+
+      await user.type(screen.getByLabelText('Full Name'), 'Jane Doe')
+      await user.type(screen.getByLabelText('Email'), 'jane@example.com')
+      await user.type(screen.getByLabelText('Password'), 'correcthorse123')
+      await user.type(screen.getByLabelText('Confirm Password'), 'correcthorse123')
+      await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+      expect(await screen.findByText('Username is required.')).toBeInTheDocument()
+      expect(mockedRegisterUser).not.toHaveBeenCalled()
+    })
+  })
+
   it('submits trimmed values and redirects to Login on success, without logging in', async () => {
     mockedRegisterUser.mockResolvedValue({
       id: 1,
       email: 'jane@example.com',
+      username: 'jane_doe',
       name: 'Jane Doe',
       created_at: '2026-01-01T00:00:00Z',
     })
@@ -92,6 +148,7 @@ describe('SignupPage', () => {
     renderSignupPage()
 
     await user.type(screen.getByLabelText('Full Name'), '  Jane Doe  ')
+    await user.type(screen.getByLabelText('Username'), '  jane_doe  ')
     await user.type(screen.getByLabelText('Email'), '  jane@example.com  ')
     await user.type(screen.getByLabelText('Password'), 'correcthorse123')
     await user.type(screen.getByLabelText('Confirm Password'), 'correcthorse123')
@@ -101,6 +158,7 @@ describe('SignupPage', () => {
       expect(mockedRegisterUser).toHaveBeenCalledWith({
         email: 'jane@example.com',
         password: 'correcthorse123',
+        username: 'jane_doe',
         name: 'Jane Doe',
       }),
     )
@@ -122,6 +180,23 @@ describe('SignupPage', () => {
       await screen.findByText('A user with this email is already registered'),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'true')
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('attaches a duplicate-username (409) error to the username field specifically', async () => {
+    mockedRegisterUser.mockRejectedValue({
+      status: 409,
+      message: 'This username is already taken',
+    })
+    const user = userEvent.setup()
+    renderSignupPage()
+
+    await fillValidForm(user)
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByText('This username is already taken')).toBeInTheDocument()
+    expect(screen.getByLabelText('Username')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Email')).not.toHaveAttribute('aria-invalid', 'true')
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
@@ -149,6 +224,7 @@ describe('SignupPage', () => {
             resolve({
               id: 1,
               email: 'jane@example.com',
+              username: 'jane_doe',
               name: 'Jane Doe',
               created_at: '2026-01-01T00:00:00Z',
             })
@@ -164,6 +240,7 @@ describe('SignupPage', () => {
       expect(screen.getByRole('button', { name: 'Creating account...' })).toBeDisabled()
     })
     expect(screen.getByLabelText('Full Name')).toBeDisabled()
+    expect(screen.getByLabelText('Username')).toBeDisabled()
     expect(screen.getByLabelText('Email')).toBeDisabled()
     expect(screen.getByLabelText('Password')).toBeDisabled()
     expect(screen.getByLabelText('Confirm Password')).toBeDisabled()

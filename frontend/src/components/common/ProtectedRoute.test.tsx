@@ -83,7 +83,13 @@ describe('ProtectedRoute', () => {
 
   it('renders children for an authenticated user', () => {
     mockedUseAuth.mockReturnValue({
-      user: { id: 1, email: 'a@example.com', name: 'A', created_at: '2026-01-01T00:00:00Z' },
+      user: {
+        id: 1,
+        email: 'a@example.com',
+        name: 'A',
+        username: null,
+        created_at: '2026-01-01T00:00:00Z',
+      },
       token: 'token',
       isAuthenticated: true,
       isLoading: false,

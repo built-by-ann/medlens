@@ -112,7 +112,13 @@ describe('DashboardPage', () => {
     mockedGetRecentAnalyses.mockReset()
     mockedGetRecentAnalyses.mockResolvedValue([])
     mockedUseAuth.mockReturnValue({
-      user: { id: 1, email: 'a@example.com', name: 'Jane', created_at: '2026-01-01T00:00:00Z' },
+      user: {
+        id: 1,
+        email: 'a@example.com',
+        name: 'Jane',
+        username: null,
+        created_at: '2026-01-01T00:00:00Z',
+      },
       token: 'token',
       isAuthenticated: true,
       isLoading: false,
@@ -134,7 +140,13 @@ describe('DashboardPage', () => {
   it('falls back to a generic welcome message when the user has no name', async () => {
     mockedListPatients.mockResolvedValue([])
     mockedUseAuth.mockReturnValue({
-      user: { id: 1, email: 'a@example.com', name: null, created_at: '2026-01-01T00:00:00Z' },
+      user: {
+        id: 1,
+        email: 'a@example.com',
+        name: null,
+        username: null,
+        created_at: '2026-01-01T00:00:00Z',
+      },
       token: 'token',
       isAuthenticated: true,
       isLoading: false,

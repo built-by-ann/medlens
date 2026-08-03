@@ -21,7 +21,13 @@ describe('SettingsPage', () => {
     localStorage.clear()
     document.documentElement.removeAttribute('data-theme')
     mockedUseAuth.mockReturnValue({
-      user: { id: 1, email: 'a@example.com', name: 'Jane Doe', created_at: '2026-01-01T00:00:00Z' },
+      user: {
+        id: 1,
+        email: 'a@example.com',
+        name: 'Jane Doe',
+        username: null,
+        created_at: '2026-01-01T00:00:00Z',
+      },
       token: 'token',
       isAuthenticated: true,
       isLoading: false,
