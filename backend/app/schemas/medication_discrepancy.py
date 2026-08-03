@@ -75,6 +75,7 @@ class ResolvedByResponse(BaseModel):
 
     id: int
     name: str | None
+    username: str | None
     email: str
 
 

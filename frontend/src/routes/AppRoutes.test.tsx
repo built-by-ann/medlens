@@ -56,7 +56,13 @@ describe('AppRoutes legacy route redirects', () => {
     mockedListAnalyses.mockResolvedValue([])
     mockedGetPatient.mockReturnValue(new Promise(() => {}))
     mockedUseAuth.mockReturnValue({
-      user: { id: 1, email: 'a@example.com', name: 'Jane', created_at: '2026-01-01T00:00:00Z' },
+      user: {
+        id: 1,
+        email: 'a@example.com',
+        name: 'Jane',
+        username: null,
+        created_at: '2026-01-01T00:00:00Z',
+      },
       token: 'token',
       isAuthenticated: true,
       isLoading: false,

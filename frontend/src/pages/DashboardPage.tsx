@@ -129,7 +129,23 @@ export function DashboardPage() {
         rearrangement, not a second navigation path through the page.
       */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start">
-        <div className="flex flex-col gap-4">
+        <section aria-labelledby="patients-heading" className="flex flex-col gap-4">
+          {/*
+            Always rendered, even while loading/erroring/empty - matches
+            Recent Analyses' heading below, which is never conditional
+            either. Previously this heading only appeared once patients
+            existed, so the empty state ("No patients yet") started flush
+            with the top of the grid row while Recent Analyses' card sat
+            below its own heading - the two columns' cards ended up at
+            different heights and looked misaligned. isSearching can only
+            be true once PatientSearch is actually rendered (patients.length
+            > 0, below), so this still reads "Recent patients" in every
+            other case without needing its own branch.
+          */}
+          <h2 id="patients-heading" className="text-lg font-semibold text-foreground">
+            {isSearching ? 'Search results' : 'Recent patients'}
+          </h2>
+
           {isLoading && <LoadingSpinner label="Loading your patients" />}
 
           {!isLoading && error && (
@@ -144,25 +160,19 @@ export function DashboardPage() {
             <>
               <PatientSearch value={searchTerm} onChange={setSearchTerm} />
 
-              <section aria-labelledby="patients-heading" className="flex flex-col gap-4">
-                <h2 id="patients-heading" className="text-lg font-semibold text-foreground">
-                  {isSearching ? 'Search results' : 'Recent patients'}
-                </h2>
-
-                {visiblePatients.length === 0 ? (
-                  <EmptyPatientState hasActivePatients={true} />
-                ) : (
-                  <PatientList
-                    patients={visiblePatients}
-                    onArchiveRequest={setPatientPendingArchive}
-                    showStatus
-                    showUpdatedAt
-                  />
-                )}
-              </section>
+              {visiblePatients.length === 0 ? (
+                <EmptyPatientState hasActivePatients={true} />
+              ) : (
+                <PatientList
+                  patients={visiblePatients}
+                  onArchiveRequest={setPatientPendingArchive}
+                  showStatus
+                  showUpdatedAt
+                />
+              )}
             </>
           )}
-        </div>
+        </section>
 
         <section aria-labelledby="recent-analyses-heading" className="flex flex-col gap-4">
           <h2 id="recent-analyses-heading" className="text-lg font-semibold text-foreground">

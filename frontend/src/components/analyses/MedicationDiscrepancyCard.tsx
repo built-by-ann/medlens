@@ -123,7 +123,12 @@ export function MedicationDiscrepancyCard({
             <p>
               {discrepancy.resolution_status === 'dismissed' ? 'Dismissed' : 'Resolved'}{' '}
               {discrepancy.resolved_by && (
-                <>by {discrepancy.resolved_by.name ?? discrepancy.resolved_by.email} </>
+                <>
+                  by{' '}
+                  {discrepancy.resolved_by.username ??
+                    discrepancy.resolved_by.name ??
+                    discrepancy.resolved_by.email}{' '}
+                </>
               )}
               on {formatResolvedAt(discrepancy.resolved_at)}
             </p>

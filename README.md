@@ -77,8 +77,9 @@ educational and portfolio purposes.**
 
 Implemented
 
-- User registration
-- User login
+- User registration, with a required, unique username (case-insensitive) chosen at signup
+- User login (always by email and password - a username is a profile field, not a credential)
+- Changing your username later from Settings
 - JWT authentication
 - Protected API endpoints
 

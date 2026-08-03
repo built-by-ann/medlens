@@ -102,7 +102,7 @@ describe('MedicationDiscrepancyCard', () => {
           resolution_status: 'resolved',
           resolution_action: 'add_medication',
           resolved_at: '2026-01-02T09:30:00Z',
-          resolved_by: { id: 3, name: 'Dr. Ann Lee', email: 'ann@example.com' },
+          resolved_by: { id: 3, name: 'Dr. Ann Lee', username: null, email: 'ann@example.com' },
         })}
       />,
     )
@@ -113,14 +113,30 @@ describe('MedicationDiscrepancyCard', () => {
     expect(screen.getByText(/Resolved by Dr\. Ann Lee/)).toBeInTheDocument()
   })
 
-  it('falls back to the resolver email when no name is on file', () => {
+  it('prefers the resolver username over their name, when both are on file', () => {
+    render(
+      <MedicationDiscrepancyCard
+        discrepancy={makeDiscrepancy({
+          resolution_status: 'resolved',
+          resolution_action: 'add_medication',
+          resolved_at: '2026-01-02T09:30:00Z',
+          resolved_by: { id: 3, name: 'Dr. Ann Lee', username: 'annlee', email: 'ann@example.com' },
+        })}
+      />,
+    )
+
+    expect(screen.getByText(/Resolved by annlee/)).toBeInTheDocument()
+    expect(screen.queryByText(/Resolved by Dr\. Ann Lee/)).not.toBeInTheDocument()
+  })
+
+  it('falls back to the resolver name, then email, when no username is on file', () => {
     render(
       <MedicationDiscrepancyCard
         discrepancy={makeDiscrepancy({
           resolution_status: 'dismissed',
           resolution_action: 'dismiss',
           resolved_at: '2026-01-02T09:30:00Z',
-          resolved_by: { id: 3, name: null, email: 'ann@example.com' },
+          resolved_by: { id: 3, name: null, username: null, email: 'ann@example.com' },
         })}
       />,
     )

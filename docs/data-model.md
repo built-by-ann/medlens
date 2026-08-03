@@ -67,9 +67,22 @@ id
 email
 hashed_password
 name
+username
 created_at
 updated_at
 ```
+
+### Field Notes
+
+```text
+username
+```
+
+Added in Issue #191. Optional and independent of authentication - login always uses email/password, regardless of whether a username is set (see Design Decisions). Nullable at the database level so every account that existed before this issue continues to work unchanged, with `username: null`; `POST /auth/register` requires one for every new account created from this point forward, but that requirement lives in the request schema (`UserCreate`), not the column itself.
+
+Unique **case-insensitively** - enforced by a functional index on `lower(username)` (see the Alembic migration) rather than a plain column-level unique constraint, which would only catch an exact-case duplicate. The value is still stored and returned exactly as the user typed it; only the *uniqueness check* folds case, not the stored value itself, so `jdoe` and `JDoe` cannot coexist but a user who registers as `JDoe` still sees `JDoe`, never `jdoe`, everywhere it's displayed.
+
+Format is validated in the same request schema, independent of the uniqueness check: 3-30 characters, containing only `a-z`, `A-Z`, `0-9`, `_`, and `.`.
 
 ### Relationships
 
@@ -847,6 +860,19 @@ The reconciliation workflow issue asked for a complete audit trail (who resolved
 `ResolutionAction` deliberately has only three values (`add_medication`, `update_medication`, `dismiss`), not one per UI-level action. The issue's own discrepancy-type examples name distinct actions per type ("Mark Discontinued," "Mark Active," "Update Medication," "Edit Manually") but every one of those, once a `Medication` already exists to modify, is the same operation: apply whichever fields the request supplies to that `Medication`. "Mark Discontinued" is `update_medication` with `status: "discontinued"`; "Edit Manually" is `update_medication` with provider-typed values instead of AI-suggested ones. The backend has no way to distinguish those two requests, nor any reason to - keeping the enum minimal avoids one API-level enum value per frontend button, consistent with `docs/api.md`'s existing "reuse existing services, keep reconciliation logic centralized" direction for this workflow, and pushes "which value to suggest for this button" entirely to the frontend, which already has the discrepancy's own evidence (`medication`, `medication_mention`) to derive a suggestion from.
 
 The `resolve_discrepancy` service function (`app/services/medication_discrepancy_service.py`) is additive to the existing reconciliation architecture, not a parallel workflow: it calls the same `create_medication`/`update_medication` functions `app/services/medication_service.py` already exposed to the medication-management routes, so there is exactly one place `Medication` rows are ever created or mutated, regardless of whether the request came from `PatientMedicationsPage`'s own form or from resolving a discrepancy.
+
+---
+
+### Issue #191: username added as a nullable column with case-insensitive uniqueness
+
+`User` gains a `username` column, nullable at the database level so every account created before this issue keeps working with no backfill and no downtime - the migration (`86d736611ffb`) only adds a column and an index, touching no existing row. `POST /auth/register` requires one for every account created from this point forward, but that's a request-schema rule (`UserCreate.username: str`), not a database constraint; the column itself stays nullable indefinitely, since there's no plan to force existing accounts to pick one retroactively.
+
+Uniqueness is enforced case-insensitively, which a plain `unique=True` column constraint cannot do - Postgres compares strings byte-for-byte for a standard unique index, so `jdoe` and `JDoe` would otherwise be treated as different values and be allowed to coexist, defeating the point of a human-facing handle meant to be unambiguous. The migration instead creates a **functional unique index** on `lower(username)`. This has two consequences worth being explicit about:
+
+- The stored value is never lowercased. A user who registers as `JDoe` is stored, returned, and displayed as `JDoe` everywhere - only the *uniqueness check* folds case, not the data itself. Re-fetching the same username later and comparing it byte-for-byte to what the user originally typed will always match.
+- NULLs are exempt from the uniqueness check entirely - Postgres never considers two NULLs equal in a unique index (functional or otherwise), so any number of pre-Issue-#191 accounts can share `username IS NULL` with no conflict. This is exactly what "existing users should continue working after migration" requires, and it falls out of a standard Postgres behavior rather than needing special-case handling in application code.
+
+The application layer (`app/services/user_service.py`'s `get_user_by_username`) queries with the same `lower(...)` comparison the index uses, so the friendly, request-time uniqueness check (`app/api/routes/auth.py`/`users.py` returning a `409` before anything touches the database's own constraint) and the database's own guarantee can never disagree about whether a given username is taken.
 
 ---
 

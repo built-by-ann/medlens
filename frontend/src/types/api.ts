@@ -10,6 +10,7 @@ export interface User {
   id: number
   email: string
   name: string | null
+  username: string | null
   created_at: string
 }
 
@@ -106,6 +107,7 @@ export type ResolutionAction = 'add_medication' | 'update_medication' | 'dismiss
 export interface ResolvedBy {
   id: number
   name: string | null
+  username: string | null
   email: string
 }
 

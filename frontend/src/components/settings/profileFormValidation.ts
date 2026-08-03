@@ -1,8 +1,9 @@
-import { isValidEmail } from '@/utils/validation'
+import { isValidEmail, usernameFormatError } from '@/utils/validation'
 
 export interface ProfileFormValues {
   firstName: string
   lastName: string
+  username: string
   email: string
 }
 
@@ -17,6 +18,17 @@ export function validateProfileForm(values: ProfileFormValues): ProfileFormError
 
   if (!values.lastName.trim()) {
     errors.lastName = 'Last name is required.'
+  }
+
+  // Unlike Signup, a blank username here is valid - it means "leave this
+  // unset" (existing accounts created before Issue #191 never had one) or
+  // "clear it", not "this form can't be submitted." Format is still
+  // checked whenever a value is actually present.
+  if (values.username.trim()) {
+    const formatError = usernameFormatError(values.username.trim())
+    if (formatError) {
+      errors.username = formatError
+    }
   }
 
   if (!values.email.trim()) {
@@ -35,7 +47,9 @@ export function validateProfileForm(values: ProfileFormValues): ProfileFormError
 // "First name", everything after it becomes "Last name". A name with more
 // than two words round-trips correctly (the whole remainder is preserved
 // as "Last name"), but this is necessarily a heuristic, not a real
-// structured field - see PROFILE_BACKEND_GAPS in ProfileSettings.tsx.
+// structured field. Unlike username (Issue #191), there is no plan to add
+// real first_name/last_name columns - see docs/frontend.md's Settings
+// section for the full reasoning.
 export function splitName(name: string | null): { firstName: string; lastName: string } {
   const trimmed = (name ?? '').trim()
 

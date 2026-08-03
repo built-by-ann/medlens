@@ -9,6 +9,7 @@ import {
 const validValues: ProfileFormValues = {
   firstName: 'Ann',
   lastName: 'Mathew',
+  username: 'annm',
   email: 'ann@example.com',
 }
 
@@ -17,12 +18,22 @@ describe('validateProfileForm', () => {
     expect(validateProfileForm(validValues)).toEqual({})
   })
 
-  it('requires first name, last name, and email', () => {
-    expect(validateProfileForm({ firstName: '', lastName: '', email: '' })).toEqual({
+  it('requires first name, last name, and email, but not username', () => {
+    expect(validateProfileForm({ firstName: '', lastName: '', username: '', email: '' })).toEqual({
       firstName: 'First name is required.',
       lastName: 'Last name is required.',
       email: 'Email is required.',
     })
+  })
+
+  it('rejects a malformed username, when one is present', () => {
+    expect(validateProfileForm({ ...validValues, username: 'ab' })).toEqual({
+      username: 'Username must be between 3 and 30 characters.',
+    })
+  })
+
+  it('accepts a blank username - it means "leave unset", not an error', () => {
+    expect(validateProfileForm({ ...validValues, username: '' })).toEqual({})
   })
 
   it('treats a whitespace-only value as missing', () => {

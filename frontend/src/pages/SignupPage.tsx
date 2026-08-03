@@ -1,3 +1,4 @@
+import type { ChangeEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Card } from '@/components/common/Card'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -7,13 +8,14 @@ import { FormError } from '@/components/common/FormError'
 import { registerUser } from '@/api/auth'
 import { useAuthForm } from '@/hooks/useAuthForm'
 import type { ApiError } from '@/api/client'
-import { isValidEmail } from '@/utils/validation'
+import { isValidEmail, usernameFormatError } from '@/utils/validation'
 import { ROUTES } from '@/routes/paths'
 
 const MIN_PASSWORD_LENGTH = 8
 
 interface FormValues {
   fullName: string
+  username: string
   email: string
   password: string
   confirmPassword: string
@@ -23,6 +25,7 @@ type FormErrors = Partial<Record<keyof FormValues, string>>
 
 const initialValues: FormValues = {
   fullName: '',
+  username: '',
   email: '',
   password: '',
   confirmPassword: '',
@@ -33,6 +36,15 @@ function validate(values: FormValues): FormErrors {
 
   if (!values.fullName.trim()) {
     errors.fullName = 'Full name is required.'
+  }
+
+  if (!values.username.trim()) {
+    errors.username = 'Username is required.'
+  } else {
+    const formatError = usernameFormatError(values.username.trim())
+    if (formatError) {
+      errors.username = formatError
+    }
   }
 
   if (!values.email.trim()) {
@@ -76,6 +88,7 @@ export function SignupPage() {
         await registerUser({
           email: values.email.trim(),
           password: values.password,
+          username: values.username.trim(),
           name: values.fullName.trim(),
         })
 
@@ -83,12 +96,16 @@ export function SignupPage() {
       } catch (error) {
         const apiError = error as ApiError
 
-        // A duplicate email is specifically about the email field, so it is
-        // shown inline like any other field error rather than as a generic
-        // banner. Every other failure (unexpected validation issues,
-        // network errors) is shown as a single form-level message instead,
-        // since it is not clearly attributable to one field.
-        if (apiError.status === 409) {
+        // A duplicate email or username is specifically about that one
+        // field, so it is shown inline like any other field error rather
+        // than as a generic banner - distinguished by the backend's own
+        // message text, since both failures share the same 409 status.
+        // Every other failure (unexpected validation issues, network
+        // errors) is shown as a single form-level message instead, since it
+        // is not clearly attributable to one field.
+        if (apiError.status === 409 && apiError.message.toLowerCase().includes('username')) {
+          setFieldError('username', apiError.message)
+        } else if (apiError.status === 409) {
           setFieldError('email', apiError.message)
         } else {
           setFormError(apiError.message)
@@ -96,6 +113,19 @@ export function SignupPage() {
       }
     },
   })
+
+  // Validates on every keystroke, not just on submit (unlike every other
+  // field here) - format mistakes are cheap to catch immediately, and a
+  // username has more ways to be malformed (length, character set) than
+  // this form's other fields. Clearing the error is just as immediate:
+  // setFieldError('username', '') is falsy, so Input renders no error at
+  // all - see Input's own `{error && ...}` check.
+  function handleUsernameChange(event: ChangeEvent<HTMLInputElement>) {
+    updateField('username')(event)
+
+    const trimmed = event.target.value.trim()
+    setFieldError('username', trimmed ? (usernameFormatError(trimmed) ?? '') : '')
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-12">
@@ -113,6 +143,17 @@ export function SignupPage() {
               value={values.fullName}
               onChange={updateField('fullName')}
               error={errors.fullName}
+              disabled={isSubmitting}
+              required
+            />
+            <Input
+              label="Username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              value={values.username}
+              onChange={handleUsernameChange}
+              error={errors.username}
               disabled={isSubmitting}
               required
             />

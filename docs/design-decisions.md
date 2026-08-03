@@ -468,6 +468,31 @@ Cons
 
 ---
 
+# Decision 21: Case-Insensitive Username Uniqueness via a Functional Index, Not a Normalized Column
+
+**Decision**
+
+Add `username` to `User` as a nullable `String` column with no column-level `unique` constraint. Uniqueness is enforced instead by a Postgres functional unique index on `lower(username)`, created in the Alembic migration. The application's own pre-check (`get_user_by_username`, `app/services/user_service.py`) queries with the same `lower(...)` comparison, so it can never disagree with what the database itself will actually accept.
+
+**Reasoning**
+
+The feature's own requirement is that usernames be unique case-insensitively - `jdoe` and `JDoe` must be treated as the same username. A plain `unique=True` column constraint can't express that; Postgres's default unique index compares raw bytes, so it would happily accept both. Two alternatives were considered and rejected: normalizing (lowercasing) the stored value itself would satisfy uniqueness but would silently discard whatever casing a user actually chose to type, which is a real, visible regression for a field whose entire purpose is being a human-facing handle; storing a second, always-lowercase shadow column purely for uniqueness checks would work but adds a column that exists solely to make an index possible, and a second write path that has to be kept in sync with the real one by hand. A functional index sidesteps both: Postgres computes and indexes `lower(username)` directly from the real column, so there's nothing to keep in sync and nothing about the stored value is ever altered.
+
+**Trade-offs**
+
+Pros
+
+- The username a user typed is exactly the username stored, returned, and displayed - the uniqueness rule is invisible to them except in the one case it's meant to be visible (being told a name is taken)
+- No second column, no application-level normalization step that could drift from what the database actually enforces
+- NULLs are exempt from any unique index in Postgres by default, so every pre-existing account (necessarily `username IS NULL`) needed zero backfill to stay valid after the migration
+
+Cons
+
+- A functional index is a less commonly reached-for tool than a plain unique constraint, so a future contributor unfamiliar with the pattern has to understand why `\d users` shows a `lower(username)` index rather than a straightforward one on the column itself
+- Case-insensitive matching happens in exactly two places by convention (the functional index, and `get_user_by_username`'s `func.lower(...)` query) rather than being enforced by a single reusable database type or constraint - a future query against `username` that forgets to lowercase both sides would silently miss a match rather than error
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:
