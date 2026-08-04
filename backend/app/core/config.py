@@ -5,6 +5,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "MedLens API"
     app_env: str = "development"
+    # Issue #61: surfaced by GET /health so a deployed instance's version
+    # is checkable without SSHing in to inspect the running image - a
+    # plain string, not derived from git or the Docker image tag, since
+    # neither is available to the running process today.
+    app_version: str = "1.0.0"
     database_url: str
 
     jwt_secret_key: str
