@@ -524,6 +524,40 @@ Cons
 
 ---
 
+# Decision 23: Same-Origin Deployment via nginx Reverse Proxy, Backend Made Internal-Only
+
+**Decision**
+
+The frontend's nginx container now reverse-proxies `/api/*` to the backend over the Docker network (`frontend/nginx.conf`), and the backend's host port is bound to `127.0.0.1` only (`infra/docker-compose.yml`), the same treatment `postgres` already had. The browser now reaches the entire application - SPA and API alike - through one origin; it never talks to the backend's own port at all. `VITE_API_BASE_URL` (baked into the frontend bundle at image build time) changes from an absolute URL to a relative path, `/api`, so the frontend never needs to know the backend's hostname, port, or protocol. `CORS_ALLOWED_ORIGINS` - the setting that let a deployed frontend's origin call the backend cross-origin - is removed entirely; nothing needs it anymore.
+
+**Reasoning**
+
+Before this, the backend's port had to be published publicly (`0.0.0.0`, reachable from the internet) purely so the browser could reach it directly, and the frontend had to be told that URL at image build time - which is also why a real deployment (`docs/deployment.md`'s AWS EC2 section) needed the instance's public IP known *before* building the frontend image, and why CORS existed as a whole layer of configuration in the first place. A reverse proxy removes the reason for all three: the backend is reachable by a fixed Docker Compose service name from inside the same container network nginx already runs in, so there's no reason for anything outside that network to reach it directly, and no cross-origin request for the browser to ever make.
+
+The CORS middleware itself is *not* removed, despite that - `npm run dev` (Vite's dev server, `docs/deployment.md`'s Local Development section) runs directly on a developer's host with no reverse proxy in front of it at all, and still makes a real cross-origin request to the backend's own port. That's the one genuine cross-origin case left in this application, and it still needs CORS to work; `configure_cors` (`app/main.py`) is scoped down to exactly that case (the existing `LOCALHOST_ORIGIN_REGEX`, unchanged, restricted to `app_env == "development"`) rather than removed outright.
+
+Two problems specific to reverse-proxying a service by its Compose name, not obvious from the requirement alone, had to be solved directly in `frontend/nginx.conf`:
+
+- **Stale upstream DNS after a partial redeploy.** `docs/deployment.md`'s own documented update flow rebuilds and recreates only the container whose image changed - a backend-only change never touches the running frontend container. A plain `proxy_pass http://backend:8000` resolves `backend`'s address once, at nginx startup, and caches it for the life of the worker process; after backend is recreated (a new container, typically a new IP), nginx would keep proxying to the dead address until it was *also* restarted - an outage this application's own deployment workflow would trigger on every backend-only update. Fixed with `resolver 127.0.0.11` (Docker's embedded DNS, present on every Compose network) plus a variable in `proxy_pass`, which defers resolution to request time instead of caching it from startup.
+- **The same fix also removes the need for `frontend: depends_on: backend`.** A static `proxy_pass` would need `backend`'s DNS name to exist by the time nginx starts, or nginx fails to start entirely (a fatal "host not found in upstream" error) - which would have meant re-adding the `depends_on: backend` that Issue #183 had specifically removed as unnecessary. The dynamic resolver above doesn't have this problem: nginx starts successfully even if `backend` doesn't exist yet, serves `/api/*` as `502` until it does, and self-heals with no restart needed once it appears - verified directly (`docker compose rm -f backend`, restart `frontend`, confirm it stays healthy and serves the SPA; bring `backend` back, confirm `/api/health` starts working with no action on `frontend`). This preserves Issue #183's "no unnecessary waiting" startup ordering rather than reintroducing the dependency this issue's own architecture change might otherwise have required.
+
+A third, easy-to-miss correctness issue: without explicit forwarding, every request the backend sees would show nginx's own Docker-network address as its `client_ip` (Issue #59's structured logging), not the real visitor's - `proxy_set_header X-Real-IP`/`X-Forwarded-For`/`X-Forwarded-Proto` in nginx, paired with `--forwarded-allow-ips='*'` on the backend's `uvicorn` invocation (`backend/Dockerfile`), fixes this. Trusting every source for that flag is safe specifically *because* of this same decision - the backend's port is no longer reachable by anything except nginx (and the host itself, for direct local access), so there's no untrusted party in a position to spoof those headers in the first place.
+
+**Trade-offs**
+
+Pros
+
+- One fewer thing to expose to the internet in production - the backend's own port is never reachable from outside the host at all, closing an attack surface that existed purely so the browser could reach it directly
+- The frontend image no longer needs the deployment's public hostname baked in at build time - `VITE_API_BASE_URL=/api` works unmodified for local Docker Compose *and* a real deployment, simplifying "Step 5: Configure environment variables" in `docs/deployment.md`'s AWS EC2 runbook to one fewer value to get right before building
+- Zero CORS preflight requests during normal application use (verified: no `Access-Control-*` response headers on any same-origin request through nginx) - one fewer request per API call in practice, and one fewer category of "why did this fail in production but work locally" bug class removed with it
+
+Cons
+
+- One more moving part in `frontend/nginx.conf` - a resolver, a rewrite, and forwarded headers, none of which are needed for `nginx.conf`'s previous job (serving static files) - all directly required to reverse-proxy correctly, not incidental complexity, but genuinely more nginx configuration to reason about than before
+- `npm run dev`'s dev-server flow and the Docker Compose/production flow now differ in an important way (one is cross-origin and needs CORS + an absolute backend URL, the other is same-origin and needs neither) - worth knowing about before assuming they behave identically, though each is now documented at its own env var (`frontend/.env.example`, `infra/.env.example`)
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:

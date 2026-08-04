@@ -25,12 +25,6 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"
 
-    # Comma-separated list of explicitly allowed frontend origins (e.g. a
-    # deployed frontend's URL). Local Vite dev servers do not need to be
-    # listed here; app.main allows any localhost/127.0.0.1 origin
-    # separately, but only outside production.
-    cors_allowed_origins: str = ""
-
     # Issue #58: which StorageService implementation
     # app/storage/service.py builds - "local" (the default, zero-config)
     # or "s3". See the model_validator below for what "s3" additionally
@@ -93,10 +87,6 @@ class Settings(BaseSettings):
                 )
 
         return self
-
-    @property
-    def cors_allowed_origins_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
 
 settings = Settings()
