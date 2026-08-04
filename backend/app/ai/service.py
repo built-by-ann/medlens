@@ -56,10 +56,13 @@ class AISummaryService:
             # response, so only a count is logged, never the errors or the
             # raw response itself.
             logger.warning(
-                "AI response failed validation provider=%s model=%s error_count=%d",
-                self._provider.name,
-                self._provider.model,
+                "AI response failed validation (%d error(s))",
                 error.error_count(),
+                extra={
+                    "event": "ai_response_validation_failed",
+                    "provider": self._provider.name,
+                    "model": self._provider.model,
+                },
             )
             raise AIProviderError("AI response failed validation") from error
 

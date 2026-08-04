@@ -124,7 +124,13 @@ def test_generate_summary_logs_api_error_message_server_side_only(monkeypatch, c
         provider.generate_summary("some prompt")
 
     assert "models/gemini-2.0-flash is not found" in caplog.text
-    assert "error_type=ClientError" in caplog.text
+    # error_type is a structured field (extra=), not part of the message
+    # text caplog.text renders - see app/core/logging_config.py's
+    # ALLOWED_FIELDS/JSONFormatter for why call sites pass fields this way
+    # rather than baking them into the message string.
+    (record,) = [r for r in caplog.records if r.event == "ai_request_failed"]
+    assert record.error_type == "ClientError"
+    assert record.provider == "gemini"
     # The API's failure description is server-side-log-only - it must never
     # reach the caller (see _safe_error_message, app/api/routes/analyses.py),
     # which only ever sees the generic wrapped message below.

@@ -1,4 +1,5 @@
 import json
+import logging
 
 import pytest
 
@@ -255,3 +256,40 @@ def test_summarize_rejects_unexpected_top_level_structure():
 
     with pytest.raises(AIProviderError):
         service.summarize(["Some clinical note."])
+
+
+def test_summarize_logs_validation_failure_without_leaking_the_raw_response(caplog):
+    # A wrong-typed dosage field carrying what looks like real clinical
+    # content (Pydantic's ValidationError.errors() echoes the offending
+    # input value back) - this is exactly the shape of data that must
+    # never reach a log line (Issue #59's "never log ... clinical document
+    # text" requirement), since the raw AI response can itself contain
+    # fragments of the clinical notes it was built from.
+    response = json.dumps(
+        {
+            "medications": [
+                {
+                    "name": "Sertraline",
+                    "dosage": ["patient reports feeling anxious and depressed, taking 50mg"],
+                    "route": "oral",
+                    "frequency": "once daily",
+                    "status": "active",
+                    "notes": None,
+                }
+            ],
+            "possible_inconsistencies": [],
+            "summary": "x",
+        }
+    )
+    provider = FakeProvider(response_text=response)
+    service = AISummaryService(provider)
+
+    with caplog.at_level(logging.WARNING), pytest.raises(AIProviderError):
+        service.summarize(["Some clinical note."])
+
+    (record,) = [r for r in caplog.records if r.event == "ai_response_validation_failed"]
+    assert record.provider == "fake"
+    assert record.model == "fake-model-1"
+    assert "anxious and depressed" not in caplog.text
+    assert "50mg" not in caplog.text
+    assert response not in caplog.text

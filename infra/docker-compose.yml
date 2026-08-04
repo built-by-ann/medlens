@@ -34,6 +34,9 @@ services:
       # Issue #61: reported as-is by GET /health - purely informational,
       # never used to gate any behavior.
       APP_VERSION: ${APP_VERSION:-1.0.0}
+      # Issue #59: root logger level - see docs/deployment.md's "Structured
+      # Application Logging" section.
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # Issue #58: defaults to local-filesystem storage (inside this
       # container - lost on every recreate, see infra/.env.example), zero
       # extra configuration needed. Settings' own startup validation

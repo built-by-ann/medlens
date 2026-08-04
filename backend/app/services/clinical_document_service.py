@@ -103,13 +103,22 @@ def create_clinical_document_from_file(
             storage.delete(storage_key)
         except StorageError:
             logger.warning(
-                "Failed to clean up orphaned storage object after a failed "
-                "document creation key=%s",
-                storage_key,
+                "Failed to clean up orphaned storage object after a failed document creation",
+                extra={"event": "storage_cleanup_failed"},
             )
         raise
 
     db.refresh(document)
+
+    logger.info(
+        "Clinical document uploaded",
+        extra={
+            "event": "document_uploaded",
+            "patient_id": patient.id,
+            "document_id": document.id,
+            "file_type": file_type,
+        },
+    )
 
     return document
 
@@ -175,6 +184,11 @@ def delete_clinical_document(
     db.delete(document)
     db.commit()
 
+    logger.info(
+        "Clinical document deleted",
+        extra={"event": "document_deleted", "patient_id": patient_id, "document_id": document_id},
+    )
+
     # The database record - what the user actually sees as "this document
     # is gone" - is already correctly deleted at this point, regardless of
     # what happens below. Deleting the storage object second, and treating
@@ -188,8 +202,12 @@ def delete_clinical_document(
             pass
         except StorageError:
             logger.warning(
-                "Failed to delete storage object for a deleted document key=%s",
-                storage_key,
+                "Failed to delete storage object for a deleted document",
+                extra={
+                    "event": "storage_delete_failed",
+                    "patient_id": patient_id,
+                    "document_id": document_id,
+                },
             )
 
     return True

@@ -298,8 +298,12 @@ def download_document(
         # ordinary, expected case above - since it means something is
         # wrong that a provider can't fix by doing anything differently.
         logger.warning(
-            "Document %s has a storage_key with no matching object in storage",
-            document_id,
+            "Document has a storage_key with no matching object in storage",
+            extra={
+                "event": "storage_object_missing",
+                "patient_id": patient.id,
+                "document_id": document_id,
+            },
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

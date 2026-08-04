@@ -167,6 +167,7 @@ A clean rebuild (`docker build --no-cache`) was verified to succeed for both ima
 | `AWS_REGION` / `S3_BUCKET_NAME` (Issue #58) | Backend **container runtime** | Only when `STORAGE_BACKEND=s3` | The backend fails to start with a clear error if either is missing while `s3` is selected - see "File Storage (S3)" below. |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (Issue #58) | Backend **container runtime** | No | Leave unset in production - an IAM role attached to the EC2 instance is used instead. Only set for local development against a real bucket. See "File Storage (S3)" below. |
 | `APP_VERSION` (Issue #61) | Backend **container runtime** | No - defaults to `1.0.0` | A plain configured string reported by `GET /health` (`docs/api.md`) - not derived from git or the image tag. Set it to whatever version identifier is meaningful for your deployment process. |
+| `LOG_LEVEL` (Issue #59) | Backend **container runtime** | No - defaults to `INFO` | Root logger level - see "Structured Application Logging" below. |
 
 The distinction in the first row - a frontend *build* argument versus every other variable being a *runtime* one - is the one genuinely non-obvious piece of configuration to get right, and is why `frontend/Dockerfile`'s `ARG`/`ENV` pair and `frontend.yml`'s `--build-arg` flag exist at all (see `docs/frontend.md`'s Continuous Integration section).
 
@@ -497,6 +498,51 @@ AWS_SECRET_ACCESS_KEY=<your own AWS secret key>
 
 ---
 
+## Structured Application Logging (Issue #59)
+
+See `docs/architecture.md`'s "Structured Logging" section for how this is implemented; this section covers what's relevant when actually running or operating the application.
+
+### Environment variables
+
+| Variable | Default | Notes |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | Passed straight to Python's `logging` as the root logger's level. `INFO` surfaces the per-request summary line and every application lifecycle event this issue added; `DEBUG` additionally surfaces third-party libraries' own debug output (e.g. SQLAlchemy query logs). |
+| `APP_ENV` | `development` | Already existed (Docker Image Builds, above) - also selects the log format: a readable `key=value` line in `development`, one JSON object per line otherwise. |
+
+### Log format
+
+**Production (`APP_ENV` anything other than `development`)** - one JSON object per line, e.g.:
+
+```json
+{"timestamp": "2026-08-04T18:07:52.854Z", "level": "INFO", "logger": "app.core.logging_config", "event": "http_request_completed", "message": "Request completed", "request_id": "5b7ee380-...", "method": "GET", "path": "/patients/1/clinical-documents", "status_code": 200, "duration_ms": 12.3, "client_ip": "203.0.113.4", "user_id": 42}
+```
+
+Pipe through `jq` for readability: `docker compose logs backend | jq -R 'fromjson? // .'` (the `// .` fallback passes through any non-JSON line, e.g. Alembic's own migration log lines, unchanged, rather than erroring).
+
+**Development (`APP_ENV=development`, the Docker Compose default)** - one readable line per record:
+
+```text
+2026-08-04T18:07:52.854Z INFO     app.core.logging_config event=http_request_completed status_code=200 duration_ms=12.3 request_id=5b7ee380-... user_id=42
+```
+
+### Request tracing
+
+Every response includes an `X-Request-ID` header (a fresh `uuid4` per request), matching the `request_id` field on every log line emitted while handling that request - useful for correlating a specific failed request (reported by its `X-Request-ID`) back to its exact log lines, including any `login_succeeded`/`document_uploaded`/`analysis_failed`/etc. event logged during it.
+
+### Uvicorn's access log is disabled
+
+The `backend` container's `CMD` runs `uvicorn ... --no-access-log` (`backend/Dockerfile`) - the application's own request-logging middleware already logs exactly one structured line per completed request (`http_request_completed`), so uvicorn's own differently-formatted access log line is turned off rather than appearing as a confusing second line for the same request.
+
+### Never logged
+
+Passwords, JWTs, `Authorization` headers, AWS credentials, Gemini prompts, and clinical document/file content are never logged anywhere in the codebase - not filtered out after the fact, simply never passed to a `logger` call in the first place. As defense in depth, every log record is additionally rendered through a fixed field allowlist (`ALLOWED_FIELDS`, `app/core/logging_config.py`) - a field outside that list is silently dropped even if some future call site passed it via `extra=`. See `docs/design-decisions.md`'s Decision 22 and `docs/architecture.md`'s Structured Logging section for the full reasoning, and `backend/tests/test_logging_config.py`/`test_request_logging_middleware.py` for the tests verifying it.
+
+### Viewing logs
+
+Unchanged from the commands in Viewing logs, above (`docker compose logs backend`, etc.) - this issue changes the *content* and *format* of what's logged, not how logs are viewed or where they go. Shipping logs somewhere queryable (e.g. CloudWatch) remains a future improvement - see Monitoring, below.
+
+---
+
 ## Continuous Deployment
 
 The planned deployment workflow is:
@@ -513,14 +559,14 @@ The planned deployment workflow is:
 
 ## Monitoring
 
-What exists today: `GET /health` (checked manually - see Verifying the deployment above), Docker-level `healthcheck`s for all three containers (`docker compose ps` shows current status), and plain container logs (`docker compose logs`). No structured/shipped logging, request tracing, or processing-time metrics exist yet - see "AWS EC2 Deployment"'s Production Readiness subsection above for why this is an explicitly deferred limitation rather than an oversight.
+What exists today: `GET /health` (checked manually - see Verifying the deployment above), Docker-level `healthcheck`s for all three containers (`docker compose ps` shows current status), and structured application logs with per-request tracing (Structured Application Logging, above) - one JSON line per completed request (`http_request_completed`, with `duration_ms`) plus every major lifecycle event (login, registration, document upload/deletion, analysis started/completed/failed, storage/AI provider failures), all correlatable by `request_id`/`X-Request-ID`. What's still missing: nothing pages anyone automatically, logs aren't shipped anywhere queryable (they're read via `docker compose logs`, not a log aggregator), and there are no aggregated performance dashboards - see "AWS EC2 Deployment"'s Production Readiness subsection above for why this is an explicitly deferred limitation rather than an oversight.
 
 Future improvements may include:
 
 - AWS CloudWatch
 - Sentry
 - Performance dashboards
-- Structured (JSON) application logs, shipped somewhere queryable
+- Shipping the existing structured (JSON) application logs somewhere queryable
 
 ---
 

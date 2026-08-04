@@ -495,6 +495,35 @@ Cons
 
 ---
 
+# Decision 22: Centrally-Configured Structured Logging with an Allowlist for Log Fields
+
+**Decision**
+
+One module, `app/core/logging_config.py`, owns all logging configuration for the entire backend - handler, formatter, and a `logging.Filter` that injects request-scoped context - configured once at import time (`configure_logging`, called from `app/main.py`) on the root logger, so every existing `logging.getLogger(__name__)` call in the codebase is picked up without being changed itself. Every log record is rendered through a fixed allowlist of field names (`ALLOWED_FIELDS`): a field passed via `extra={...}` that isn't in this tuple is silently dropped by both formatters, rather than reaching a log line.
+
+**Reasoning**
+
+The alternative to centralizing configuration - each module calling `logging.basicConfig` or configuring its own handler - was already implicitly ruled out by there being no logging configuration at all before this issue (four loggers running on Python's default, unconfigured root logger). A single `configure_x(app, ...)` function wired up once from `app/main.py` is the pattern this codebase already uses for other cross-cutting concerns (`configure_cors`); logging fits the same shape rather than inventing a new one.
+
+The allowlist is the more consequential decision. This application handles synthetic clinical data, but the logging code that handles it doesn't get to assume every future call site will remember that credentials, tokens, prompts, and document text must never be logged - a project convention enforced only by developer discipline doesn't survive a rushed debugging session where someone adds `extra={"raw_response": response}` to see what a failure looked like. Making the field list an allowlist, not a denylist, means that mistake fails safe: the added field simply never appears in the rendered output until someone deliberately adds it to `ALLOWED_FIELDS`, a small, visible, single-file change that's easy to catch in review. A denylist (block known-bad field names) would have the opposite failure mode - safe only until someone invents a new sensitive field name the denylist doesn't yet know about.
+
+`user_id` specifically could not be carried the same way as `request_id`/`method`/`path`/`client_ip` (all via a `contextvars.ContextVar`, set once by the request-logging middleware and read by every log call during that request). Every dependency and route handler in this codebase is a synchronous `def`, and Starlette runs each one via `run_in_threadpool`, which executes it inside its own *copy* of the current context - a `ContextVar.set()` made inside `get_current_user` (itself a sync dependency) is invisible to sibling dependencies or to the middleware's own code, even within the same request, even on the same thread (verified empirically: a minimal diagnostic FastAPI app with three sync dependencies sharing one OS thread still couldn't see one dependency's `ContextVar.set()` from another). `request.state` - a plain mutable attribute on the one `Request` object every dependency and the middleware share - is not subject to that per-call context-copy isolation, so `user_id` rides `request.state` instead, read back by the middleware after `call_next()` returns.
+
+**Trade-offs**
+
+Pros
+
+- A field can never leak into a log line by accident - it must be added to `ALLOWED_FIELDS` first, a deliberate, reviewable step, not a runtime configuration flag someone could get wrong
+- Zero new third-party dependencies - the standard library's `logging` module, already in use, is centrally configured rather than replaced
+- JSON in production (`JSONFormatter`), a readable single line in development (`ConsoleFormatter`) - the same underlying fields either way, so a log aggregator and a developer's terminal never disagree about what's available, only how it's displayed
+
+Cons
+
+- The allowlist is one more place to update when a genuinely new, safe field is needed - a small but real tax on adding new structured log data going forward
+- `user_id`'s `request.state`-based path is asymmetric with every other context field (which use the `ContextVar` uniformly) - a direct consequence of this codebase's synchronous-dependency architecture rather than a free design choice, and worth knowing about before assuming a new context field can simply be added to `RequestContextFilter._CONTEXT_FIELDS` without checking whether it's set from inside a sync dependency the same way `user_id` is
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:
