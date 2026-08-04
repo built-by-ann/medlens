@@ -48,20 +48,34 @@ app = FastAPI(title="MedLens API", lifespan=lifespan)
 # Vite's dev server picks the next free port (5173, 5174, ...) if the
 # default is taken, so a fixed port list would break the next time that
 # happens. A regex covers any localhost/127.0.0.1 port instead. This is
-# intentionally restricted to non-production environments; a deployed
-# frontend origin belongs in CORS_ALLOWED_ORIGINS instead, never here.
+# intentionally restricted to non-production environments.
 LOCALHOST_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1):\d+$"
 
 
-def configure_cors(app: FastAPI, app_env: str, allowed_origins: list[str]) -> None:
+def configure_cors(app: FastAPI, app_env: str) -> None:
     """Adds the CORS middleware. Extracted from module scope, with the
-    environment and allowed origins passed in explicitly rather than read
-    from the global settings object, purely so tests can exercise this
-    against multiple environments without relying on process-wide state.
+    environment passed in explicitly rather than read from the global
+    settings object, purely so tests can exercise this against multiple
+    environments without relying on process-wide state.
+
+    Retained for exactly one case (Issue #190): `npm run dev`'s Vite dev
+    server runs outside Docker and talks to this backend directly and
+    cross-origin (see docs/deployment.md's Local Development section) -
+    that's the only real cross-origin request this application ever
+    receives. Every other path - the Docker Compose / production frontend
+    image, and any real deployment - now reaches this backend exclusively
+    through the frontend container's own nginx reverse proxy
+    (frontend/nginx.conf), which is same-origin from the browser's point
+    of view and never triggers CORS at all. There is deliberately no
+    allow_origins list for a deployed frontend origin anymore (Issue #57
+    originally added CORS_ALLOWED_ORIGINS for exactly that, since removed -
+    see docs/design-decisions.md, Decision 23) - nothing outside local dev
+    needs one, so allow_origins is always empty; only the regex below,
+    itself already restricted to non-production, ever allows anything.
     """
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins,
+        allow_origins=[],
         allow_origin_regex=LOCALHOST_ORIGIN_REGEX if app_env == "development" else None,
         allow_credentials=False,
         allow_methods=["*"],
@@ -69,7 +83,7 @@ def configure_cors(app: FastAPI, app_env: str, allowed_origins: list[str]) -> No
     )
 
 
-configure_cors(app, settings.app_env, settings.cors_allowed_origins_list)
+configure_cors(app, settings.app_env)
 # Request-scoped logging context (request_id/method/path/client_ip) and the
 # one-line-per-request summary log - registered after CORS so a preflight
 # OPTIONS request is still handled (and logged) the same as any other

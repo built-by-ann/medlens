@@ -286,7 +286,7 @@ cd infra
 docker compose up --build
 ```
 
-This also builds and starts a `frontend` container (a production build served by nginx, at http://localhost:8080) for validating that image - see `docs/deployment.md`'s "Docker Image Builds" section. For active frontend development, run it directly instead, which hot-reloads:
+This also builds and starts a `frontend` container (a production build served by nginx, at http://localhost - it reverse-proxies API requests to the backend, so the whole app is reachable at this one address) for validating that image - see `docs/deployment.md`'s "Docker Image Builds" section. For active frontend development, run it directly instead, which hot-reloads:
 
 ``` bash
 cd frontend
@@ -307,18 +307,20 @@ python -m pytest -v
 
 # Deployment
 
-MedLens deploys to a single AWS EC2 instance running the same three Docker containers (`frontend`, `backend`, `postgres`) as local development, coordinated by the same `infra/docker-compose.yml` - no separate production-only configuration, no reverse proxy, no container orchestration platform.
+MedLens deploys to a single AWS EC2 instance running the same three Docker containers (`frontend`, `backend`, `postgres`) as local development, coordinated by the same `infra/docker-compose.yml` - no separate production-only configuration, no container orchestration platform. The frontend container's nginx is the app's one public entry point: it serves the built React SPA and reverse-proxies `/api/*` requests to the backend, which is otherwise unreachable from outside the Docker network.
 
 ``` text
 Internet
     │
-    ├── :8080 ─▶ frontend container (nginx, static build)
-    └── :8000 ─▶ backend container (uvicorn)
-                      │
-                      ▼
-              postgres container
-           (127.0.0.1 only - never
-            reachable from outside)
+    └── :80 ─▶ frontend container (nginx)
+                 ├─ serves the built React SPA
+                 └─ reverse-proxies /api/* ──▶ backend container (uvicorn)
+                                                (127.0.0.1 only - never
+                                                 reachable from outside)   │
+                                                                            ▼
+                                                                    postgres container
+                                                                 (127.0.0.1 only - never
+                                                                  reachable from outside)
 ```
 
 Short version, on a fresh Ubuntu EC2 instance:
@@ -330,13 +332,13 @@ sudo usermod -aG docker $USER    # log out and back in after this line
 git clone https://github.com/built-by-ann/medlens.git
 cd medlens/infra
 cp .env.example .env
-nano .env   # set JWT_SECRET_KEY, POSTGRES_PASSWORD, VITE_API_BASE_URL, APP_ENV=production, CORS_ALLOWED_ORIGINS
+nano .env   # set JWT_SECRET_KEY, POSTGRES_PASSWORD, APP_ENV=production
 
 docker compose build
 docker compose up -d
 ```
 
-**See `docs/deployment.md`'s "AWS EC2 Deployment" section for the complete runbook** - launching and sizing the instance, security group configuration, every environment variable and where it's used, updating a running deployment, rollback, viewing logs, troubleshooting, and the full list of what's intentionally deferred (HTTPS, a custom domain, a reverse proxy, automated deployment, monitoring, and backups - all explicitly out of scope for now, not overlooked).
+**See `docs/deployment.md`'s "AWS EC2 Deployment" section for the complete runbook** - launching and sizing the instance, security group configuration, every environment variable and where it's used, updating a running deployment, rollback, viewing logs, troubleshooting, and the full list of what's intentionally deferred (HTTPS, a custom domain, automated deployment, monitoring, and backups - all explicitly out of scope for now, not overlooked).
 
 ------------------------------------------------------------------------
 
