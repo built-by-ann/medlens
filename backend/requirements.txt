@@ -12,3 +12,4 @@ pyjwt
 python-multipart
 pypdf
 google-genai
+boto3

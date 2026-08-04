@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 import psycopg2
 from dotenv import load_dotenv
@@ -12,6 +13,18 @@ _test_database_url = _dev_database_url.rsplit("/", 1)[0] + f"/{_test_db_name}"
 assert _test_db_name in _test_database_url
 
 os.environ["DATABASE_URL"] = _test_database_url
+
+# Forced to "local" (even if a developer's own backend/.env has
+# STORAGE_BACKEND=s3 set for their own manual testing against a real
+# bucket) and pointed at a fresh temp directory, for the same reason the
+# database above is swapped for a dedicated test database: tests must
+# never depend on, or write into, whatever a developer happens to have
+# configured for local development. A session-scoped temp directory (not
+# per-test) is deliberate - LocalStorageService's own key generation
+# already guarantees every uploaded object gets a unique path, so nothing
+# ever collides between tests even though they share one directory.
+os.environ["STORAGE_BACKEND"] = "local"
+os.environ["LOCAL_STORAGE_DIR"] = tempfile.mkdtemp(prefix="medlens_test_storage_")
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

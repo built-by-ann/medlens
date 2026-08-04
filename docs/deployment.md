@@ -163,6 +163,9 @@ A clean rebuild (`docker build --no-cache`) was verified to succeed for both ima
 | `APP_ENV` (Issue #57) | Backend **container runtime** | No - defaults to `development` | `development` auto-allows any `localhost`/`127.0.0.1` origin for CORS in addition to `CORS_ALLOWED_ORIGINS` (see `app/main.py`) - correct for local Docker use, wrong for a real deployment, which should set this to `production`. |
 | `POSTGRES_PASSWORD` (Issue #57) | Backend + `postgres` **container runtime** | No - defaults to `medlens_password` | `infra/docker-compose.yml` references this one variable in both the `postgres` service's own credentials and the backend's `DATABASE_URL`, so they can't drift out of sync. Change it before any real deployment. |
 | `FRONTEND_PORT` / `BACKEND_PORT` (Issue #57) | Host, at `docker compose up` time | No - default to `8080`/`8000` | Which host ports Compose publishes the containers on - not read by the application itself. Set `FRONTEND_PORT=80` for a deployment reachable at `http://<ec2-public-ip>/` with no port suffix. |
+| `STORAGE_BACKEND` (Issue #58) | Backend **container runtime** | No - defaults to `local` | `local` or `s3` - see the "File Storage (S3)" section below for the full setup. |
+| `AWS_REGION` / `S3_BUCKET_NAME` (Issue #58) | Backend **container runtime** | Only when `STORAGE_BACKEND=s3` | The backend fails to start with a clear error if either is missing while `s3` is selected - see "File Storage (S3)" below. |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (Issue #58) | Backend **container runtime** | No | Leave unset in production - an IAM role attached to the EC2 instance is used instead. Only set for local development against a real bucket. See "File Storage (S3)" below. |
 
 The distinction in the first row - a frontend *build* argument versus every other variable being a *runtime* one - is the one genuinely non-obvious piece of configuration to get right, and is why `frontend/Dockerfile`'s `ARG`/`ENV` pair and `frontend.yml`'s `--build-arg` flag exist at all (see `docs/frontend.md`'s Continuous Integration section).
 
@@ -399,9 +402,97 @@ Also added, for the reliability this issue's own task list asks for: `restart: u
 | Reverse proxy | Currently two ports to expose and remember instead of one; also a prerequisite for HTTPS (e.g. Caddy/nginx with Let's Encrypt) | None - see Deployment Architecture above |
 | Automated deployment | "Deploy" (Continuous Deployment's step 7) is a manual SSH session today, not triggered by merging to `main` | The manual procedure in Updating the application, above |
 | Monitoring / alerting | Nothing pages anyone if a container is unhealthy for an extended period | `docker compose ps`/`GET /health`, checked by hand |
-| Backups | `docker compose down -v` (or any volume loss) is unrecoverable data loss | The named volume persists across container/instance restarts (verified - see Manual Verification), but nothing protects against genuine volume loss |
+| Backups | `docker compose down -v` (or any volume loss) is unrecoverable data loss | The named volume persists across container/instance restarts (verified - see Manual Verification), but nothing protects against genuine volume loss. Uploaded *files* specifically have a better story once S3 is configured (Issue #58, below) - S3 durability is independent of this EC2 instance entirely - but the *metadata* pointing to them (`ClinicalDocument.storage_key`, in Postgres) is not, so losing the database volume still means those S3 objects become unreachable through the application even though the bytes themselves survive |
 | Managed database (RDS) | A single Postgres container has no automated failover or point-in-time recovery | The `postgres` container + named volume, as deployed |
 | Kubernetes / ECS / EKS | Out of scope for this issue by explicit instruction, and unnecessary at this project's actual scale (one instance, one of each container) | Docker Compose, as it already was |
+
+---
+
+## File Storage (S3) (Issue #58)
+
+Uploaded clinical document files (the original `.txt`/`.pdf`/`.csv`, not just their extracted text) are stored through a pluggable `StorageService` - see `docs/architecture.md`'s Storage Abstraction section for the interface and both implementations. This section is the operational half: creating a bucket, its IAM policy, and the environment variables that select and configure S3 in a real deployment.
+
+### Choosing a backend
+
+`STORAGE_BACKEND` (default `local`) selects which `StorageService` implementation the backend uses - set via `infra/.env` (Docker Compose - see `infra/.env.example`) or `backend/.env` (running the backend directly - see `backend/.env.example`). Switching it is a configuration change, never a code change:
+
+| `STORAGE_BACKEND` | Where files go | Survives the container being recreated? | Extra configuration needed |
+|---|---|---|---|
+| `local` (default) | Inside the backend container's own filesystem (`LOCAL_STORAGE_DIR`, default `./storage/clinical_documents`) | No - lost on every `docker compose up`/redeploy that recreates the backend container (see Updating the application, above) | None |
+| `s3` | A private S3 bucket | Yes - independent of the EC2 instance and its containers entirely | `AWS_REGION`, `S3_BUCKET_NAME` (required); `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (only for local testing against a real bucket - see Security below) |
+
+`local` is fine for trying the application out; **`s3` is what a real deployment should use**, since local storage is silently lost the next time the backend container is recreated - exactly the kind of file loss "Updating the application" (above) causes routinely and doesn't otherwise warn about.
+
+If `STORAGE_BACKEND=s3` is set without `AWS_REGION` or `S3_BUCKET_NAME`, the backend **fails to start** with a clear error naming exactly which variable is missing (`Settings`'s own startup validation, `backend/app/core/config.py`) - not a runtime failure on the first upload.
+
+### Creating the bucket
+
+```bash
+aws s3api create-bucket \
+  --bucket medlens-documents-<something-unique> \
+  --region us-east-1
+
+# Block all public access - defense in depth alongside the private ACL
+# every upload already sets (see docs/architecture.md).
+aws s3api put-public-access-block \
+  --bucket medlens-documents-<something-unique> \
+  --public-access-block-configuration \
+    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+```
+
+S3 bucket names are globally unique across all of AWS, not just your account - `<something-unique>` needs to be genuinely unique (e.g. a suffix from `uuidgen` or your AWS account id), and is otherwise unconstrained by this application (`S3_BUCKET_NAME` accepts whatever name the bucket was actually created with).
+
+### IAM permissions
+
+The backend needs exactly three S3 actions, scoped to this one bucket - never broader `s3:*` or account-wide access:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::medlens-documents-<something-unique>/*"
+    }
+  ]
+}
+```
+
+`s3:DeleteObject` is included because `DELETE /patients/{patient_id}/clinical-documents/{document_id}` deletes the S3 object along with the database row (`docs/api.md`). No `s3:ListBucket` is needed - every operation this application performs (`upload`/`download`/`delete`) addresses a specific, already-known key; it never lists a bucket's contents.
+
+**Recommended: an IAM role attached to the EC2 instance**, not a long-lived access key pair - this is what this feature's own "use IAM credentials" requirement means in practice, and it's also what `S3StorageService`'s credential handling is built around (see `docs/architecture.md`): leave `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` unset in `infra/.env`, and `boto3` picks up the role automatically via EC2 instance metadata, with nothing to rotate and nothing that could leak from a config file. Attach the policy above to a role, then attach that role to the EC2 instance (via an instance profile) at launch or afterward.
+
+### Environment variables
+
+Already covered in the Environment Variables table under Docker Image Builds, above; summarized here for the S3-specific ones:
+
+| Variable | Required when `STORAGE_BACKEND=s3` | Notes |
+|---|---|---|
+| `AWS_REGION` | Yes | The bucket's region, e.g. `us-east-1`. |
+| `S3_BUCKET_NAME` | Yes | Must already exist - this application never creates a bucket itself. |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | No | Leave both unset on a real deployment (see IAM role, above). Only set for local development against a real bucket using your own AWS credentials - never commit real values. |
+
+### Local development against a real bucket
+
+Local development defaults to `STORAGE_BACKEND=local` and needs no AWS account at all. To test against a real S3 bucket instead, set in `backend/.env` (running the backend directly) or `infra/.env` (Docker Compose):
+
+```bash
+STORAGE_BACKEND=s3
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=medlens-documents-<something-unique>
+AWS_ACCESS_KEY_ID=<your own AWS access key>
+AWS_SECRET_ACCESS_KEY=<your own AWS secret key>
+```
+
+### Security
+
+- **Never public.** Every uploaded object is stored with `ACL="private"` (`app/storage/s3.py`), and the bucket itself should additionally block public access at the account level (`put-public-access-block`, above) - two independent layers, so a mistake in either alone doesn't make an object public.
+- **No public object URLs, ever.** `GET .../{document_id}/download` (`docs/api.md`) streams the file's bytes through the backend process itself; the response is never a redirect to an S3 URL (pre-signed or otherwise), and no endpoint anywhere returns a bucket URL or object key to the client.
+- **IAM credentials, not long-lived keys**, in production - see IAM permissions above.
+- **Least-privilege policy** - `PutObject`/`GetObject`/`DeleteObject` scoped to one bucket's objects only, nothing account-wide.
+- **Content type and filename validation are unchanged by this feature** - `upload-txt`/`upload-pdf`/`upload-csv` still validate extension/content-type/encoding/extractability exactly as before Issue #58 (`docs/api.md`); a file that fails any of those checks is rejected before storage is ever touched.
+- **No AWS credential is ever logged.** Verified directly: `tests/test_storage_service.py::test_s3_credentials_are_never_included_in_a_raised_error_message` asserts a fake secret key and access key id never appear in a raised `StorageError`'s message, and `S3StorageService`/`LocalStorageService` never call `logger` with anything credential-shaped - the only things logged anywhere in the storage path are object keys and generic failure descriptions (`app/services/clinical_document_service.py`, `app/api/routes/clinical_documents.py`).
 
 ---
 
