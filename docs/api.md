@@ -10,11 +10,18 @@ All endpoints return JSON.
 
 ## Base URL
 
+Every endpoint in this document is documented by its path alone (e.g. `POST /auth/login`) - which base URL that path is relative to depends on how you're reaching the backend:
+
 ```text
-http://localhost:8000
+http://localhost:8000       # direct access - running the backend with `uvicorn app.main:app --reload`,
+                             # or Docker Compose's backend container (127.0.0.1 only - see docs/deployment.md)
+http://<app-origin>/api      # through the app itself (Issue #190) - the frontend's own origin, prefixed
+                             # with /api, e.g. https://medlenshealth.com/api/auth/login. This is what the
+                             # browser actually uses; nginx reverse-proxies /api/* to the backend and
+                             # strips the prefix, so POST /api/auth/login here means POST /auth/login below.
 ```
 
-This is the local development URL when running the backend directly (`uvicorn app.main:app --reload`) or through Docker Compose (`docker compose up --build` from `infra/`).
+The browser never uses the first form - only tools talking to the backend directly (`curl`, Postman, the API docs above) do, and even then only from the same host the backend is running on, or over the Docker network - see `docs/deployment.md`'s Reverse Proxy section for why.
 
 ---
 

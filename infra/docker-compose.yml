@@ -3,7 +3,17 @@ services:
     build:
       context: ../backend
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      # 127.0.0.1, not a bare port publish (Issue #190): the browser now
+      # only ever reaches this service through the frontend container's
+      # nginx reverse proxy (frontend/nginx.conf), which reaches it over
+      # the Docker network by service name, not through this published
+      # port at all - published ports are only ever a host-to-container
+      # path, never used for container-to-container traffic. This exists
+      # purely so a developer on the host itself can still reach the API
+      # directly (curl, Postman, `npm run dev`'s Vite dev server - see
+      # docs/deployment.md), the same reasoning already applied to
+      # postgres below.
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     environment:
       # POSTGRES_PASSWORD is shared with the postgres service below - both
       # read the same variable so they can never drift out of sync.
@@ -25,12 +35,14 @@ services:
       # any image - just a container restart.
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       # development (the default) auto-allows any localhost/127.0.0.1
-      # origin for CORS in addition to CORS_ALLOWED_ORIGINS (see
-      # app/main.py) - correct for local Docker use, but a real deployment
-      # must set this to "production" and set CORS_ALLOWED_ORIGINS
-      # explicitly, or the deployed frontend's origin will be rejected.
+      # origin for CORS (see app/main.py's configure_cors) - relevant only
+      # to `npm run dev`'s Vite dev server, which talks to this container
+      # directly and cross-origin (see docs/deployment.md). Every request
+      # that goes through the frontend container's nginx reverse proxy
+      # (Issue #190) is same-origin and never triggers CORS at all, in
+      # either environment, so there is no production equivalent of this
+      # setting to configure - see docs/design-decisions.md, Decision 23.
       APP_ENV: ${APP_ENV:-development}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       # Issue #61: reported as-is by GET /health - purely informational,
       # never used to gate any behavior.
       APP_VERSION: ${APP_VERSION:-1.0.0}
@@ -80,15 +92,19 @@ services:
       context: ../frontend
       args:
         # Baked into the built JS bundle at image build time (see
-        # frontend/Dockerfile) - the browser, not this container, is what
-        # actually calls the backend, so this must be a real, publicly
-        # reachable URL for a deployment (e.g. http://<ec2-public-ip>:8000),
-        # not backend's in-network service name. Rebuild the image (`docker
+        # frontend/Dockerfile) - a relative path (Issue #190), not an
+        # absolute URL, since the browser now reaches the backend through
+        # this same nginx container's own reverse proxy
+        # (frontend/nginx.conf) rather than a separate host/port. This is
+        # also why this same default now works unmodified for both local
+        # Docker Compose use and a real deployment - unlike before, the
+        # frontend image no longer needs to know the deployment's public
+        # hostname at build time at all. Rebuild the image (`docker
         # compose build frontend`) after changing this - restarting the
         # container alone has no effect, since it's already baked in.
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
     ports:
-      - "${FRONTEND_PORT:-8080}:80"
+      - "${FRONTEND_PORT:-80}:80"
     restart: unless-stopped
     healthcheck:
       # 127.0.0.1, not localhost: this image's nginx only listens on
@@ -101,14 +117,18 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
-    # No depends_on: backend (Issue #183). This container serves the
-    # prebuilt static SPA over nginx and nothing else - there is no
-    # reverse proxy (see docs/deployment.md's Deployment Architecture) and
-    # VITE_API_BASE_URL is baked into the JS bundle at image build time,
-    # not read at container start, so the browser calls the backend
-    # directly and this container has no runtime dependency on backend
-    # being up, healthy, or even present. Waiting for it here would only
-    # slow down `docker compose up` for no functional reason.
+    # Still no depends_on: backend, even though this container's nginx now
+    # reverse-proxies to it (Issue #190; see frontend/nginx.conf) - unlike
+    # Issue #183's original reasoning (no reverse proxy existed yet, so
+    # there was no dependency at all), nginx's use of Docker's DNS
+    # resolver with a dynamic upstream means it starts successfully even
+    # if `backend` doesn't exist yet, and self-heals /api/ once it does -
+    # a static `proxy_pass http://backend:8000` would instead fail to
+    # start entirely without this container waiting on backend first. See
+    # frontend/nginx.conf's own comments and docs/design-decisions.md,
+    # Decision 23, for the full reasoning. Waiting here anyway would
+    # needlessly delay this container's own (independent) readiness for
+    # serving the SPA - see Issue #183 for why that specifically matters.
 
   postgres:
     image: postgres:16
@@ -117,9 +137,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medlens_password}
       POSTGRES_DB: medlens_db
     ports:
-      # Bound to localhost only, unlike backend/frontend above - the
-      # database has no reason to be reachable from outside the host at
-      # all (nothing outside this compose file ever needs to reach it
+      # Bound to localhost only, like backend above and unlike frontend -
+      # the database has no reason to be reachable from outside the host
+      # at all (nothing outside this compose file ever needs to reach it
       # directly), so it stays unreachable even if a security group is
       # ever misconfigured to allow it. Still reachable from the host
       # itself (e.g. `psql -h localhost`, or an SSH tunnel from a laptop)

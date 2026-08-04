@@ -4,7 +4,7 @@
 
 MedLens is deployed as a Dockerized full-stack web application on AWS. The deployment emphasizes reproducibility and simplicity appropriate to a single-developer project over scalability - one EC2 instance, running the same three containers (`frontend`, `backend`, `postgres`) locally validated in Issue #56, coordinated by the same Docker Compose file used for local development.
 
-Issue #56 validated that the production images build, both locally and in CI. Issue #57 (this document's "AWS EC2 Deployment" section, below) is what actually runs them on a real EC2 instance. HTTPS, a custom domain, a reverse proxy, managed databases, and container orchestration (ECS/EKS/Kubernetes) are all explicitly deferred - see that section's Production Readiness subsection for the full list and why each is deferred rather than overlooked.
+Issue #56 validated that the production images build, both locally and in CI. Issue #57 (this document's "AWS EC2 Deployment" section, below) is what actually runs them on a real EC2 instance. Issue #190 (this document's "Reverse Proxy" section, below) put nginx in front of the backend, so the browser now reaches the whole application through one origin. HTTPS, a custom domain, managed databases, and container orchestration (ECS/EKS/Kubernetes) remain explicitly deferred - see the Production Readiness subsection for the full list and why each is deferred rather than overlooked.
 
 ---
 
@@ -12,13 +12,13 @@ Issue #56 validated that the production images build, both locally and in CI. Is
 
 The current production environment consists of:
 
-- React frontend (served as a static build by nginx - see Docker Strategy below)
-- FastAPI backend
+- React frontend (served as a static build by nginx, which also reverse-proxies API requests to the backend - see Docker Strategy and Reverse Proxy below)
+- FastAPI backend, reachable only from inside the Docker network (Issue #190) - never directly from the browser
 - PostgreSQL database
 - Docker containers, coordinated by Docker Compose
 - A single AWS EC2 instance
 
-See the "AWS EC2 Deployment" section below for the full architecture diagram, the deployment runbook, and why there's no reverse proxy or S3 integration - neither exists in this application today (uploaded documents are stored as extracted text in Postgres, never as files on disk or in object storage - see `docs/data-model.md`), so nothing here depends on either.
+See the "AWS EC2 Deployment" section below for the full architecture diagram and deployment runbook, and the "Reverse Proxy" section for how the frontend and backend are served under one origin.
 
 ---
 
@@ -41,9 +41,11 @@ docker compose up --build
 
 | Service | Host port | Container port |
 |---|---|---|
-| `frontend` | `8080` | `80` (nginx) |
-| `backend` | `8000` | `8000` |
-| `postgres` | `5432` | `5432` |
+| `frontend` | `80` | `80` (nginx) |
+| `backend` | `127.0.0.1:8000` only (Issue #190) | `8000` |
+| `postgres` | `127.0.0.1:5432` only | `5432` |
+
+`frontend` is the only one of the three meant to be opened in a browser (`http://localhost/`) - it serves the SPA and reverse-proxies `/api/*` to `backend` (see Reverse Proxy below), so every request the app makes goes through it too, at the same origin. `backend`'s own port still exists for direct access - `curl`, Postman, `npm run dev`'s Vite dev server - but is bound to `127.0.0.1`, not published beyond the host, the same treatment `postgres` already had.
 
 `docker compose down` stops and removes the containers and network; add `-v` to also remove the named Postgres volume (`medlens_postgres_data`) and start from an empty database next time.
 
@@ -80,7 +82,6 @@ Examples include:
 - DATABASE_URL
 - JWT_SECRET_KEY
 - GEMINI_API_KEY
-- CORS_ALLOWED_ORIGINS
 - AWS_ACCESS_KEY_ID
 - AWS_SECRET_ACCESS_KEY
 - AWS_REGION
@@ -90,7 +91,7 @@ Sensitive values will never be committed to the repository.
 
 An `.env.example` file will document required variables.
 
-See Docker Image Builds below for `VITE_API_BASE_URL`, `DATABASE_URL`, `JWT_SECRET_KEY`, `GEMINI_API_KEY`, and `CORS_ALLOWED_ORIGINS` as they apply specifically to building and running the Docker images - including the one variable that's a *build* argument rather than a runtime one.
+See Docker Image Builds below for `VITE_API_BASE_URL`, `DATABASE_URL`, `JWT_SECRET_KEY`, and `GEMINI_API_KEY` as they apply specifically to building and running the Docker images - including the one variable that's a *build* argument rather than a runtime one. `CORS_ALLOWED_ORIGINS` no longer exists (Issue #190) - see the Reverse Proxy section below for why.
 
 ---
 
@@ -99,7 +100,7 @@ See Docker Image Builds below for `VITE_API_BASE_URL`, `DATABASE_URL`, `JWT_SECR
 Each major component has its own Dockerfile:
 
 - `backend/Dockerfile` - multi-stage: a `builder` stage installs Python dependencies with pip, a slim runtime stage copies only the installed packages and application code, and runs as a dedicated non-root user.
-- `frontend/Dockerfile` - multi-stage: a Node `builder` stage runs the same `npm ci && npm run build` CI already runs, an `nginx:alpine` runtime stage serves the resulting static files, with an SPA fallback route (`frontend/nginx.conf`) so client-side routes survive a direct load or refresh.
+- `frontend/Dockerfile` - multi-stage: a Node `builder` stage runs the same `npm ci && npm run build` CI already runs, an `nginx:alpine` runtime stage serves the resulting static files, with an SPA fallback route so client-side routes survive a direct load or refresh, and (Issue #190) a reverse proxy for `/api/*` to the backend - see `frontend/nginx.conf` and the Reverse Proxy section below.
 - `postgres` uses the stock `postgres:16` image directly - no Dockerfile of its own.
 
 Docker Compose (`infra/docker-compose.yml`) coordinates all three for local development. See Docker Image Builds below for build commands, environment variables, and the full set of decisions behind both Dockerfiles.
@@ -154,15 +155,15 @@ A clean rebuild (`docker build --no-cache`) was verified to succeed for both ima
 
 | Variable | Where it's needed | Required | Notes |
 |---|---|---|---|
-| `VITE_API_BASE_URL` | Frontend **image build** (`docker build --build-arg`) | No - defaults to `http://localhost:8000` | Vite inlines `import.meta.env.VITE_API_BASE_URL` into the built JS bundle at build time, not at container start - unlike a typical server-side app, this can't be changed by restarting the container with a different environment variable. A real deployment overrides it: `docker build --build-arg VITE_API_BASE_URL=https://api.example.com .` |
+| `VITE_API_BASE_URL` | Frontend **image build** (`docker build --build-arg`) | No - defaults to `/api` (Issue #190) | Vite inlines `import.meta.env.VITE_API_BASE_URL` into the built JS bundle at build time, not at container start - unlike a typical server-side app, this can't be changed by restarting the container with a different environment variable. A relative path, not an absolute URL: the browser reaches the backend through this same nginx container's own reverse proxy (see Reverse Proxy below), so the default works unmodified for any deployment - there is normally no reason to override it. |
 | `DATABASE_URL` | Backend **container runtime** | Yes | `infra/docker-compose.yml` builds this from `POSTGRES_PASSWORD` below and the `postgres` service's in-network address - set `POSTGRES_PASSWORD`, not `DATABASE_URL` itself, when using Compose. |
 | `JWT_SECRET_KEY` | Backend **container runtime** | Yes | `infra/docker-compose.yml` defaults to a placeholder value - see "What was missing before this issue" above. **Issue #57's AWS EC2 Deployment section below covers overriding this (and every variable in this table) via `infra/.env` for a real deployment** - never edit `docker-compose.yml` itself to set a real secret. |
 | `GEMINI_API_KEY` | Backend **container runtime** | No | AI features return a `503` with a clear error when unset (see `docs/api.md`) rather than the container failing to start. |
 | `GEMINI_MODEL` | Backend **container runtime** | No - defaults to `gemini-2.5-flash` | Which Gemini model to call - see `docs/ai.md`'s "A Note on Model Retirement." Changing this only needs `infra/.env` updated and the backend container restarted (`docker compose up -d backend`), never a rebuild - useful when Google retires the current default, which has already happened once (`gemini-2.0-flash`, fixed by changing this same default). |
-| `CORS_ALLOWED_ORIGINS` | Backend **container runtime** | No, but required in practice once `APP_ENV=production` | Defaults to empty; see `.env.example`. Comma-separated frontend origin(s), e.g. `http://<ec2-public-ip>:8080`. |
-| `APP_ENV` (Issue #57) | Backend **container runtime** | No - defaults to `development` | `development` auto-allows any `localhost`/`127.0.0.1` origin for CORS in addition to `CORS_ALLOWED_ORIGINS` (see `app/main.py`) - correct for local Docker use, wrong for a real deployment, which should set this to `production`. |
+| `APP_ENV` (Issue #57) | Backend **container runtime** | No - defaults to `development` | `development` auto-allows any `localhost`/`127.0.0.1` origin for CORS (see `app/main.py`'s `configure_cors`) - relevant only to `npm run dev`'s Vite dev server, which talks to the backend directly and cross-origin. A real deployment should still set this to `production`, but not for CORS reasons anymore - see Reverse Proxy below. |
 | `POSTGRES_PASSWORD` (Issue #57) | Backend + `postgres` **container runtime** | No - defaults to `medlens_password` | `infra/docker-compose.yml` references this one variable in both the `postgres` service's own credentials and the backend's `DATABASE_URL`, so they can't drift out of sync. Change it before any real deployment. |
-| `FRONTEND_PORT` / `BACKEND_PORT` (Issue #57) | Host, at `docker compose up` time | No - default to `8080`/`8000` | Which host ports Compose publishes the containers on - not read by the application itself. Set `FRONTEND_PORT=80` for a deployment reachable at `http://<ec2-public-ip>/` with no port suffix. |
+| `FRONTEND_PORT` (Issue #57) | Host, at `docker compose up` time | No - defaults to `80` (Issue #190) | Which host port Compose publishes the frontend container on - the app's only public entry point. Not read by the application itself. |
+| `BACKEND_PORT` (Issue #57) | Host, at `docker compose up` time | No - defaults to `8000` | Bound to `127.0.0.1` only (Issue #190) - never reachable from outside the host. Exists for direct local access to the API (`curl`, Postman, `npm run dev`), not for the browser, which only ever uses the reverse proxy above. |
 | `STORAGE_BACKEND` (Issue #58) | Backend **container runtime** | No - defaults to `local` | `local` or `s3` - see the "File Storage (S3)" section below for the full setup. |
 | `AWS_REGION` / `S3_BUCKET_NAME` (Issue #58) | Backend **container runtime** | Only when `STORAGE_BACKEND=s3` | The backend fails to start with a clear error if either is missing while `s3` is selected - see "File Storage (S3)" below. |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (Issue #58) | Backend **container runtime** | No | Leave unset in production - an IAM role attached to the EC2 instance is used instead. Only set for local development against a real bucket. See "File Storage (S3)" below. |
@@ -206,25 +207,30 @@ Where Issue #56 stopped at "the images build," this issue is "the images run, in
                             │
               ┌─────────────┼─────────────┐
               │ security group             │
-              │ 22 (SSH)   8080  8000      │
-              └─────┬────────┬───────┬─────┘
-                    ▼        ▼       ▼
-              ┌─────────────────────────────────┐
-              │         EC2 instance             │
-              │                                   │
-              │  frontend container (nginx) :8080 │
-              │  backend container (uvicorn) :8000│
-              │  postgres container :5432          │
-              │    (127.0.0.1 only - not exposed  │
-              │     through the security group)   │
-              │                                   │
-              │  docker compose (infra/)          │
-              └───────────────┬───────────────────┘
+              │      22 (SSH)   80         │
+              └─────┬────────────┬─────────┘
+                    ▼            ▼
+              ┌──────────────────────────────────────┐
+              │            EC2 instance                │
+              │                                         │
+              │  frontend container (nginx) :80         │
+              │    ├─ serves the built React SPA        │
+              │    └─ reverse-proxies /api/* ──┐         │
+              │                                 ▼         │
+              │  backend container (uvicorn) :8000        │
+              │    (127.0.0.1 only - not exposed          │
+              │     through the security group)           │
+              │  postgres container :5432                 │
+              │    (127.0.0.1 only - not exposed          │
+              │     through the security group)           │
+              │                                         │
+              │  docker compose (infra/)                │
+              └───────────────┬─────────────────────────┘
                               ▼
                          Gemini API
 ```
 
-No reverse proxy sits in front of the two application containers - the frontend and backend are each reached directly on their own published port, exactly as `infra/docker-compose.yml` already publishes them for local use (see Local Development above). This is the same architecture, unchanged, just running on an EC2 instance instead of a laptop.
+nginx (Issue #190) is the one thing the browser ever talks to - it serves the built React SPA directly and reverse-proxies `/api/*` requests to the backend over the Docker network (see the Reverse Proxy section below). The backend's own port is bound to `127.0.0.1`, the same treatment postgres already had, and is no longer part of the security group at all - nothing outside the instance can reach it directly, real deployment or not.
 
 ### Prerequisites
 
@@ -248,10 +254,9 @@ See Security below for the reasoning; the rules themselves:
 | Type | Port | Source | Purpose |
 |---|---|---|---|
 | SSH | 22 | Your own IP only (`My IP` in the console) | Administration. Never `0.0.0.0/0` - an SSH port open to the entire internet is scanned and attacked continuously. |
-| Custom TCP | 8080 (or `FRONTEND_PORT`, see below) | `0.0.0.0/0` | The web app itself. |
-| Custom TCP | 8000 (or `BACKEND_PORT`) | `0.0.0.0/0` | The API - the browser calls this directly (see Deployment Architecture above; there's no reverse proxy to hide it behind). |
+| Custom TCP | 80 (or `FRONTEND_PORT`, see below) | `0.0.0.0/0` | The web app itself - the SPA and, via nginx's reverse proxy, the API too (`/api/*`, see Reverse Proxy below). The one and only public entry point. |
 
-**5432 (Postgres) is deliberately absent from this table** - `infra/docker-compose.yml` binds it to `127.0.0.1` only (see Docker Strategy above), so it isn't reachable from outside the instance even if a security group rule mistakenly allowed it. Nothing to configure here; this is enforced at the Docker level, not the AWS level, on purpose - see Security below.
+**8000 (backend) and 5432 (Postgres) are both deliberately absent from this table** (Issue #190) - `infra/docker-compose.yml` binds both to `127.0.0.1` only (see Docker Strategy above), so neither is reachable from outside the instance even if a security group rule mistakenly allowed it. Nothing to configure here; this is enforced at the Docker level, not the AWS level, on purpose - see Security below.
 
 ### Step 3: Install Docker and Docker Compose
 
@@ -287,7 +292,7 @@ cp .env.example .env
 nano .env      # or vim, or any editor
 ```
 
-Fill in, at minimum, `JWT_SECRET_KEY` and `POSTGRES_PASSWORD` (both required for a real deployment - see Security below), and `VITE_API_BASE_URL` (set it to `http://<ec2-public-ip>:8000`, using this instance's actual public IP - the frontend image bakes this in at build time in the next step, so it must be correct *before* building, not after). Set `APP_ENV=production` and `CORS_ALLOWED_ORIGINS=http://<ec2-public-ip>:8080` (or whatever `FRONTEND_PORT` is set to) so the deployed frontend's origin is actually allowed to call the API. `infra/.env` is gitignored - it never gets committed, by this repository's own `.gitignore`, regardless of what's in it.
+Fill in, at minimum, `JWT_SECRET_KEY` and `POSTGRES_PASSWORD` (both required for a real deployment - see Security below), and set `APP_ENV=production`. That's it for this instance's own public address - `VITE_API_BASE_URL` no longer needs to be set at all (Issue #190): it defaults to the relative path `/api`, which is correct for every deployment since the browser reaches the backend through this same frontend's own reverse proxy (see Reverse Proxy below), never a separate host/port. There is nothing to know about this instance's public IP before building the frontend image anymore - a real simplification over the previous flow. `infra/.env` is gitignored - it never gets committed, by this repository's own `.gitignore`, regardless of what's in it.
 
 ### Step 6: Build the images
 
@@ -310,13 +315,16 @@ docker compose up -d
 ```bash
 # From the instance itself:
 docker compose ps                     # all three services should show "healthy" within ~30s
-curl http://localhost:8000/health     # {"status":"ok","version":"1.0.0","environment":"production",...} - see docs/api.md
+curl http://localhost:8000/health     # direct to the backend - 127.0.0.1 only, works from the instance itself
+curl http://localhost/api/health      # through nginx - what the browser actually uses (Issue #190)
 
 # From your own machine:
-curl http://<ec2-public-ip>:8000/health
+curl http://<ec2-public-ip>/api/health
 ```
 
-Then open `http://<ec2-public-ip>:8080` in a browser - the app should load, and registering an account should succeed (this exercises the database end to end, proving migrations actually ran - see Production Configuration below for why that specifically used to be broken).
+Both `/health` checks return the same body - `{"status":"ok","version":"1.0.0","environment":"production",...}`, see `docs/api.md` - the second one just additionally proves the reverse proxy itself is working, not only the backend directly.
+
+Then open `http://<ec2-public-ip>/` in a browser - the app should load, and registering an account should succeed (this exercises the database end to end, proving migrations actually ran - see Production Configuration below for why that specifically used to be broken). Open the browser's Network tab while doing this: every request should show as `http://<ec2-public-ip>/api/...`, never a separate `:8000` origin, and none should be preceded by an `OPTIONS` preflight request - see Reverse Proxy below for why.
 
 ### Updating the application
 
@@ -371,8 +379,8 @@ docker compose down -v             # also remove the postgres volume - genuinely
 
 - **A container shows `unhealthy` or keeps restarting.** `docker compose ps` shows which one; `docker compose logs <service>` almost always explains why. A backend stuck unhealthy immediately after a fresh `docker compose up` is most often `postgres` not being reachable yet - `depends_on: condition: service_healthy` (see Production Configuration below) should prevent this by making backend wait, but if `postgres` itself never reports healthy, check its own logs first.
 - **`docker compose build` fails partway through, out of memory.** Most common on `t3.micro` - the frontend build (`npm ci && vite build`) is the usual culprit. Either resize the instance (Step 1) or add swap: `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`.
-- **The frontend loads but every request fails with a CORS error in the browser console.** `CORS_ALLOWED_ORIGINS` doesn't include the frontend's real origin, or `APP_ENV` is still `development` was assumed instead of set - see Step 5 and `app/main.py`'s `configure_cors`. Fix `infra/.env`, then `docker compose up -d` (no rebuild needed - these are runtime environment variables, not baked in).
-- **The frontend loads but API calls go to the wrong place / `localhost`.** `VITE_API_BASE_URL` was wrong (or left at its default) when the frontend image was built. Fix `infra/.env` and **rebuild** (`docker compose build frontend`) - restarting the container alone does nothing, since this value is baked into the JS bundle at build time (see Environment Variables above).
+- **A request fails with a CORS error in the browser console.** Since Issue #190, this should never happen against the deployed app at all - every request goes through nginx's own reverse proxy, same-origin, and CORS is only ever relevant to `npm run dev`'s Vite dev server (see Reverse Proxy below). If you're seeing this against a real deployment, check the browser's Network tab for what origin the failing request actually went to - it likely means the frontend image was built with a stale, absolute `VITE_API_BASE_URL` rather than the current default (`/api`); see the next bullet.
+- **API calls in the browser go to the wrong place, e.g. a `:8000` origin instead of the app's own.** `VITE_API_BASE_URL` was overridden to something other than its default (`/api`) when the frontend image was built - there's normally no reason to set it at all anymore (see Environment Variables above). Fix `infra/.env` (remove the override, or set it back to `/api`) and **rebuild** (`docker compose build frontend`) - restarting the container alone does nothing, since this value is baked into the JS bundle at build time.
 - **`docker: permission denied` on every command.** The `usermod -aG docker` group change from Step 3 needs a fresh login to take effect - log out and back in (or run `newgrp docker` in the current shell as a one-session workaround).
 - **Registering a user (or any database write) fails with a 500.** Almost certainly a missed migration - check `docker compose logs backend` for `alembic` output near the top of the log; a real error there (not just the normal "Running upgrade..." lines) means the schema didn't apply. This should be automatic on every backend start (see Production Configuration below), so a persistent failure here is worth investigating directly rather than working around.
 - **Creating an analysis always fails with a 503, "Gemini request failed: ClientError."** Check `docker compose logs backend` for the accompanying `detail=` field (see `docs/ai.md`'s Logging section) - `"models/<name> is not found"` means Google has retired the configured model server-side, exactly what happened to `gemini-2.0-flash` in production. Fix: set `GEMINI_MODEL` in `infra/.env` to a current model name and restart the backend (`docker compose up -d backend`) - no rebuild needed, this is a runtime variable (see Environment Variables above).
@@ -396,6 +404,20 @@ Auditing the health/ordering configuration Issue #57 already put in place (above
 
 Verified with a full `docker compose up -d --build` from a clean state: `postgres` reaches `healthy` first, `backend` starts once `postgres` is healthy, and `frontend` starts immediately in parallel with both rather than waiting on `backend` - see the final report for this issue for the exact `docker compose ps` output and startup timeline observed.
 
+### Reverse Proxy (Issue #190)
+
+Before this issue, the browser talked to two separate origins - the frontend on its own port, and the backend directly on its own (`http(s)://<host>:8000`) - which meant the backend's port had to be published publicly, the frontend had to be told that URL at image build time, and the backend needed CORS configured to accept requests from the frontend's separate origin. This issue put nginx (already the frontend's own container, serving the built SPA - no new component) in front of the backend too: it now reverse-proxies `/api/*` to the backend over the Docker network, and the browser never talks to the backend's own port at all. See the Deployment Architecture diagram above for the request flow, and `docs/design-decisions.md` (Decision 23) for the full reasoning.
+
+**What changed:**
+
+- `frontend/nginx.conf` gained a `location /api/` block that strips the `/api` prefix and proxies everything else to `backend:8000` over the Docker network, using Docker's embedded DNS resolver so it re-resolves `backend`'s address per request rather than caching it from nginx startup (needed because `backend` can be recreated with a new IP independently - see Decision 23) - plus a `client_max_body_size 25m` (nginx's own 1m default is smaller than a real clinical PDF upload) and the standard `X-Real-IP`/`X-Forwarded-For`/`X-Forwarded-Proto` headers.
+- `backend/Dockerfile`'s `uvicorn` invocation gained `--forwarded-allow-ips='*'`, so it actually trusts and reads those headers - without it, every request's `client_ip` (Issue #59's structured logging) would show nginx's own Docker-network address instead of the real visitor's. Safe to trust unconditionally here specifically because the backend's port is no longer reachable by anything except nginx (and the host itself).
+- `infra/docker-compose.yml`: `backend`'s port binds to `127.0.0.1` only (the same treatment `postgres` already had); `frontend`'s default host port changes from `8080` to `80`; `VITE_API_BASE_URL`'s build-arg default changes from an absolute URL to `/api`; `CORS_ALLOWED_ORIGINS` is removed. No changes to healthchecks, `depends_on`, or restart policies - all three were preserved exactly as Issue #183 left them (see that section above), including `frontend` still having no `depends_on: backend` at all, now for a different reason than before (see Decision 23).
+- `app/main.py`'s `configure_cors` drops its `allowed_origins` parameter - `allow_origins` is now always empty, since there is no longer any legitimate cross-origin production request to allow for. The `LOCALHOST_ORIGIN_REGEX` behavior for `app_env == "development"` is unchanged: CORS middleware itself is retained, not removed, because `npm run dev`'s Vite dev server still makes a real cross-origin request directly to the backend (see Local Development above) - the one case this issue's own instructions anticipated ("if it is intentionally retained: document exactly why").
+- No frontend *source* changes at all - `frontend/src/api/client.ts`'s one shared axios instance already built every request from a configured `baseURL` plus a relative path (`/patients`, `/auth/login`, ...) with zero hardcoded hosts anywhere in the codebase, so pointing `VITE_API_BASE_URL` at a relative path (`/api`) was sufficient on its own; axios resolves a relative `baseURL` against the page's own origin automatically.
+
+**Verified directly** (not just "the config looks right"): a full `docker compose up -d --build` from a clean state, then registering a user, logging in, and exercising patient/medication CRUD entirely through `http://localhost/api/...` - identical responses to calling the backend's own port directly, and `client_ip` in the backend's own structured logs showing the real originating address, not nginx's container IP. Also verified the specific failure mode Decision 23 calls out: recreating *only* the `backend` container (`docker compose up -d --force-recreate backend`, simulating exactly what "Updating the application" above does on a backend-only change) leaves it with a new Docker-network IP, and `/api/health` through nginx keeps working afterward with no action taken on `frontend` at all - and separately, removing the `backend` container entirely and restarting `frontend` first confirmed nginx still starts and serves the SPA normally, `/api/*` correctly returning `502` (not a crash) until `backend` exists again.
+
 ### Security
 
 - **Containers run as non-root where applicable.** The backend runs as a dedicated `appuser` (Issue #56, `backend/Dockerfile`) - verified again for this issue (`docker exec <container> whoami` → `appuser`). The frontend's `nginx:alpine` runtime uses the standard nginx image as-is: its master process binds port 80 as root (required to bind a port below 1024) and hands actual request handling off to worker processes running as the unprivileged `nginx` user, nginx's own well-established privilege-separation model - not something this project's Dockerfile needs to (or should) override. `postgres:16` is the stock upstream image, whose own entrypoint already drops to a non-root `postgres` user.
@@ -406,8 +428,8 @@ Verified with a full `docker compose up -d --build` from a clean state: `postgre
   | Port | Exposed to | Why |
   |---|---|---|
   | 22 (SSH) | Your IP only | Administration access. |
-  | 8080 (frontend, or `FRONTEND_PORT`) | Everyone | The application. |
-  | 8000 (backend, or `BACKEND_PORT`) | Everyone | The API - called directly by the browser, since there's no reverse proxy in front of it (see Deployment Architecture above). |
+  | 80 (frontend, or `FRONTEND_PORT`) | Everyone | The whole application - the SPA and, via nginx's reverse proxy, the API too (Issue #190; see Reverse Proxy below). The only public entry point. |
+  | 8000 (backend, or `BACKEND_PORT`) | **Nobody** | Bound to `127.0.0.1` inside `docker-compose.yml` (Issue #190) - not reachable from outside the instance even if a security group rule mistakenly allowed it, the same treatment Postgres already had. The browser never uses this port; only nginx (over the Docker network) and, for direct local access, the instance itself. |
   | 5432 (Postgres) | **Nobody** | Bound to `127.0.0.1` inside `docker-compose.yml` itself (see Production Configuration Changes above) - there is no security group rule that could expose it even by mistake, since the port is never listening on a network interface a security group rule could apply to in the first place. |
 
 ### Production Readiness
@@ -424,7 +446,6 @@ Verified with a full `docker compose up -d --build` from a clean state: `postgre
 |---|---|---|
 | HTTPS / TLS | Traffic (including login credentials and JWTs) travels in plaintext | None - synthetic data only (see `docs/design-decisions.md` Decision 8), so the practical exposure is low for this project specifically, but this would be a hard blocker for any real deployment handling real data |
 | DNS / custom domain | The app is only reachable by raw IP, which changes if the instance is ever replaced | None |
-| Reverse proxy | Currently two ports to expose and remember instead of one; also a prerequisite for HTTPS (e.g. Caddy/nginx with Let's Encrypt) | None - see Deployment Architecture above |
 | Automated deployment | "Deploy" (Continuous Deployment's step 7) is a manual SSH session today, not triggered by merging to `main` | The manual procedure in Updating the application, above |
 | Monitoring / alerting | Nothing pages anyone if a container is unhealthy for an extended period | `docker compose ps`/`GET /health`, checked by hand |
 | Backups | `docker compose down -v` (or any volume loss) is unrecoverable data loss | The named volume persists across container/instance restarts (verified - see Manual Verification), but nothing protects against genuine volume loss. Uploaded *files* specifically have a better story once S3 is configured (Issue #58, below) - S3 durability is independent of this EC2 instance entirely - but the *metadata* pointing to them (`ClinicalDocument.storage_key`, in Postgres) is not, so losing the database volume still means those S3 objects become unreachable through the application even though the bytes themselves survive |

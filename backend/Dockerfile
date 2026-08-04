@@ -68,4 +68,16 @@ EXPOSE 8000
 # structured summary line per completed request - uvicorn's default access
 # log would otherwise add a second, differently-formatted line for the
 # same request, right alongside it.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]
+#
+# --forwarded-allow-ips='*' (Issue #190): every request now arrives via
+# the frontend container's nginx reverse proxy (frontend/nginx.conf),
+# never directly from a browser - uvicorn's X-Forwarded-For/-Proto support
+# is already on by default, but it only trusts those headers from
+# 127.0.0.1 unless told otherwise, and nginx's requests arrive from its
+# own Docker-network address, not 127.0.0.1. Trusting every source here is
+# safe specifically because this port is no longer published beyond
+# 127.0.0.1 on the host (infra/docker-compose.yml) - nginx is the only
+# thing that can reach this container at all in a real deployment.
+# Without this, every request's client_ip (app/core/logging_config.py)
+# would log nginx's own container address instead of the real visitor.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log --forwarded-allow-ips='*'"]
