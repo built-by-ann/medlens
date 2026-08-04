@@ -101,8 +101,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
-    depends_on:
-      - backend
+    # No depends_on: backend (Issue #183). This container serves the
+    # prebuilt static SPA over nginx and nothing else - there is no
+    # reverse proxy (see docs/deployment.md's Deployment Architecture) and
+    # VITE_API_BASE_URL is baked into the JS bundle at image build time,
+    # not read at container start, so the browser calls the backend
+    # directly and this container has no runtime dependency on backend
+    # being up, healthy, or even present. Waiting for it here would only
+    # slow down `docker compose up` for no functional reason.
 
   postgres:
     image: postgres:16
@@ -127,6 +133,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      # On a fresh volume, postgres's own entrypoint runs initdb, then
+      # briefly starts and stops the server once as part of that process
+      # before starting it for real (standard postgres:16 image behavior)
+      # - pg_isready fails (connection refused) during that window, which
+      # is expected, not a real problem. Without start_period those
+      # expected early failures count toward retries above like any other
+      # failure; matches backend's/frontend's own start_period above.
+      start_period: 10s
 
 volumes:
   medlens_postgres_data:
