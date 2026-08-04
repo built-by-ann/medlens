@@ -1,6 +1,14 @@
+# syntax=docker/dockerfile:1
+# Pins the BuildKit Dockerfile frontend version so `--mount=type=cache`
+# below (Issue #184) is recognized consistently regardless of the exact
+# Docker Engine version running this build (local, CI, or a future EC2
+# instance) - the syntax pragma, not the Engine version, is what selects
+# the frontend that understands cache mounts.
+
 # Build stage: installs dependencies in isolation so the final image never
 # carries pip's build cache, wheel metadata, or anything else the install
-# process leaves behind - only the installed packages themselves.
+# process leaves behind - only the installed packages themselves (pip's
+# own cache lives in a BuildKit mount below, not this layer, either way).
 FROM python:3.12-slim AS builder
 
 WORKDIR /app
@@ -12,7 +20,20 @@ COPY requirements.txt .
 # --prefix installs to a plain directory that gets copied wholesale into
 # the final stage's /usr/local, already on PATH and Python's search path
 # for any user.
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+#
+# --mount=type=cache (Issue #184), not --no-cache-dir: a cache *mount* is
+# never included in the exported image layer at all (unlike pip's normal
+# on-disk cache directory would be), so it gets the same "no cache bloat
+# in the final image" property --no-cache-dir was originally chosen for
+# (Decision 18) - but unlike --no-cache-dir, this cache persists *between*
+# builds (BuildKit's own cache store, separate from image layers
+# entirely), so a build that only adds one line to requirements.txt
+# reuses every already-downloaded wheel instead of redownloading all of
+# them from PyPI. Measured locally: a requirements.txt change with a warm
+# mount installs every package from "Using cached ..." wheels, zero
+# network requests - see this issue's final report for the full numbers.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --prefix=/install -r requirements.txt
 
 # Runtime stage: a fresh base with nothing but the installed dependencies
 # and application code - no pip, no build artifacts.

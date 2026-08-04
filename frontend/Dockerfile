@@ -1,3 +1,8 @@
+# syntax=docker/dockerfile:1
+# Pins the BuildKit Dockerfile frontend version so `--mount=type=cache`
+# below (Issue #184) is recognized consistently regardless of the exact
+# Docker Engine version running this build.
+
 # Build stage: compiles the SPA to static files. Node is only needed to
 # run the build - the runtime stage below never sees it.
 FROM node:20-alpine AS builder
@@ -8,7 +13,15 @@ WORKDIR /app
 # correct here, not `npm install` - same reasoning as frontend.yml's CI
 # install step.
 COPY package.json package-lock.json ./
-RUN npm ci
+# --mount=type=cache (Issue #184): npm's own download cache (~/.npm)
+# persists across builds via a BuildKit cache mount rather than living in
+# this layer - `npm ci` still verifies/reinstalls into node_modules from
+# the lockfile every time (unchanged, reproducible installs are the whole
+# point of npm ci), but a lockfile change no longer means redownloading
+# every package tarball from the registry - see this issue's final report
+# for measured before/after numbers.
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 COPY . .
 

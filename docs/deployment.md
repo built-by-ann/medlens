@@ -179,6 +179,20 @@ The distinction in the first row - a frontend *build* argument versus every othe
 
 See `docs/design-decisions.md` (Decision 18) for the full reasoning behind each Dockerfile's shape: multi-stage builds, running the backend as a non-root user, why `frontend/Dockerfile` serves the build with nginx rather than `npm run preview` or a Node static-file server, and why `.dockerignore` was treated as a security fix rather than a cleanup nice-to-have.
 
+### Build Performance (Issue #184)
+
+Auditing both Dockerfiles against this issue's checklist found the two most impactful patterns already in place from Issue #56: multi-stage builds, and dependency installation (`pip install` / `npm ci`) copied and run in its own layer *before* application source is copied in, so a source-only change (the overwhelming majority of commits) already skips reinstalling dependencies entirely via Docker's own layer cache - verified directly, this already took ~1.4s locally, unchanged by this issue.
+
+What was missing, and added by this issue:
+
+- **BuildKit cache mounts** (`--mount=type=cache`) for both `pip install` and `npm ci`, plus a `# syntax=docker/dockerfile:1` pragma at the top of each Dockerfile so the mount syntax is recognized consistently regardless of Docker Engine version. A cache mount is never included in the exported image layer (unlike a normal on-disk cache directory would be), so the final image is unchanged, but the downloaded packages persist *between* builds in BuildKit's own cache store - a build that changes only one line of `requirements.txt`/`package-lock.json` reuses every already-downloaded wheel/tarball instead of redownloading from PyPI/npm. This is what let `backend/Dockerfile` drop `pip install`'s `--no-cache-dir` flag (Decision 18's original size-driven choice) without reintroducing the cache-bloats-the-image problem it existed to prevent - see Decision 23.
+- **GitHub Actions cache** (`type=gha`) for the "Validate Docker image build" step in both `backend.yml` and `frontend.yml`, via `docker/setup-buildx-action` + `docker/build-push-action` in place of a plain `docker build`. This is the change with the largest real-world effect: every previous CI run rebuilt every layer from nothing, since each job starts on a fresh runner with no prior Docker state at all - the cache mounts above are only useful if something persists them across builds, which locally is BuildKit's own on-disk cache but in CI didn't exist in any form. `type=gha` stores and restores that same cache (layers and mount contents both) via GitHub's Actions cache, so an unchanged Dockerfile/dependency file skips reinstalling entirely on the next CI run, the same way a local rebuild already did.
+- **`.dockerignore` additions**: `.mypy_cache/`, coverage artifacts, and editor directories (`.vscode/`, `.idea/`) in both, defensively - none are currently produced by this project (no mypy or coverage tooling configured, see `docs/testing.md`), but excluding them costs nothing and avoids surprises if either is added later.
+
+**Not changed**: `infra/docker-compose.yml` - audited for unnecessary rebuilds and found none; it already just points at each Dockerfile's context, and Compose's own build machinery (BuildKit-backed by default) already picks up the cache-mount changes above with no compose-level configuration needed. Runtime behavior, healthchecks, `depends_on`, restart policies, and networking are all unchanged - this issue is build-time only.
+
+See this issue's final report for measured before/after build times.
+
 ---
 
 ## AWS EC2 Deployment (Issue #57)

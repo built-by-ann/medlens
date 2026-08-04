@@ -7,22 +7,33 @@
 
 # Python virtual environment and caches - large, host-specific, and
 # unnecessary since the image installs its own dependencies from
-# requirements.txt.
+# requirements.txt. None of these are actually produced by this project
+# today (no mypy, no pytest-cov - see docs/testing.md) but are excluded
+# defensively (Issue #184): a build context scan is cheap either way, and
+# it means adding either tool later doesn't silently start bloating the
+# build context or invalidating layers with cache-directory churn.
 .venv
 __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # Test suite - not needed at runtime; kept out of the production image to
 # minimize its size (backend/tests/ has its own fixtures, sample files,
 # etc. that only matter for `pytest`, which CI already runs outside Docker).
 tests/
 
-# Version control and editor/OS metadata.
+# Version control, editor, and OS metadata.
 .git
 .gitignore
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
 .dockerignore
 Dockerfile
 
