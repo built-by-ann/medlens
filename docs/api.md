@@ -4,7 +4,11 @@
 
 MedLens exposes a REST API built with FastAPI. This document describes the endpoints that are currently implemented.
 
-All endpoints return JSON.
+All endpoints return JSON (`Content-Type: application/json`), except `GET /patients/{patient_id}/clinical-documents/{document_id}/download`, which streams the original uploaded file back with its own stored `Content-Type` (see File Uploads below). Every JSON request body is also `application/json`, except the three `upload-txt`/`upload-pdf`/`upload-csv` endpoints, which take `multipart/form-data`.
+
+Error responses always have a JSON body with a `detail` key - either a string (most errors) or a structured value (request validation failures, and the CSV import endpoint's row-level errors). See Error Responses below for the exact shape returned by each status code.
+
+This document is a companion to, not a replacement for, the OpenAPI schema FastAPI generates automatically from the code itself - see OpenAPI / Interactive Docs at the end of this document.
 
 ---
 
@@ -38,6 +42,54 @@ Authorization: Bearer <access_token>
 ```
 
 If the header is missing, the token is malformed or expired, or the token references a user that no longer exists, the request is rejected with `401 Unauthorized`.
+
+There is no refresh token and no logout endpoint: a token is simply valid until it expires, and a client discarding it is the only "logout" that exists today.
+
+---
+
+## Authentication Flow
+
+```text
+POST /auth/register          Create an account (email, password, username)
+        │
+        ▼
+POST /auth/login              Exchange email + password for a JWT
+        │
+        ▼
+   Receive JWT                 { "access_token": "<jwt>", "token_type": "bearer" }
+        │
+        ▼
+Authorization: Bearer <jwt>   Attach to every subsequent request
+        │
+        ▼
+Access protected endpoints    GET /users/me, /patients, /patients/{id}/medications, ...
+```
+
+Registering does **not** log the new account in - `POST /auth/register` returns the created user's profile (`UserResponse`), not a token. A client must call `POST /auth/login` immediately afterward to obtain one, the same as any other login. Every endpoint except `GET /`, `GET /health`, `POST /auth/register`, and `POST /auth/login` requires the header above; see each endpoint's own "Authentication requirements" for confirmation.
+
+---
+
+## Schemas
+
+Every request and response body below is shown as a full worked JSON example under its endpoint - this section only covers the shapes that are *shared* across more than one endpoint, so their shape is documented once rather than repeated. For the exact field types, constraints (min length, nullability), and full enum definitions straight from the Pydantic models themselves, see `GET /docs` or `GET /openapi.json` (OpenAPI / Interactive Docs, below) - those are generated directly from the code and can never drift from it the way hand-written field tables can.
+
+Reused/nested response shapes:
+
+- **`PatientSummaryResponse`** (`id`, `first_name`, `last_name`) - a minimal patient citation, used wherever a resource needs to identify its owning patient without embedding the full `PatientResponse`. Appears in `GET /analyses/recent`.
+- **`ClinicalDocumentSummaryResponse`** (`id`, `title`, `document_type`) - a minimal document citation with no `raw_text`, used when citing a document as supporting evidence. Appears nested inside `medication_mention.clinical_document` in `GET /patients/{patient_id}/analyses/{analysis_id}`.
+- **`MedicationResponse`** - the same full medication shape returned by `GET /patients/{patient_id}/medications/{medication_id}` is also embedded directly (not summarized) in a resolved discrepancy's `medication` field, since a provider reviewing a finding needs the complete row, not a citation.
+
+Enums used across more than one field (full definitions in `app/schemas/`):
+
+| Enum | Values |
+|---|---|
+| `AnalysisStatus` | `pending`, `processing`, `completed`, `failed` |
+| `DiscrepancyType` | `missing_from_medication_list`, `discontinued_status_conflict`, `dose_conflict`, `route_conflict`, `frequency_conflict`, `status_conflict`, `unsupported_medication_list_entry` |
+| `DiscrepancySeverity` | `low`, `medium`, `high` |
+| `ResolutionStatus` | `open`, `reviewed`, `resolved`, `dismissed` |
+| `ResolutionAction` | `add_medication`, `update_medication`, `dismiss` |
+
+All five are serialized as plain strings in JSON (Pydantic `str` enums) - a client never needs to decode an integer or otherwise-encoded value.
 
 ---
 
@@ -1435,11 +1487,74 @@ Possible error responses
 
 ---
 
+## File Uploads
+
+Clinical documents can enter the system three ways: pasted text (JSON), or an uploaded file (`multipart/form-data`). Every route below is fully documented under its own entry above; this section is a consolidated summary of the pattern they share.
+
+### Pasted text
+
+`POST /patients/{patient_id}/clinical-documents` takes an ordinary JSON body (`document_type`, `title`, `raw_text`) - there is no file involved. The resulting document has `file_name`, `content_type`, and `file_size_bytes` all `null`, and `file_type` set to `"manual_entry"`. It has nothing to download: `GET .../{document_id}/download` 404s for it.
+
+### File upload
+
+| Endpoint | Accepted file | Stored `file_type` | Stored `content_type` |
+|---|---|---|---|
+| `POST /patients/{patient_id}/clinical-documents/upload-txt` | `.txt` extension or `text/plain` | `"txt"` | `"text/plain"` |
+| `POST /patients/{patient_id}/clinical-documents/upload-pdf` | `.pdf` extension or `application/pdf` | `"pdf"` | `"application/pdf"` |
+| `POST /patients/{patient_id}/clinical-documents/upload-csv` | `.csv` extension or `text/csv` | `"csv"` | `"text/csv"` |
+
+All three are `multipart/form-data` requests with the same three parts:
+
+```http
+POST /patients/1/clinical-documents/upload-txt HTTP/1.1
+Content-Type: multipart/form-data; boundary=...
+
+--...
+Content-Disposition: form-data; name="document_type"
+
+visit_note
+--...
+Content-Disposition: form-data; name="title"
+
+Initial Visit
+--...
+Content-Disposition: form-data; name="file"; filename="visit-note.txt"
+Content-Type: text/plain
+
+Patient presents with hypertension.
+--...--
+```
+
+`document_type` and `title` are plain form fields (not part of the file), both required and non-empty. Extension and content type are checked independently - either one matching is enough, so a file with a generic `application/octet-stream` content type but a correct extension is still accepted, and vice versa. Text is extracted server-side (a plain UTF-8 decode for `.txt`/`.csv`, `pypdf` for `.pdf`) into the same `raw_text` field a pasted-text document has, so AI analysis (`POST /patients/{patient_id}/analyses`) treats every document identically regardless of how it was created.
+
+**Both** the extracted text and the original file bytes are kept: `raw_text` is stored in Postgres exactly as with pasted text, and the original file is separately uploaded to the configured storage backend (`STORAGE_BACKEND=local` or `s3` - see `docs/deployment.md`) under a generated key never exposed over the API. `content_type` and `file_size_bytes` on the response reflect that stored file.
+
+### Downloading the original file
+
+`GET /patients/{patient_id}/clinical-documents/{document_id}/download` streams the original uploaded file's bytes back through this server - never a redirect to a bucket URL, and the response never reveals a storage path or key. Response headers:
+
+- `Content-Type`: the document's stored `content_type`.
+- `Content-Disposition`: `attachment; filename="<original file name>"`.
+
+A pasted-text document, or any document with no stored file, 404s here (`"This document has no stored file to download"`) rather than returning an empty body.
+
+### Two different `.csv` endpoints
+
+`POST /patients/{patient_id}/medications/import` and `POST /patients/{patient_id}/clinical-documents/upload-csv` both accept a `.csv` file but do unrelated things - the former parses it into structured `Medication` rows, the latter stores its raw text as ordinary clinical-document evidence. See each endpoint's own entry above, and the Notes section below, for the full distinction.
+
+---
+
 ## Error Responses
 
 ### 400 Bad Request
 
-Reserved for malformed requests. No endpoint currently returns this status directly — request body validation failures surface as `422` instead (see below).
+Returned only by `POST /patients/{patient_id}/analyses/{analysis_id}/discrepancies/{discrepancy_id}/resolve`, when the requested `action` doesn't make sense for that discrepancy's `discrepancy_type` or current medication linkage (see that endpoint's table above) - a request that is well-formed JSON and passes schema validation, but is semantically invalid given the resource's current state. No other endpoint returns this status; request *body* validation failures (missing/malformed fields) surface as `422` instead (see below).
+
+```json
+{
+  "detail": "add_medication is only valid for a medication missing from the list"
+}
+```
 
 ### 401 Unauthorized
 
@@ -1522,6 +1637,33 @@ Also returned (Issue #58) by `POST /patients/{patient_id}/clinical-documents/upl
   "detail": "File storage is currently unavailable"
 }
 ```
+
+---
+
+## API Conventions
+
+**Pagination.** Only `GET /patients/{patient_id}/analyses` and `GET /analyses/recent` paginate, and only in the limited sense of a `limit` query parameter (integer, default `10`, minimum `1`, maximum `50`) - there is no `offset`, page number, or cursor, and no way to fetch anything past the most recent `limit` results. Every other list endpoint (`GET /patients`, `GET /patients/{patient_id}/medications`, `GET /patients/{patient_id}/clinical-documents`) returns the full, unpaginated list.
+
+**Timestamps.** Every `created_at`/`updated_at`/`started_at`/`completed_at`/`resolved_at` field is UTC, serialized by Pydantic from a `datetime` column (e.g. `"2026-07-12T19:59:14.696845Z"`). The one exception is `GET /health`'s `timestamp`, a plain pre-formatted string (`"2026-08-04T02:15:30Z"`, no microseconds) rather than a serialized `datetime` field - see that endpoint's field notes above for why. `updated_at` is `null` until a resource is actually updated for the first time; creation alone never sets it.
+
+**IDs.** Every resource is identified by an integer primary key, assigned by the database on creation - never a UUID or client-supplied id. Ownership is enforced by scoping every query to the authenticated user (directly, e.g. `Patient.user_id`, or transitively through `patient_id`, e.g. medications/clinical documents/analyses) - an id that exists but belongs to someone else is indistinguishable from one that doesn't exist at all: both 404, never `403 Forbidden` (see 404 Not Found above).
+
+**Nullable fields.** A field that is optional at creation (e.g. `Patient.external_mrn`, `Medication.notes`) is `null`, never omitted, in every response - the response schemas list every field explicitly rather than using `exclude_unset`/`exclude_none` (the one exception is `GET /health`, which does use `exclude_none` - see that endpoint). On `PATCH` endpoints, a field left out of the *request* body is left unchanged, which is a different thing from explicitly setting it to `null`; where a field can be intentionally cleared this way (e.g. `username` on `PATCH /users/me`), that's called out in the endpoint's own validation rules.
+
+**Enum values.** Every enum (see Schemas above) is a plain lowercase, `snake_case` string over the wire - `"pending"`, `"dose_conflict"`, `"add_medication"`, and so on - never an integer code.
+
+**Consistent response patterns.** `POST` that creates a resource returns `201` with the created resource; `PATCH` returns `200` with the updated resource; `DELETE` returns `204` with no body. A partial update (`PATCH`) never requires resending fields the caller isn't changing. A handful of request schemas (`UserUpdate`, `DiscrepancyResolutionIn`) reject unrecognized fields outright (`extra="forbid"`, surfacing as `422`) rather than silently ignoring them; most others (e.g. `PatientUpdate`) simply ignore an unrecognized field. Soft-delete exists only for `Patient` (`DELETE /patients/{patient_id}` sets `status: "archived"`, does not remove the row); every other `DELETE` endpoint is a real, permanent delete.
+
+---
+
+## OpenAPI / Interactive Docs
+
+This document is written and maintained by hand, alongside the code - it is not generated. FastAPI separately generates a full OpenAPI 3 schema directly from the route decorators, Pydantic models, and type hints in `app/`, always exactly in sync with the running code:
+
+- `GET /docs` - interactive Swagger UI. Every endpoint below can be tried directly from the browser, including sending a Bearer token via the "Authorize" button.
+- `GET /openapi.json` - the raw OpenAPI schema, useful for generating a typed client or importing into a tool like Postman/Insomnia.
+
+Where this document explains *why* something works the way it does (a workflow, a validation rule's reasoning, which endpoints share a schema), the OpenAPI schema is the authoritative source for the exact shape of a request or response - field types, which fields are required, and full enum definitions. If the two ever disagree, the running code (and therefore `/openapi.json`) is correct and this document is stale.
 
 ---
 

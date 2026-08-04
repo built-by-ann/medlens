@@ -273,6 +273,7 @@ def delete_analysis_detail(
 @router.post(
     "/{analysis_id}/discrepancies/{discrepancy_id}/resolve",
     response_model=MedicationDiscrepancyDetailResponse,
+    summary="Resolve discrepancy",
 )
 def resolve_discrepancy_route(
     analysis_id: int,
