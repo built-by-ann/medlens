@@ -1,4 +1,5 @@
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -102,6 +103,8 @@ def summarize_clinical_documents(
         },
     )
 
+    started_at = time.monotonic()
+
     try:
         mark_analysis_processing(db, analysis)
 
@@ -124,6 +127,7 @@ def summarize_clinical_documents(
         db.rollback()
         message = _safe_error_message(error)
         mark_analysis_failed(db, analysis, message)
+        duration_ms = (time.monotonic() - started_at) * 1000
 
         # message is already sanitized by _safe_error_message - the same
         # text returned to the client in the 503 below, never a raw
@@ -140,6 +144,7 @@ def summarize_clinical_documents(
                 "event": "analysis_failed",
                 "patient_id": patient.id,
                 "analysis_id": analysis.id,
+                "duration_ms": round(duration_ms, 1),
             },
         )
 
@@ -148,6 +153,14 @@ def summarize_clinical_documents(
             detail=message,
         ) from error
 
+    duration_ms = (time.monotonic() - started_at) * 1000
+
+    # duration_ms here is the whole pipeline this route runs after marking
+    # the analysis processing - AI request (already timed on its own by
+    # GeminiProvider, app/ai/providers/gemini_provider.py) plus response
+    # validation and reconciliation (persist_analysis_result, above) - not
+    # a duplicate of the AI provider's own timing, a broader span that
+    # includes it.
     logger.info(
         "Analysis completed",
         extra={
@@ -156,6 +169,7 @@ def summarize_clinical_documents(
             "analysis_id": analysis.id,
             "provider": result.provider,
             "model": result.model,
+            "duration_ms": round(duration_ms, 1),
         },
     )
 

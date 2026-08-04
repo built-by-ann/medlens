@@ -543,6 +543,25 @@ Unchanged from the commands in Viewing logs, above (`docker compose logs backend
 
 ---
 
+## Timing Metrics (Issue #60)
+
+Every meaningful operation logs its own duration as a `duration_ms` field (milliseconds, always a plain number - never a formatted string) on an existing structured log event - no new logging mechanism, no Prometheus/OpenTelemetry/CloudWatch metrics, and no database changes. This builds directly on Structured Application Logging (above): the same `docker compose logs backend | jq` workflow already documented there is how these are read, and `request_id` still correlates every line from the same request.
+
+| What | Event | Span |
+|---|---|---|
+| Total HTTP request | `http_request_completed` | Already existed (Issue #59) - the whole request, from the request-logging middleware. |
+| AI provider request | `ai_request_succeeded` / `ai_request_failed` | Already existed (Issue #59) - just the call to Gemini, from `GeminiProvider.generate_summary`. |
+| Analysis processing | `analysis_completed` / `analysis_failed` | New - from `mark_analysis_processing` through reconciliation, i.e. everything `POST /patients/{id}/analyses` does after creating the `Analysis` row. Broader than, and includes, the AI provider span above. |
+| Document upload processing | `document_uploaded` | New - the whole upload route handler: validation, extraction, storage upload, and persistence. Broader than, and includes, the two spans below. |
+| Document text extraction | `document_text_extracted` (new event) | New - just parsing/decoding (`pypdf` for PDF, a plain UTF-8 decode for txt/csv), logged uniformly across all three upload formats via `file_type`. |
+| Storage upload | `storage_upload_completed` (new event, success) / `s3_upload_failed` (existing event, failure) | New - just the write to the backend (`S3StorageService.upload`'s `put_object` call, or `LocalStorageService.upload`'s file write), identified by `storage_backend` (`"s3"` or `"local"`) and `storage_key`. |
+
+**Nested spans are intentional, not duplicate instrumentation.** A single analysis request produces several `duration_ms` values that each cover a different, overlapping scope - e.g. `ai_request_succeeded` (2412ms) < `analysis_completed` (2436ms, adds reconciliation) < `http_request_completed` (2453ms, adds routing/auth overhead) for the same request, all sharing one `request_id`. The same nesting applies to uploads: `document_text_extracted` < `document_uploaded` < `http_request_completed`. This mirrors Issue #59's own AI-provider-inside-analysis pattern; no event is logged twice under two different names for the same span.
+
+**Identifiers**: every timing event carries whichever of `request_id`, `patient_id`, `analysis_id`, `document_id`, `provider`, `model`, `storage_backend`, `storage_key` actually apply to it - the same `ALLOWED_FIELDS` allowlist from Issue #59, unchanged (every field used here already existed in it).
+
+---
+
 ## Continuous Deployment
 
 The planned deployment workflow is:

@@ -1,4 +1,5 @@
 import logging
+import time
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -70,6 +71,7 @@ def upload_txt_document(
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
 ) -> ClinicalDocumentResponse:
+    started_at = time.monotonic()
     is_txt_extension = (file.filename or "").lower().endswith(".txt")
     is_plain_text_content_type = file.content_type == "text/plain"
 
@@ -81,6 +83,7 @@ def upload_txt_document(
 
     contents = file.file.read()
 
+    extraction_started_at = time.monotonic()
     try:
         raw_text = contents.decode("utf-8")
     except UnicodeDecodeError:
@@ -88,6 +91,7 @@ def upload_txt_document(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File must be valid UTF-8 encoded text",
         ) from None
+    _log_text_extracted(patient.id, TXT_FILE_TYPE, extraction_started_at)
 
     if not raw_text:
         raise HTTPException(
@@ -106,6 +110,7 @@ def upload_txt_document(
         file_type=TXT_FILE_TYPE,
         content=contents,
         content_type=TXT_CONTENT_TYPE,
+        started_at=started_at,
     )
 
 
@@ -122,6 +127,7 @@ def upload_pdf_document(
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
 ) -> ClinicalDocumentResponse:
+    started_at = time.monotonic()
     is_pdf_extension = (file.filename or "").lower().endswith(".pdf")
     is_pdf_content_type = file.content_type == "application/pdf"
 
@@ -139,6 +145,7 @@ def upload_pdf_document(
             detail="Uploaded file is empty",
         )
 
+    extraction_started_at = time.monotonic()
     try:
         raw_text = extract_text_from_pdf(contents)
     except PdfExtractionError:
@@ -146,6 +153,7 @@ def upload_pdf_document(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File must be a valid PDF",
         ) from None
+    _log_text_extracted(patient.id, PDF_FILE_TYPE, extraction_started_at)
 
     if not raw_text:
         raise HTTPException(
@@ -164,6 +172,7 @@ def upload_pdf_document(
         file_type=PDF_FILE_TYPE,
         content=contents,
         content_type=PDF_CONTENT_TYPE,
+        started_at=started_at,
     )
 
 
@@ -187,6 +196,7 @@ def upload_csv_document(
     # the /patients/{id}/medications/import route in medications.py); the raw
     # CSV text is stored and flows through the exact same pipeline as an
     # uploaded .txt file, with nothing patient-medication-specific about it.
+    started_at = time.monotonic()
     is_csv_extension = (file.filename or "").lower().endswith(".csv")
     is_csv_content_type = file.content_type == "text/csv"
 
@@ -198,6 +208,7 @@ def upload_csv_document(
 
     contents = file.file.read()
 
+    extraction_started_at = time.monotonic()
     try:
         raw_text = contents.decode("utf-8")
     except UnicodeDecodeError:
@@ -205,6 +216,7 @@ def upload_csv_document(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File must be valid UTF-8 encoded text",
         ) from None
+    _log_text_extracted(patient.id, CSV_FILE_TYPE, extraction_started_at)
 
     if not raw_text:
         raise HTTPException(
@@ -223,6 +235,27 @@ def upload_csv_document(
         file_type=CSV_FILE_TYPE,
         content=contents,
         content_type=CSV_CONTENT_TYPE,
+        started_at=started_at,
+    )
+
+
+def _log_text_extracted(patient_id: int, file_type: str, extraction_started_at: float) -> None:
+    # Issue #60: separate from document_uploaded's own duration_ms
+    # (create_clinical_document_from_file, app/services/clinical_document_service.py),
+    # which covers storage upload + persistence - this is only the
+    # text-extraction step (pypdf for PDF, a plain decode for txt/csv),
+    # logged uniformly across all three formats so file_type is a
+    # meaningful comparison dimension (e.g. PDF extraction is expected to
+    # be slower than a plain decode).
+    duration_ms = (time.monotonic() - extraction_started_at) * 1000
+    logger.info(
+        "Document text extracted",
+        extra={
+            "event": "document_text_extracted",
+            "patient_id": patient_id,
+            "file_type": file_type,
+            "duration_ms": round(duration_ms, 1),
+        },
     )
 
 

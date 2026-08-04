@@ -217,3 +217,47 @@ def test_s3_delete_for_a_missing_object_is_not_logged_as_a_failure(s3_bucket, ca
         storage.delete("does/not/exist.txt")
 
     assert [r for r in caplog.records if r.event == "s3_delete_failed"] == []
+
+
+# --- Storage upload timing (Issue #60) ---
+
+
+def test_local_upload_logs_storage_upload_completed_duration_ms(tmp_path, caplog):
+    storage = LocalStorageService(base_dir=str(tmp_path))
+
+    with caplog.at_level(logging.INFO):
+        storage.upload("a.txt", b"content", "text/plain")
+
+    (record,) = [r for r in caplog.records if r.event == "storage_upload_completed"]
+    assert record.storage_backend == "local"
+    assert record.storage_key == "a.txt"
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+
+
+def test_s3_upload_logs_storage_upload_completed_duration_ms(s3_bucket, caplog):
+    storage = _s3_storage(s3_bucket)
+
+    with caplog.at_level(logging.INFO):
+        storage.upload("a.txt", b"content", "text/plain")
+
+    (record,) = [r for r in caplog.records if r.event == "storage_upload_completed"]
+    assert record.storage_backend == "s3"
+    assert record.storage_key == "a.txt"
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+
+
+def test_s3_upload_failure_also_includes_duration_ms(s3_bucket, caplog):
+    # The timer that produces storage_upload_completed's duration_ms above
+    # is the same one already wrapping the failure path (S3StorageService.upload) -
+    # naturally extending the existing s3_upload_failed log with the value
+    # it was already computing, not a second, duplicate timing mechanism.
+    storage = S3StorageService(bucket_name="this-bucket-does-not-exist", region="us-east-1")
+
+    with caplog.at_level(logging.WARNING), pytest.raises(StorageError):
+        storage.upload("a.txt", b"content", "text/plain")
+
+    (record,) = [r for r in caplog.records if r.event == "s3_upload_failed"]
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0

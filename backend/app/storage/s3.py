@@ -1,4 +1,5 @@
 import logging
+import time
 
 import boto3
 from botocore.exceptions import ClientError
@@ -40,6 +41,7 @@ class S3StorageService(StorageService):
         self._client = boto3.client("s3", **client_kwargs)
 
     def upload(self, key: str, content: bytes, content_type: str) -> None:
+        started_at = time.monotonic()
         try:
             self._client.put_object(
                 Bucket=self._bucket_name,
@@ -68,9 +70,20 @@ class S3StorageService(StorageService):
                     "event": "s3_upload_failed",
                     "storage_key": key,
                     "error_type": _error_code(error),
+                    "duration_ms": round((time.monotonic() - started_at) * 1000, 1),
                 },
             )
             raise StorageError(f"Failed to upload object to S3: {key}") from error
+
+        logger.info(
+            "S3 upload completed",
+            extra={
+                "event": "storage_upload_completed",
+                "storage_backend": "s3",
+                "storage_key": key,
+                "duration_ms": round((time.monotonic() - started_at) * 1000, 1),
+            },
+        )
 
     def download(self, key: str) -> StoredObject:
         try:

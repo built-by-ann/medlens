@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 
 from sqlalchemy.orm import Session, selectinload
@@ -66,6 +67,7 @@ def create_clinical_document_from_file(
     file_type: str,
     content: bytes,
     content_type: str,
+    started_at: float | None = None,
 ) -> ClinicalDocument:
     """Uploads the original file to storage, then persists the document
     with the resulting metadata. Text extraction (producing `raw_text`)
@@ -73,7 +75,17 @@ def create_clinical_document_from_file(
     before this is called - a PDF/CSV/TXT that fails extraction never
     reaches here, so this function never uploads a file for a document
     that wouldn't have been created anyway.
+
+    started_at (Issue #60): a time.monotonic() reading from the top of the
+    calling route handler, used only to compute the document_uploaded log's
+    duration_ms below - the "document upload processing" span covers the
+    whole route (validation, extraction, this function), not just the part
+    inside this function, so the timer has to start before this function is
+    even called. Optional (defaults to now, i.e. ~0ms) so this function
+    still works standalone, e.g. from a test that doesn't care about timing.
     """
+    if started_at is None:
+        started_at = time.monotonic()
     storage_key = _build_storage_key(patient.id, file_name)
     storage.upload(storage_key, content, content_type)
 
@@ -110,6 +122,7 @@ def create_clinical_document_from_file(
 
     db.refresh(document)
 
+    duration_ms = (time.monotonic() - started_at) * 1000
     logger.info(
         "Clinical document uploaded",
         extra={
@@ -117,6 +130,7 @@ def create_clinical_document_from_file(
             "patient_id": patient.id,
             "document_id": document.id,
             "file_type": file_type,
+            "duration_ms": round(duration_ms, 1),
         },
     )
 

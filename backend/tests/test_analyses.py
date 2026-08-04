@@ -1,4 +1,5 @@
 import json
+import logging
 
 from app.ai.providers.base import AIProvider, AIProviderError
 from app.ai.service import AISummaryService, get_ai_summary_service
@@ -172,6 +173,58 @@ def _create_completed_analysis(
 
     assert response.status_code == 201
     return response.json()["analysis_id"]
+
+
+# --- Timing (Issue #60) -------------------------------------------------
+
+
+def test_summarize_logs_analysis_completed_duration_ms(client, caplog):
+    token = _register_and_login(client, "analysistiming@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+
+    app.dependency_overrides[get_ai_summary_service] = _override_ai_service(_FakeProvider())
+    caplog.set_level(logging.INFO)
+    try:
+        response = client.post(
+            f"/patients/{patient['id']}/analyses",
+            json={"clinical_document_ids": [document["id"]]},
+            headers=_auth_headers(token),
+        )
+    finally:
+        app.dependency_overrides.pop(get_ai_summary_service, None)
+
+    assert response.status_code == 201
+    (record,) = [r for r in caplog.records if getattr(r, "event", None) == "analysis_completed"]
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+    assert record.patient_id == patient["id"]
+    assert record.analysis_id == response.json()["analysis_id"]
+
+
+def test_summarize_logs_analysis_failed_duration_ms(client, caplog):
+    token = _register_and_login(client, "analysistimingfail@example.com")
+    patient = _create_patient(client, token).json()
+    document = _create_document(client, token, patient["id"])
+
+    app.dependency_overrides[get_ai_summary_service] = _override_ai_service(
+        _FakeProvider(error=AIProviderError("simulated provider failure"))
+    )
+    caplog.set_level(logging.INFO)
+    try:
+        response = client.post(
+            f"/patients/{patient['id']}/analyses",
+            json={"clinical_document_ids": [document["id"]]},
+            headers=_auth_headers(token),
+        )
+    finally:
+        app.dependency_overrides.pop(get_ai_summary_service, None)
+
+    assert response.status_code == 503
+    (record,) = [r for r in caplog.records if getattr(r, "event", None) == "analysis_failed"]
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+    assert record.patient_id == patient["id"]
 
 
 def test_summarize_requires_authentication(client):
