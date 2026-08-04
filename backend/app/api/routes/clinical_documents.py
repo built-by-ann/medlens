@@ -62,6 +62,7 @@ def create_document(
     "/upload-txt",
     response_model=ClinicalDocumentResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Upload TXT document",
 )
 def upload_txt_document(
     document_type: str = Form(min_length=1),
@@ -118,6 +119,7 @@ def upload_txt_document(
     "/upload-pdf",
     response_model=ClinicalDocumentResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Upload PDF document",
 )
 def upload_pdf_document(
     document_type: str = Form(min_length=1),
@@ -180,6 +182,7 @@ def upload_pdf_document(
     "/upload-csv",
     response_model=ClinicalDocumentResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Upload CSV document",
 )
 def upload_csv_document(
     document_type: str = Form(min_length=1),
