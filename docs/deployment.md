@@ -2,9 +2,9 @@
 
 ## Overview
 
-MedLens is deployed as a Dockerized full-stack web application on AWS. The deployment emphasizes reproducibility and simplicity appropriate to a single-developer project over scalability - one EC2 instance, running the same three containers (`frontend`, `backend`, `postgres`) locally validated in Issue #56, coordinated by the same Docker Compose file used for local development.
+MedLens is deployed as a Dockerized full-stack web application on AWS. The deployment emphasizes reproducibility and simplicity appropriate to a single-developer project over scalability - one EC2 instance, running the same three containers (`frontend`, `backend`, `postgres`) locally validated in Issue #56, coordinated by the same Docker Compose file used for local development. A fourth container, `certbot` (Issue #189), exists in the same file but never runs continuously - only on demand, to issue or renew the HTTPS certificate `frontend` serves.
 
-Issue #56 validated that the production images build, both locally and in CI. Issue #57 (this document's "AWS EC2 Deployment" section, below) is what actually runs them on a real EC2 instance. Issue #190 (this document's "Reverse Proxy" section, below) put nginx in front of the backend, so the browser now reaches the whole application through one origin. HTTPS, a custom domain, managed databases, and container orchestration (ECS/EKS/Kubernetes) remain explicitly deferred - see the Production Readiness subsection for the full list and why each is deferred rather than overlooked.
+Issue #56 validated that the production images build, both locally and in CI. Issue #57 (this document's "AWS EC2 Deployment" section, below) is what actually runs them on a real EC2 instance. Issue #190 (this document's "Reverse Proxy" section, below) put nginx in front of the backend, so the browser now reaches the whole application through one origin, and Issue #189 (this document's "HTTPS / TLS" section, below) put a real TLS certificate on that same nginx. A custom domain actually resolving to this instance, managed databases, and container orchestration (ECS/EKS/Kubernetes) remain explicitly deferred - see the Production Readiness subsection for the full list and why each is deferred rather than overlooked.
 
 ---
 
@@ -12,13 +12,13 @@ Issue #56 validated that the production images build, both locally and in CI. Is
 
 The current production environment consists of:
 
-- React frontend (served as a static build by nginx, which also reverse-proxies API requests to the backend - see Docker Strategy and Reverse Proxy below)
+- React frontend (served as a static build by nginx, which also terminates HTTPS and reverse-proxies API requests to the backend - see Docker Strategy, Reverse Proxy, and HTTPS / TLS below)
 - FastAPI backend, reachable only from inside the Docker network (Issue #190) - never directly from the browser
 - PostgreSQL database
 - Docker containers, coordinated by Docker Compose
 - A single AWS EC2 instance
 
-See the "AWS EC2 Deployment" section below for the full architecture diagram and deployment runbook, and the "Reverse Proxy" section for how the frontend and backend are served under one origin.
+See the "AWS EC2 Deployment" section below for the full architecture diagram and deployment runbook, the "Reverse Proxy" section for how the frontend and backend are served under one origin, and the "HTTPS / TLS" section for how that one origin is served securely.
 
 ---
 
@@ -41,11 +41,12 @@ docker compose up --build
 
 | Service | Host port | Container port |
 |---|---|---|
-| `frontend` | `80` | `80` (nginx) |
+| `frontend` | `80` and `443` (Issue #189) | `80` and `443` (nginx) |
 | `backend` | `127.0.0.1:8000` only (Issue #190) | `8000` |
 | `postgres` | `127.0.0.1:5432` only | `5432` |
+| `certbot` | none - never publishes a port, and never starts with `docker compose up` at all (Issue #189, see HTTPS / TLS below) | n/a |
 
-`frontend` is the only one of the three meant to be opened in a browser (`http://localhost/`) - it serves the SPA and reverse-proxies `/api/*` to `backend` (see Reverse Proxy below), so every request the app makes goes through it too, at the same origin. `backend`'s own port still exists for direct access - `curl`, Postman, `npm run dev`'s Vite dev server - but is bound to `127.0.0.1`, not published beyond the host, the same treatment `postgres` already had.
+`frontend` is the only one of the four meant to be opened in a browser (`http://localhost/`, which immediately redirects to `https://localhost/` - see HTTPS / TLS below for why a browser will show a certificate warning here in local development, expected and harmless) - it serves the SPA and reverse-proxies `/api/*` to `backend` (see Reverse Proxy below), so every request the app makes goes through it too, at the same origin. `backend`'s own port still exists for direct access - `curl`, Postman, `npm run dev`'s Vite dev server - but is bound to `127.0.0.1`, not published beyond the host, the same treatment `postgres` already had. `certbot` is never opened in a browser at all and isn't started by `docker compose up` in the first place.
 
 `docker compose down` stops and removes the containers and network; add `-v` to also remove the named Postgres volume (`medlens_postgres_data`) and start from an empty database next time.
 
@@ -55,17 +56,16 @@ docker compose up --build
 
 The current production deployment (see "AWS EC2 Deployment" below for the full runbook) includes:
 
-- Dockerized frontend (nginx serving a static build) and backend, each with a Docker-level health check and `restart: unless-stopped`
+- Dockerized frontend (nginx, terminating HTTPS and reverse-proxying to the backend - Issues #190/#189) and backend, each with a Docker-level health check and `restart: unless-stopped`
 - PostgreSQL, with its data on a named Docker volume that survives container restarts and `docker compose down` (without `-v`)
 - Configuration and secrets via environment variables (`infra/.env`, gitignored - never a value hardcoded in a tracked file)
 - Database migrations applied automatically on every backend container start
 - Application logs via `docker compose logs` (plain container stdout/stderr - no structured/shipped logging yet, see Production Readiness below)
+- HTTPS via a real Let's Encrypt certificate, once `certbot` has actually been run against a domain that resolves to this instance - see HTTPS / TLS below
 
 Deferred to a future iteration, in explicit scope per Issue #57's own instructions - see "AWS EC2 Deployment" below's Production Readiness subsection for the full reasoning behind each:
 
-- Nginx (or similar) reverse proxy in front of both application containers
-- HTTPS / TLS
-- DNS / a custom domain
+- DNS / a custom domain actually resolving to this instance (a prerequisite for HTTPS / TLS to do anything beyond what's already implemented - see HTTPS / TLS below)
 - Load balancing / multiple instances
 - Managed PostgreSQL (AWS RDS)
 - Automated (CI-triggered) deployment
@@ -162,7 +162,9 @@ A clean rebuild (`docker build --no-cache`) was verified to succeed for both ima
 | `GEMINI_MODEL` | Backend **container runtime** | No - defaults to `gemini-2.5-flash` | Which Gemini model to call - see `docs/ai.md`'s "A Note on Model Retirement." Changing this only needs `infra/.env` updated and the backend container restarted (`docker compose up -d backend`), never a rebuild - useful when Google retires the current default, which has already happened once (`gemini-2.0-flash`, fixed by changing this same default). |
 | `APP_ENV` (Issue #57) | Backend **container runtime** | No - defaults to `development` | `development` auto-allows any `localhost`/`127.0.0.1` origin for CORS (see `app/main.py`'s `configure_cors`) - relevant only to `npm run dev`'s Vite dev server, which talks to the backend directly and cross-origin. A real deployment should still set this to `production`, but not for CORS reasons anymore - see Reverse Proxy below. |
 | `POSTGRES_PASSWORD` (Issue #57) | Backend + `postgres` **container runtime** | No - defaults to `medlens_password` | `infra/docker-compose.yml` references this one variable in both the `postgres` service's own credentials and the backend's `DATABASE_URL`, so they can't drift out of sync. Change it before any real deployment. |
-| `FRONTEND_PORT` (Issue #57) | Host, at `docker compose up` time | No - defaults to `80` (Issue #190) | Which host port Compose publishes the frontend container on - the app's only public entry point. Not read by the application itself. |
+| `FRONTEND_PORT` (Issue #57) | Host, at `docker compose up` time | No - defaults to `80` (Issue #190) | Which host port Compose publishes the frontend container's HTTP listener on - redirects to HTTPS and serves Let's Encrypt's renewal challenge only (Issue #189), not the app itself. Not read by the application itself. |
+| `FRONTEND_HTTPS_PORT` (Issue #189) | Host, at `docker compose up` time | No - defaults to `443` | Which host port Compose publishes the frontend container's HTTPS listener on - the actual public entry point once HTTPS is set up. See HTTPS / TLS below. |
+| `DOMAIN` (Issue #189) | Frontend **image build** (`docker build --build-arg`) | No - defaults to `medlenshealth.com` | Baked into `nginx.conf` at build time (same reasoning as `VITE_API_BASE_URL` above), so nginx knows which path inside the shared certificate volume to read from. Must match the domain `certbot` actually issues a certificate for - see HTTPS / TLS below. |
 | `BACKEND_PORT` (Issue #57) | Host, at `docker compose up` time | No - defaults to `8000` | Bound to `127.0.0.1` only (Issue #190) - never reachable from outside the host. Exists for direct local access to the API (`curl`, Postman, `npm run dev`), not for the browser, which only ever uses the reverse proxy above. |
 | `STORAGE_BACKEND` (Issue #58) | Backend **container runtime** | No - defaults to `local` | `local` or `s3` - see the "File Storage (S3)" section below for the full setup. |
 | `AWS_REGION` / `S3_BUCKET_NAME` (Issue #58) | Backend **container runtime** | Only when `STORAGE_BACKEND=s3` | The backend fails to start with a clear error if either is missing while `s3` is selected - see "File Storage (S3)" below. |
@@ -198,7 +200,7 @@ See this issue's final report for measured before/after build times.
 
 ## AWS EC2 Deployment (Issue #57)
 
-Where Issue #56 stopped at "the images build," this issue is "the images run, in production, on a real EC2 instance, using Docker Compose" - reusing exactly those images and `infra/docker-compose.yml`, not a redesign. Deliberately out of scope, per the issue itself, and covered instead under Production Readiness below as intentionally deferred work: DNS, HTTPS/TLS, a reverse proxy, ECS/EKS/Kubernetes, and automated (CI-triggered) deployment. This is a single EC2 instance, reached directly by IP and port, updated by hand over SSH.
+Where Issue #56 stopped at "the images build," this issue is "the images run, in production, on a real EC2 instance, using Docker Compose" - reusing exactly those images and `infra/docker-compose.yml`, not a redesign. Deliberately out of scope, per the issue itself, and covered instead under Production Readiness below as intentionally deferred work: DNS/a custom domain actually resolving here, ECS/EKS/Kubernetes, and automated (CI-triggered) deployment (a reverse proxy and HTTPS/TLS were deferred here too originally, but are now implemented - see the Reverse Proxy and HTTPS / TLS sections below). This is a single EC2 instance, reached directly by IP (or, once DNS is configured, a domain) over HTTPS, updated by hand over SSH.
 
 ### Deployment architecture
 
@@ -207,22 +209,27 @@ Where Issue #56 stopped at "the images build," this issue is "the images run, in
                             │
               ┌─────────────┼─────────────┐
               │ security group             │
-              │      22 (SSH)   80         │
-              └─────┬────────────┬─────────┘
-                    ▼            ▼
+              │   22 (SSH)   80   443      │
+              └─────┬────────┬───────┬─────┘
+                    ▼        ▼       ▼
               ┌──────────────────────────────────────┐
               │            EC2 instance                │
               │                                         │
-              │  frontend container (nginx) :80         │
-              │    ├─ serves the built React SPA        │
-              │    └─ reverse-proxies /api/* ──┐         │
-              │                                 ▼         │
+              │  frontend container (nginx) :80, :443    │
+              │    ├─ :80  redirects to :443, serves    │
+              │    │       the ACME renewal challenge   │
+              │    ├─ :443 serves the built React SPA   │
+              │    └─      reverse-proxies /api/* ──┐    │
+              │                                      ▼    │
               │  backend container (uvicorn) :8000        │
               │    (127.0.0.1 only - not exposed          │
               │     through the security group)           │
               │  postgres container :5432                 │
               │    (127.0.0.1 only - not exposed          │
               │     through the security group)           │
+              │  certbot container - not always running,   │
+              │    invoked on demand for cert issuance/    │
+              │    renewal (see HTTPS / TLS below)         │
               │                                         │
               │  docker compose (infra/)                │
               └───────────────┬─────────────────────────┘
@@ -254,7 +261,8 @@ See Security below for the reasoning; the rules themselves:
 | Type | Port | Source | Purpose |
 |---|---|---|---|
 | SSH | 22 | Your own IP only (`My IP` in the console) | Administration. Never `0.0.0.0/0` - an SSH port open to the entire internet is scanned and attacked continuously. |
-| Custom TCP | 80 (or `FRONTEND_PORT`, see below) | `0.0.0.0/0` | The web app itself - the SPA and, via nginx's reverse proxy, the API too (`/api/*`, see Reverse Proxy below). The one and only public entry point. |
+| Custom TCP | 443 (or `FRONTEND_HTTPS_PORT`, see below) | `0.0.0.0/0` | The web app itself - the SPA and, via nginx's reverse proxy, the API too (`/api/*`, see Reverse Proxy below). The actual public entry point once HTTPS is set up (see HTTPS / TLS below). |
+| Custom TCP | 80 (or `FRONTEND_PORT`, see below) | `0.0.0.0/0` | Redirects to 443, and serves Let's Encrypt's renewal challenge (Issue #189, see HTTPS / TLS below) - this can't be closed even after HTTPS is working, since certificate renewal depends on it staying reachable. |
 
 **8000 (backend) and 5432 (Postgres) are both deliberately absent from this table** (Issue #190) - `infra/docker-compose.yml` binds both to `127.0.0.1` only (see Docker Strategy above), so neither is reachable from outside the instance even if a security group rule mistakenly allowed it. Nothing to configure here; this is enforced at the Docker level, not the AWS level, on purpose - see Security below.
 
@@ -308,23 +316,44 @@ This is the exact `docker build` already validated in CI (Issue #56) for each im
 docker compose up -d
 ```
 
-`-d` (detached) so the application keeps running after the SSH session ends - without it, closing the terminal stops every container. `restart: unless-stopped` on all three services (see Production Configuration below) means they also come back automatically if the instance itself reboots, with no manual step needed.
+`-d` (detached) so the application keeps running after the SSH session ends - without it, closing the terminal stops every container. `restart: unless-stopped` on `frontend`/`backend`/`postgres` (see Production Configuration below) means they come back automatically if the instance itself reboots, with no manual step needed. `certbot` never starts here at all (Issue #189 - see HTTPS / TLS below) - `docker compose up` brings up exactly the same three always-running containers it always has.
+
+At this point the app is already reachable over HTTPS, at `https://<ec2-public-ip>/` - `frontend`'s own `ensure-dummy-cert.sh` generates a short-lived self-signed certificate the moment nginx starts, specifically so this step alone is never blocked on DNS or Let's Encrypt being reachable. A browser will show a certificate warning until Step 8 below replaces it with a real one; nothing else is broken or waiting on that.
+
+### Step 8: Enable real HTTPS
+
+Only possible once your domain's DNS actually points at this instance's public IP (an A record, at whatever registrar/DNS provider you use for it - outside this repository, see Production Readiness below) - Let's Encrypt validates domain control by connecting to port 80 on the domain itself, not the IP directly, so this step fails until that DNS change has propagated.
+
+```bash
+docker compose run --rm certbot certonly \
+  --webroot -w /var/www/certbot \
+  -d medlenshealth.com \
+  --email you@example.com --agree-tos --no-eff-email
+
+docker compose exec frontend nginx -s reload
+```
+
+Replace the domain and email with your own if you're deploying this project under a different one - and make sure it's the *same* domain `DOMAIN` was set to in `infra/.env` before `docker compose build frontend` (Step 6), or nginx will be looking for the certificate in the wrong place inside the shared volume. `nginx -s reload` picks up the new certificate without dropping any in-flight connections - no container restart needed.
+
+See HTTPS / TLS below for what this command actually did, and for the cron entry that keeps the certificate renewed afterward without repeating this step by hand every ~90 days.
 
 ### Verifying the deployment
 
 ```bash
 # From the instance itself:
-docker compose ps                     # all three services should show "healthy" within ~30s
+docker compose ps                     # frontend/backend/postgres should show "healthy" within ~30s
 curl http://localhost:8000/health     # direct to the backend - 127.0.0.1 only, works from the instance itself
-curl http://localhost/api/health      # through nginx - what the browser actually uses (Issue #190)
+curl -k https://localhost/api/health  # through nginx - what the browser actually uses (Issues #190/#189).
+                                       # -k (skip certificate verification) only matters before Step 8 -
+                                       # once a real certificate is in place, drop it.
 
 # From your own machine:
-curl http://<ec2-public-ip>/api/health
+curl https://<ec2-public-ip-or-domain>/api/health   # add -k too, before Step 8
 ```
 
-Both `/health` checks return the same body - `{"status":"ok","version":"1.0.0","environment":"production",...}`, see `docs/api.md` - the second one just additionally proves the reverse proxy itself is working, not only the backend directly.
+Every `/health` check returns the same body - `{"status":"ok","version":"1.0.0","environment":"production",...}`, see `docs/api.md` - the nginx-routed ones just additionally prove the reverse proxy (and, after Step 8, HTTPS itself) are working, not only the backend directly.
 
-Then open `http://<ec2-public-ip>/` in a browser - the app should load, and registering an account should succeed (this exercises the database end to end, proving migrations actually ran - see Production Configuration below for why that specifically used to be broken). Open the browser's Network tab while doing this: every request should show as `http://<ec2-public-ip>/api/...`, never a separate `:8000` origin, and none should be preceded by an `OPTIONS` preflight request - see Reverse Proxy below for why.
+Then open `https://<ec2-public-ip-or-domain>/` in a browser - the app should load (with a certificate warning to click through, if Step 8 hasn't run yet), and registering an account should succeed (this exercises the database end to end, proving migrations actually ran - see Production Configuration below for why that specifically used to be broken). Open the browser's Network tab while doing this: every request should show as `https://.../api/...`, never a separate `:8000` origin or a plain `http://` request, and none should be preceded by an `OPTIONS` preflight request - see Reverse Proxy below for why on the CORS point, and HTTPS / TLS below for the redirect and certificate.
 
 ### Updating the application
 
@@ -406,17 +435,43 @@ Verified with a full `docker compose up -d --build` from a clean state: `postgre
 
 ### Reverse Proxy (Issue #190)
 
-Before this issue, the browser talked to two separate origins - the frontend on its own port, and the backend directly on its own (`http(s)://<host>:8000`) - which meant the backend's port had to be published publicly, the frontend had to be told that URL at image build time, and the backend needed CORS configured to accept requests from the frontend's separate origin. This issue put nginx (already the frontend's own container, serving the built SPA - no new component) in front of the backend too: it now reverse-proxies `/api/*` to the backend over the Docker network, and the browser never talks to the backend's own port at all. See the Deployment Architecture diagram above for the request flow, and `docs/design-decisions.md` (Decision 23) for the full reasoning.
+Before this issue, the browser talked to two separate origins - the frontend on its own port, and the backend directly on its own (`http(s)://<host>:8000`) - which meant the backend's port had to be published publicly, the frontend had to be told that URL at image build time, and the backend needed CORS configured to accept requests from the frontend's separate origin. This issue put nginx (already the frontend's own container, serving the built SPA - no new component) in front of the backend too: it now reverse-proxies `/api/*` to the backend over the Docker network, and the browser never talks to the backend's own port at all. See the Deployment Architecture diagram above for the request flow, and `docs/design-decisions.md` (Decision 24) for the full reasoning.
 
 **What changed:**
 
-- `frontend/nginx.conf` gained a `location /api/` block that strips the `/api` prefix and proxies everything else to `backend:8000` over the Docker network, using Docker's embedded DNS resolver so it re-resolves `backend`'s address per request rather than caching it from nginx startup (needed because `backend` can be recreated with a new IP independently - see Decision 23) - plus a `client_max_body_size 25m` (nginx's own 1m default is smaller than a real clinical PDF upload) and the standard `X-Real-IP`/`X-Forwarded-For`/`X-Forwarded-Proto` headers.
+- `frontend/nginx.conf` gained a `location /api/` block that strips the `/api` prefix and proxies everything else to `backend:8000` over the Docker network, using Docker's embedded DNS resolver so it re-resolves `backend`'s address per request rather than caching it from nginx startup (needed because `backend` can be recreated with a new IP independently - see Decision 24) - plus a `client_max_body_size 25m` (nginx's own 1m default is smaller than a real clinical PDF upload) and the standard `X-Real-IP`/`X-Forwarded-For`/`X-Forwarded-Proto` headers.
 - `backend/Dockerfile`'s `uvicorn` invocation gained `--forwarded-allow-ips='*'`, so it actually trusts and reads those headers - without it, every request's `client_ip` (Issue #59's structured logging) would show nginx's own Docker-network address instead of the real visitor's. Safe to trust unconditionally here specifically because the backend's port is no longer reachable by anything except nginx (and the host itself).
-- `infra/docker-compose.yml`: `backend`'s port binds to `127.0.0.1` only (the same treatment `postgres` already had); `frontend`'s default host port changes from `8080` to `80`; `VITE_API_BASE_URL`'s build-arg default changes from an absolute URL to `/api`; `CORS_ALLOWED_ORIGINS` is removed. No changes to healthchecks, `depends_on`, or restart policies - all three were preserved exactly as Issue #183 left them (see that section above), including `frontend` still having no `depends_on: backend` at all, now for a different reason than before (see Decision 23).
+- `infra/docker-compose.yml`: `backend`'s port binds to `127.0.0.1` only (the same treatment `postgres` already had); `frontend`'s default host port changes from `8080` to `80`; `VITE_API_BASE_URL`'s build-arg default changes from an absolute URL to `/api`; `CORS_ALLOWED_ORIGINS` is removed. No changes to healthchecks, `depends_on`, or restart policies - all three were preserved exactly as Issue #183 left them (see that section above), including `frontend` still having no `depends_on: backend` at all, now for a different reason than before (see Decision 24).
 - `app/main.py`'s `configure_cors` drops its `allowed_origins` parameter - `allow_origins` is now always empty, since there is no longer any legitimate cross-origin production request to allow for. The `LOCALHOST_ORIGIN_REGEX` behavior for `app_env == "development"` is unchanged: CORS middleware itself is retained, not removed, because `npm run dev`'s Vite dev server still makes a real cross-origin request directly to the backend (see Local Development above) - the one case this issue's own instructions anticipated ("if it is intentionally retained: document exactly why").
 - No frontend *source* changes at all - `frontend/src/api/client.ts`'s one shared axios instance already built every request from a configured `baseURL` plus a relative path (`/patients`, `/auth/login`, ...) with zero hardcoded hosts anywhere in the codebase, so pointing `VITE_API_BASE_URL` at a relative path (`/api`) was sufficient on its own; axios resolves a relative `baseURL` against the page's own origin automatically.
 
-**Verified directly** (not just "the config looks right"): a full `docker compose up -d --build` from a clean state, then registering a user, logging in, and exercising patient/medication CRUD entirely through `http://localhost/api/...` - identical responses to calling the backend's own port directly, and `client_ip` in the backend's own structured logs showing the real originating address, not nginx's container IP. Also verified the specific failure mode Decision 23 calls out: recreating *only* the `backend` container (`docker compose up -d --force-recreate backend`, simulating exactly what "Updating the application" above does on a backend-only change) leaves it with a new Docker-network IP, and `/api/health` through nginx keeps working afterward with no action taken on `frontend` at all - and separately, removing the `backend` container entirely and restarting `frontend` first confirmed nginx still starts and serves the SPA normally, `/api/*` correctly returning `502` (not a crash) until `backend` exists again.
+**Verified directly** (not just "the config looks right"): a full `docker compose up -d --build` from a clean state, then registering a user, logging in, and exercising patient/medication CRUD entirely through `http://localhost/api/...` - identical responses to calling the backend's own port directly, and `client_ip` in the backend's own structured logs showing the real originating address, not nginx's container IP. Also verified the specific failure mode Decision 24 calls out: recreating *only* the `backend` container (`docker compose up -d --force-recreate backend`, simulating exactly what "Updating the application" above does on a backend-only change) leaves it with a new Docker-network IP, and `/api/health` through nginx keeps working afterward with no action taken on `frontend` at all - and separately, removing the `backend` container entirely and restarting `frontend` first confirmed nginx still starts and serves the SPA normally, `/api/*` correctly returning `502` (not a crash) until `backend` exists again.
+
+### HTTPS / TLS (Issue #189)
+
+Audited against this issue's own checklist first (per its explicit "do not assume this issue still requires implementation" instruction): no certificate, no nginx TLS configuration, no certbot integration, and no mention of the production domain anywhere in the codebase existed before this issue - HTTPS was still genuinely unimplemented, only the reverse proxy it now builds on top of (Issue #190) had landed since this issue was originally written. See `docs/design-decisions.md` (Decision 25) for the full reasoning behind the design below.
+
+**What changed:**
+
+- `frontend/nginx.conf`'s single server block splits into two: port 80 now only redirects to HTTPS (`308`, preserving the request method and query string) and serves Let's Encrypt's ACME HTTP-01 challenge at `/.well-known/acme-challenge/` (which must stay reachable over plain HTTP forever, not just during initial issuance - renewal re-validates the same way); port 443 carries everything the old port-80 block had (the `/api/` proxy, SPA serving) plus TLS termination - `ssl_protocols TLSv1.2 TLSv1.3`, Mozilla's "Intermediate" cipher list, and an `Strict-Transport-Security` header (`max-age=15768000` - about 6 months, deliberately without `includeSubDomains` or `preload`, both of which are much harder to safely reverse than to add later).
+- `frontend/Dockerfile` gains a `DOMAIN` build arg (defaults to `medlenshealth.com`, overridable via `infra/.env`) baked into `nginx.conf` at build time, an `openssl` package (not present in `nginx:alpine` by default), and `ensure-dummy-cert.sh` installed into nginx's own `/docker-entrypoint.d/` auto-run mechanism - it generates a short-lived self-signed certificate at the same path `nginx.conf` expects, but only when nothing real is there yet, so `docker compose up` works identically whether or not a real certificate has ever been issued.
+- `infra/docker-compose.yml`: `frontend` now publishes `443` (`FRONTEND_HTTPS_PORT`) alongside `80`, and mounts two new named volumes - `certbot_certs` (the certificate; read-write, since `ensure-dummy-cert.sh` needs to write the placeholder there too) and `certbot_www` (the ACME challenge webroot; read-only from `frontend`'s side). A new `certbot` service, using the official `certbot/certbot` image and sharing both volumes, provides the real certificate - gated behind Compose's `profiles` so it never starts with a plain `docker compose up`, only via `docker compose run` (see Step 8 above for the actual commands). `frontend`'s healthcheck moves from plain HTTP to `https://127.0.0.1/` with `--no-check-certificate` (it only needs to confirm nginx is responding, not that the certificate is CA-trusted - true by design for the self-signed placeholder). No changes to `backend` or `postgres`, their healthchecks, `depends_on`, or restart policies.
+- No application code changes at all - HTTPS termination happens entirely in nginx; the backend continues speaking plain HTTP over the Docker network exactly as it did after Issue #190, and `X-Forwarded-Proto` (already forwarded correctly by the reverse proxy) now genuinely reads `https` for every real request instead of always being `http`.
+
+**Certificate management and renewal:**
+
+`certbot/certbot`'s webroot plugin is what Step 8 above actually invokes (`certonly --webroot -w /var/www/certbot -d medlenshealth.com`) - it writes challenge files nginx serves from the shared `certbot_www` volume, Let's Encrypt fetches them over port 80 to confirm domain control, and the resulting certificate lands in `certbot_certs` at `/etc/letsencrypt/live/medlenshealth.com/`, the same path `nginx.conf` was built to read from. `docker compose exec frontend nginx -s reload` picks it up without dropping connections.
+
+Renewal is a host-level cron entry, not a fourth always-running container - Let's Encrypt certificates are valid 90 days, and `certbot renew` is a no-op unless a certificate is actually close to expiring, so a frequent, idempotent cron job is the standard, low-risk approach:
+
+```bash
+# crontab -e, on the EC2 instance:
+0 3,15 * * * cd ~/medlens/infra && docker compose run --rm certbot renew --quiet && docker compose exec frontend nginx -s reload
+```
+
+Twice daily (Certbot's own recommended frequency, to tolerate a transient failure without risking an actual expiry), redirected to run quietly - `certbot renew` already logs to `/var/log/letsencrypt` inside the volume on an actual attempt. The `nginx -s reload` only matters on the rare day a renewal actually happens; it's harmless (a no-op reload) every other day.
+
+**Not verified in this environment**: actually obtaining a certificate from Let's Encrypt, since that requires `medlenshealth.com` to already resolve via DNS to a real, publicly-reachable instance - neither exists in this development environment (see Production Readiness below). What *is* verified directly: the entire path up to that point - `docker compose up -d --build` from a clean state, `frontend` reaching `healthy` on both ports, `http://localhost/` redirecting to `https://localhost/` (`308`), the self-signed placeholder certificate negotiating TLS 1.3 successfully, the `Strict-Transport-Security` header present, `/api/health` and a full register/login/patient-CRUD flow working identically over HTTPS as they did over plain HTTP, the ACME challenge location responding (`404` for a nonexistent token, not a redirect - proving it's correctly excluded from the HTTP→HTTPS redirect), `docker compose run --rm certbot certificates` executing correctly against the (empty, in this environment) certificate volume, and the dummy certificate persisting unchanged across a `frontend` container recreation (confirmed by an identical file checksum before and after) rather than being needlessly regenerated. Also confirmed `certbot` does not start with a plain `docker compose up`/`up -d --build` (Compose `profiles`), while `docker compose run --rm certbot ...` still reaches it by name regardless.
 
 ### Security
 
@@ -428,7 +483,8 @@ Before this issue, the browser talked to two separate origins - the frontend on 
   | Port | Exposed to | Why |
   |---|---|---|
   | 22 (SSH) | Your IP only | Administration access. |
-  | 80 (frontend, or `FRONTEND_PORT`) | Everyone | The whole application - the SPA and, via nginx's reverse proxy, the API too (Issue #190; see Reverse Proxy below). The only public entry point. |
+  | 443 (frontend, or `FRONTEND_HTTPS_PORT`) | Everyone | The whole application - the SPA and, via nginx's reverse proxy, the API too (Issue #190; see Reverse Proxy below). The actual public entry point once HTTPS is set up (Issue #189; see HTTPS / TLS below). |
+  | 80 (frontend, or `FRONTEND_PORT`) | Everyone | Redirects to 443, and serves Let's Encrypt's renewal challenge (Issue #189) - can't be closed even after HTTPS is working, since renewal depends on it. |
   | 8000 (backend, or `BACKEND_PORT`) | **Nobody** | Bound to `127.0.0.1` inside `docker-compose.yml` (Issue #190) - not reachable from outside the instance even if a security group rule mistakenly allowed it, the same treatment Postgres already had. The browser never uses this port; only nginx (over the Docker network) and, for direct local access, the instance itself. |
   | 5432 (Postgres) | **Nobody** | Bound to `127.0.0.1` inside `docker-compose.yml` itself (see Production Configuration Changes above) - there is no security group rule that could expose it even by mistake, since the port is never listening on a network interface a security group rule could apply to in the first place. |
 
@@ -444,8 +500,7 @@ Before this issue, the browser talked to two separate origins - the frontend on 
 
 | Deferred | Why it matters eventually | What exists today instead |
 |---|---|---|
-| HTTPS / TLS | Traffic (including login credentials and JWTs) travels in plaintext | None - synthetic data only (see `docs/design-decisions.md` Decision 8), so the practical exposure is low for this project specifically, but this would be a hard blocker for any real deployment handling real data |
-| DNS / custom domain | The app is only reachable by raw IP, which changes if the instance is ever replaced | None |
+| DNS / custom domain actually resolving here | HTTPS / TLS (Issue #189, see above) is fully implemented, but can't issue a real certificate without a domain that resolves to this instance - until DNS is configured, the app is only reachable by raw IP, which also changes if the instance is ever replaced | The infrastructure to enable HTTPS the moment DNS exists - see HTTPS / TLS above, Step 8 |
 | Automated deployment | "Deploy" (Continuous Deployment's step 7) is a manual SSH session today, not triggered by merging to `main` | The manual procedure in Updating the application, above |
 | Monitoring / alerting | Nothing pages anyone if a container is unhealthy for an extended period | `docker compose ps`/`GET /health`, checked by hand |
 | Backups | `docker compose down -v` (or any volume loss) is unrecoverable data loss | The named volume persists across container/instance restarts (verified - see Manual Verification), but nothing protects against genuine volume loss. Uploaded *files* specifically have a better story once S3 is configured (Issue #58, below) - S3 durability is independent of this EC2 instance entirely - but the *metadata* pointing to them (`ClinicalDocument.storage_key`, in Postgres) is not, so losing the database volume still means those S3 objects become unreachable through the application even though the bytes themselves survive |
@@ -637,8 +692,7 @@ Future improvements may include:
 
 Potential production improvements include, roughly in the order they'd likely matter (see "AWS EC2 Deployment"'s Production Readiness subsection above for the full reasoning behind each):
 
-- HTTPS / TLS and a reverse proxy
-- A custom domain
+- A custom domain actually resolving to this instance (HTTPS / TLS and a reverse proxy are both implemented already - see the HTTPS / TLS and Reverse Proxy sections above)
 - Automated (CI-triggered) deployment
 - Backups
 - Monitoring / alerting

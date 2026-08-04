@@ -702,7 +702,7 @@ Global state uses React Context (`AuthContext` today). No Redux or other state l
 
 `VITE_API_BASE_URL` has no fallback and must be set explicitly; `src/lib/env.ts` throws a clear error at startup if it's missing, rather than silently defaulting to `localhost`. Copy `.env.example` to `.env` and adjust it for your environment before running the dev server or building.
 
-This one file (`frontend/.env.example`) is the single place this value is still an absolute URL (`http://localhost:8000`) - it's specifically for `npm run dev`, which runs outside Docker with no reverse proxy in front of it. Everywhere else - the Docker Compose / production image (`infra/.env.example`) - it's a relative path (`/api`) instead, since the browser reaches the backend through nginx's own reverse proxy there. See `docs/design-decisions.md`, Decision 23.
+This one file (`frontend/.env.example`) is the single place this value is still an absolute URL (`http://localhost:8000`) - it's specifically for `npm run dev`, which runs outside Docker with no reverse proxy in front of it. Everywhere else - the Docker Compose / production image (`infra/.env.example`) - it's a relative path (`/api`) instead, since the browser reaches the backend through nginx's own reverse proxy there. See `docs/design-decisions.md`, Decision 24.
 
 ---
 

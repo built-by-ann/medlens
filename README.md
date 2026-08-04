@@ -307,20 +307,21 @@ python -m pytest -v
 
 # Deployment
 
-MedLens deploys to a single AWS EC2 instance running the same three Docker containers (`frontend`, `backend`, `postgres`) as local development, coordinated by the same `infra/docker-compose.yml` - no separate production-only configuration, no container orchestration platform. The frontend container's nginx is the app's one public entry point: it serves the built React SPA and reverse-proxies `/api/*` requests to the backend, which is otherwise unreachable from outside the Docker network.
+MedLens deploys to a single AWS EC2 instance running the same three always-on Docker containers (`frontend`, `backend`, `postgres`) as local development, plus a fourth (`certbot`) that only ever runs on demand, coordinated by the same `infra/docker-compose.yml` - no separate production-only configuration, no container orchestration platform. The frontend container's nginx is the app's one public entry point: it terminates HTTPS, serves the built React SPA, and reverse-proxies `/api/*` requests to the backend, which is otherwise unreachable from outside the Docker network.
 
 ``` text
 Internet
     │
-    └── :80 ─▶ frontend container (nginx)
-                 ├─ serves the built React SPA
-                 └─ reverse-proxies /api/* ──▶ backend container (uvicorn)
-                                                (127.0.0.1 only - never
-                                                 reachable from outside)   │
-                                                                            ▼
-                                                                    postgres container
-                                                                 (127.0.0.1 only - never
-                                                                  reachable from outside)
+    └── :443 ─▶ frontend container (nginx, HTTPS)
+                  ├─ serves the built React SPA
+                  └─ reverse-proxies /api/* ──▶ backend container (uvicorn)
+                                                 (127.0.0.1 only - never
+                                                  reachable from outside)   │
+                                                                             ▼
+                                                                     postgres container
+                                                                  (127.0.0.1 only - never
+                                                                   reachable from outside)
+    :80 ─▶ frontend container - redirects to :443, serves Let's Encrypt's renewal challenge
 ```
 
 Short version, on a fresh Ubuntu EC2 instance:
@@ -338,7 +339,9 @@ docker compose build
 docker compose up -d
 ```
 
-**See `docs/deployment.md`'s "AWS EC2 Deployment" section for the complete runbook** - launching and sizing the instance, security group configuration, every environment variable and where it's used, updating a running deployment, rollback, viewing logs, troubleshooting, and the full list of what's intentionally deferred (HTTPS, a custom domain, automated deployment, monitoring, and backups - all explicitly out of scope for now, not overlooked).
+The app is reachable over HTTPS immediately (a self-signed certificate, so browsers show a warning until a real one is issued): once DNS for your domain actually points here, run `docker compose run --rm certbot certonly --webroot -w /var/www/certbot -d medlenshealth.com ...` and reload nginx - see `docs/deployment.md`'s HTTPS / TLS section for the full command and the cron entry that keeps it renewed.
+
+**See `docs/deployment.md`'s "AWS EC2 Deployment" section for the complete runbook** - launching and sizing the instance, security group configuration, every environment variable and where it's used, updating a running deployment, rollback, viewing logs, troubleshooting, and the full list of what's intentionally deferred (a custom domain actually resolving here, automated deployment, monitoring, and backups - all explicitly out of scope for now, not overlooked).
 
 ------------------------------------------------------------------------
 
@@ -370,7 +373,7 @@ docker compose up -d
 
 - Additional LLM providers
 - Production monitoring
-- HTTPS, a custom domain, and a reverse proxy
+- A custom domain actually resolving to production (HTTPS and a reverse proxy are both already implemented - see Deployment above)
 - Automated (CI-triggered) deployment
 
 ------------------------------------------------------------------------
