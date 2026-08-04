@@ -153,6 +153,30 @@ As of Issue #148, this engine is invoked automatically as part of analysis creat
 
 ---
 
+### Storage Abstraction (Issue #58)
+
+Before this issue, no uploaded file's original bytes were ever persisted anywhere - `upload-txt`/`upload-pdf`/`upload-csv` read a file into memory, extracted its text into `raw_text`, and discarded the bytes (see `docs/data-model.md`'s Design Decisions for the full "additive, not a migration" framing). This section describes the file-persistence capability added on top of that unchanged pipeline.
+
+`StorageService` (`app/storage/base.py`) is an abstract interface with three methods - `upload(key, content, content_type)`, `download(key) -> StoredObject`, `delete(key)` - and two exceptions, `StorageError` (the operation failed) and `ObjectNotFoundError` (a `StorageError` subtype specifically for "no object at this key"). It is deliberately the same shape as `AIProvider` (`app/ai/providers/base.py`, see Decision 15 in `docs/design-decisions.md`): business logic depends only on the interface, never on a concrete backend, so which backend is active is a matter of configuration, not conditionals scattered through upload/download/delete code.
+
+Two implementations exist:
+
+- **`LocalStorageService`** (`app/storage/local.py`) - writes objects as plain files under a local directory (`Settings.local_storage_dir`), with a small `<key>.meta.json` sidecar file recording the content type (a plain filesystem has no first-class concept of content type, unlike S3's object metadata). The default backend - zero AWS configuration needed, so local development, CI, and this feature's own test suite (`tests/test_clinical_documents.py`, `tests/test_clinical_document_service.py`) all work without touching AWS at all.
+- **`S3StorageService`** (`app/storage/s3.py`) - uploads/downloads/deletes objects in a single private S3 bucket via `boto3`. Every `put_object` call sets `ACL="private"` explicitly, defense in depth on top of the bucket itself being expected to block public access at the account level (see `docs/deployment.md`'s Security section - "never make uploaded files public" is enforced at both layers, not just one). Credentials are passed to `boto3` only when both `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are configured (for a developer testing against a real bucket locally); otherwise `boto3`'s own default credential chain is used, which includes an IAM role attached to the EC2 instance in production - the "use IAM credentials" requirement this feature specifically asked for.
+
+**Selection** happens in exactly one place, `build_storage_service` (`app/storage/service.py`), branching on `Settings.storage_backend` ("local" or "s3") - the only conditional anywhere in the codebase that knows both backends exist. Routes and services depend on `get_storage_service` (a FastAPI dependency wrapping `build_storage_service`) and the abstract `StorageService` type only, the same dependency-injection pattern `get_ai_summary_service` already established for AI providers (`app/ai/service.py`).
+
+**Configuration validation happens at startup, not on first use.** `Settings` (`app/core/config.py`) is constructed once, at module import time (`settings = Settings()`); a `model_validator` on it raises immediately if `storage_backend == "s3"` but `aws_region` or `s3_bucket_name` is missing, so a misconfigured deployment fails to start at all rather than coming up looking healthy and only breaking on the first upload request. `aws_access_key_id`/`aws_secret_access_key` are deliberately not required even when S3 is selected - see the IAM-role reasoning above.
+
+**Key generation** (`_build_storage_key`, `app/services/clinical_document_service.py`) always includes a `uuid4` segment (`clinical-documents/{patient_id}/{uuid4()}/{filename}`), which is what actually guarantees "never overwrite an existing object" - two uploads of the same filename, even for the same patient, get different keys. `storage_key` is never exposed over the API (`docs/api.md`) or stored as a URL (`docs/data-model.md`) - only the fact that a document has a file (`file_size_bytes` not null) and the download endpoint that resolves it internally.
+
+**Failure handling** follows the same "database record is the source of truth" principle in both directions:
+
+- **Upload** (`create_clinical_document_from_file`): the file is uploaded to storage *before* the database row is created. If the subsequent `db.commit()` fails, the just-uploaded object is deleted best-effort (a secondary failure there is logged, not raised) before the original database error propagates - otherwise a failed document creation would silently leak an orphaned object with nothing in Postgres ever pointing to it.
+- **Delete** (`delete_clinical_document`): the database row is deleted *first*; the storage object is deleted second, and treated as non-fatal if it fails (caught and logged, not raised). This ordering is deliberate, not arbitrary - deleting storage first and having the database delete fail afterward would leave a document that still exists but points at a file that's already gone (a real, user-visible inconsistency: the document appears in the list but 404s on download); deleting the database row first means the worst case of a subsequent storage failure is a harmless orphaned object in storage, a cleanup/cost concern, never something a user can observe as broken.
+
+---
+
 ## Expected Data Flow
 
 The expected application workflow is:
@@ -283,6 +307,7 @@ The application includes:
 - Input validation
 - Structured AI response validation
 - Secure database connections
+- Private-only file storage (Issue #58) - uploaded documents are never made public; every object is uploaded with an explicit private ACL, the API only ever streams file bytes through the backend itself (never a bucket URL), and production credentials are expected to come from an IAM role rather than long-lived access keys - see the Storage Abstraction section above and `docs/deployment.md`.
 
 Only synthetic clinical data is used throughout the application.
 

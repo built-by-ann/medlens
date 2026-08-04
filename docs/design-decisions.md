@@ -468,6 +468,33 @@ Cons
 
 ---
 
+# Decision 21: Pluggable StorageService Interface for File Storage, Mirroring the AI Provider Pattern
+
+**Decision**
+
+Introduce `StorageService`, an abstract interface (`upload`/`download`/`delete`) with two implementations - `LocalStorageService` (the default, writes to a local directory) and `S3StorageService` (uploads to a private S3 bucket via `boto3`) - selected by one setting, `Settings.storage_backend`, through a single factory function (`build_storage_service`). Every other part of the application (the clinical document routes and service) depends only on the `StorageService` interface, injected via FastAPI's dependency system, never on a concrete backend class.
+
+**Reasoning**
+
+This application already had exactly this problem once, for AI providers (Decision 15): business logic needing an external capability whose concrete implementation should be swappable without touching that logic. `AIProvider` solved it with a minimal interface, a factory function, and dependency injection - `StorageService` reuses the identical shape rather than inventing a new pattern for a structurally identical problem. The alternative - `if settings.storage_backend == "s3": ... else: ...` conditionals wherever a file is read or written - would scatter the same branch across every call site and make adding a third backend (or testing against a fake one) require finding and updating every one of them individually.
+
+Before this feature, no file storage of any kind existed in the application - uploaded files were read into memory, text-extracted, and discarded (see `docs/data-model.md`'s Design Decisions). This is worth being explicit about because the interface was designed for the problem this application actually has (an original file plus its already-separately-stored extracted text) rather than adapted from a different one; `StorageService` has no method for anything analysis-related, since AI analysis was never going to read through it - it continues reading `raw_text` from Postgres exactly as before.
+
+**Trade-offs**
+
+Pros
+
+- A new backend (e.g. a different cloud provider, or Google Cloud Storage) is a new class implementing three methods, not a change to any route or service
+- `LocalStorageService` makes local development, CI, and this feature's own test suite fully independent of AWS - no account, no credentials, no network call, ever, unless a test explicitly opts into `S3StorageService` (via `moto`, which mocks the AWS API rather than calling it for real)
+- Settings validates S3 configuration at startup (a `model_validator`, not a lazy check on first upload) - a misconfigured `STORAGE_BACKEND=s3` fails immediately and clearly, the same "fail fast, not on first use" principle Decision 19 already established for a different startup-time failure mode
+
+Cons
+
+- Two implementations to keep behaviorally consistent (e.g. both raise `ObjectNotFoundError`, not just a generic exception, for a missing key) - enforced only by a shared test suite (`tests/test_storage_service.py` runs the same assertions against both), not by the type system
+- `LocalStorageService`'s sidecar `.meta.json` file (recording content type, which a plain filesystem has no native concept of) is a small, backend-specific implementation detail that `S3StorageService` doesn't need at all, since S3 stores content type as real object metadata - an asymmetry between the two implementations that the shared interface itself doesn't surface
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:

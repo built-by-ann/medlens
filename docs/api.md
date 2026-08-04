@@ -101,17 +101,20 @@ Request body
 {
   "email": "user@example.com",
   "password": "securepassword",
+  "username": "jane_doe",
   "name": "Jane Doe"
 }
 ```
 
-`name` is optional.
+`name` is optional. `username` is required (Issue #191) — every account created from this point forward has one; see `docs/data-model.md`'s `User` entity for why the underlying column is nullable despite that.
 
 Validation rules
 
 - `email` must be a valid email address.
 - `password` must be at least 8 characters long.
 - `email` must not already belong to a registered user.
+- `username` must be 3–30 characters long, containing only letters, numbers, underscores, and periods (`a-z`, `A-Z`, `0-9`, `_`, `.`).
+- `username` must not already belong to a registered user — checked **case-insensitively**: `jdoe` and `JDoe` are treated as the same username for this check, even though the value is stored and returned exactly as submitted.
 
 Success response
 
@@ -122,6 +125,7 @@ Success response
   "id": 1,
   "email": "user@example.com",
   "name": "Jane Doe",
+  "username": "jane_doe",
   "created_at": "2026-07-03T19:13:05.755361Z"
 }
 ```
@@ -130,8 +134,8 @@ The stored password hash is never included in the response.
 
 Possible error responses
 
-- `409 Conflict` — the email is already registered.
-- `422 Unprocessable Entity` — invalid email format, password shorter than 8 characters, or missing required fields.
+- `409 Conflict` — the email is already registered (`"A user with this email is already registered"`), or the username is already taken, case-insensitively (`"This username is already taken"`).
+- `422 Unprocessable Entity` — invalid email format, password shorter than 8 characters, `username` missing or failing its format rules above, or another required field missing.
 
 ---
 
@@ -200,15 +204,69 @@ Success response
   "id": 1,
   "email": "user@example.com",
   "name": "Jane Doe",
+  "username": "jane_doe",
   "created_at": "2026-07-03T19:13:05.755361Z"
 }
 ```
+
+`username` is `null` for any account created before Issue #191 that hasn't set one since — see `docs/data-model.md`.
 
 401 responses
 
 - Missing `Authorization` header — `{"detail": "Not authenticated"}`
 - Invalid, malformed, or expired token — `{"detail": "Could not validate credentials"}`
 - Token is well-formed and correctly signed but references a user id that no longer exists — `{"detail": "Could not validate credentials"}`
+
+---
+
+### PATCH /users/me
+
+Purpose
+
+Partially updates the authenticated user's own profile. Only the fields included in the request body are changed; this is a profile-editing endpoint, not a credential change — there is no way to change a password here, and authentication always continues to use email/password (Issue #191), regardless of whether a username is set.
+
+Authentication requirements
+
+Requires a valid Bearer token in the `Authorization` header, as described above.
+
+Request body
+
+```json
+{
+  "username": "new_username"
+}
+```
+
+Any subset of `email`, `name`, and `username` may be included. Extra/unrecognized fields are rejected outright rather than silently ignored.
+
+Validation rules
+
+- `email`, if included, must be a valid email address, and must not already belong to a different user.
+- `username`, if included:
+  - `null` clears it (an account can always go back to having no username).
+  - A non-null value must pass the same 3–30 character, `a-z`/`A-Z`/`0-9`/`_`/`.`-only rules `POST /auth/register` enforces.
+  - A non-null value must not already belong to a *different* user, checked case-insensitively — re-submitting your own current username with different casing (e.g. `jdoe` → `JDoe`) is allowed, the same way re-submitting your own current email is.
+- Fields left out of the request body are unchanged.
+
+Success response
+
+`200 OK` — the same shape as `GET /users/me`, reflecting the update:
+
+```json
+{
+  "id": 1,
+  "email": "user@example.com",
+  "name": "Jane Doe",
+  "username": "new_username",
+  "created_at": "2026-07-03T19:13:05.755361Z"
+}
+```
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `409 Conflict`: the given `email` already belongs to another user (`"A user with this email is already registered"`), or the given `username` already belongs to another user, case-insensitively (`"This username is already taken"`).
+- `422 Unprocessable Entity`: `email` is not a valid email address, `username` fails its format rules, or the request body contains a field this endpoint doesn't recognize.
 
 ---
 
@@ -751,13 +809,17 @@ Success response
   "raw_text": "Patient presents with hypertension.",
   "file_name": null,
   "file_type": "manual_entry",
+  "content_type": null,
+  "file_size_bytes": null,
   "created_at": "2026-07-12T19:59:14.696845Z",
   "updated_at": null,
   "analysis_count": 0
 }
 ```
 
-`analysis_count` (added in Issue #146) is `len(document.analyses)` - how many analyses this document has been included in via `POST /patients/{patient_id}/analyses`'s `clinical_document_ids` (a computed property on the model, not a stored column; the same pattern as `AnalysisSummaryResponse.document_count`). A brand-new document always starts at `0`. There is no file-size field: the backend never stores an uploaded file's original bytes, only its extracted `raw_text`, so no real byte count exists anywhere to expose - `len(raw_text)` would not be a file size and is not substituted for one.
+`analysis_count` (added in Issue #146) is `len(document.analyses)` - how many analyses this document has been included in via `POST /patients/{patient_id}/analyses`'s `clinical_document_ids` (a computed property on the model, not a stored column; the same pattern as `AnalysisSummaryResponse.document_count`). A brand-new document always starts at `0`.
+
+`content_type` and `file_size_bytes` (Issue #58) are `null` for a document created this way - pasted text has no original file, so there is nothing to store in S3/local storage and nothing to report a size or content type for. See `upload-txt`/`upload-pdf`/`upload-csv` below for when they're populated, and `GET .../{document_id}/download` for retrieving the file itself. There is no `storage_key` field in this response at all - it identifies the object in whichever storage backend is configured (a local path or an S3 key), and is never exposed over the API; see `docs/architecture.md`.
 
 Possible error responses
 
@@ -771,7 +833,7 @@ Possible error responses
 
 Purpose
 
-Creates a clinical document belonging to the given patient from an uploaded `.txt` file. `document_type` and `title` are sent as form fields alongside the file.
+Creates a clinical document belonging to the given patient from an uploaded `.txt` file. `document_type` and `title` are sent as form fields alongside the file. As of Issue #58, the original file itself is uploaded to the configured storage backend (local disk or S3 - see `docs/architecture.md`), in addition to the extracted text already stored in `raw_text` as before; nothing about how `raw_text` is produced or used by AI analysis changed.
 
 Accepted file type
 
@@ -784,13 +846,14 @@ Validation rules
 
 Success response
 
-`201 Created` - same shape as `POST /patients/{patient_id}/clinical-documents`, with `file_name` set to the uploaded file's name and `file_type` set to `"txt"`.
+`201 Created` - same shape as `POST /patients/{patient_id}/clinical-documents`, with `file_name` set to the uploaded file's name, `file_type` set to `"txt"`, `content_type` set to `"text/plain"`, and `file_size_bytes` set to the uploaded file's size in bytes.
 
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
 - `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
 - `422 Unprocessable Entity`: the file is not a `.txt`/`text/plain` file, is not valid UTF-8, or decodes to empty text.
+- `503 Service Unavailable` (Issue #58): the configured storage backend could not be reached - see the `503` reference under Error Responses below. Text extraction and validation happen *before* the storage upload, so a request that fails for any of the reasons above never reaches storage at all; this can only happen once the file has already passed every other check.
 
 ---
 
@@ -798,7 +861,7 @@ Possible error responses
 
 Purpose
 
-Creates a clinical document belonging to the given patient from an uploaded `.pdf` file, extracting its text content.
+Creates a clinical document belonging to the given patient from an uploaded `.pdf` file, extracting its text content. As of Issue #58, the original PDF itself is also uploaded to storage - see `upload-txt` above.
 
 Accepted file type
 
@@ -812,13 +875,14 @@ Validation rules
 
 Success response
 
-`201 Created` - same shape as `POST /patients/{patient_id}/clinical-documents`, with `file_name` set to the uploaded file's name and `file_type` set to `"pdf"`.
+`201 Created` - same shape as `POST /patients/{patient_id}/clinical-documents`, with `file_name` set to the uploaded file's name, `file_type` set to `"pdf"`, `content_type` set to `"application/pdf"`, and `file_size_bytes` set to the uploaded file's size in bytes.
 
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
 - `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
 - `422 Unprocessable Entity`: the file is not a `.pdf`/`application/pdf` file, is empty, is malformed, or has no extractable text.
+- `503 Service Unavailable` (Issue #58): the configured storage backend could not be reached - see `upload-txt` above.
 
 ---
 
@@ -826,7 +890,7 @@ Possible error responses
 
 Purpose
 
-Creates a clinical document belonging to the given patient from an uploaded `.csv` file (Issue #164). The CSV's raw text is stored and treated exactly like an uploaded `.txt` file - it becomes ordinary evidence for AI extraction and medication reconciliation. This endpoint never parses the CSV into rows and never creates or modifies `Medication` records; that is a distinct feature (`POST /patients/{patient_id}/medications/import`, see above), unrelated to this one beyond both accepting a `.csv` file.
+Creates a clinical document belonging to the given patient from an uploaded `.csv` file (Issue #164). The CSV's raw text is stored and treated exactly like an uploaded `.txt` file - it becomes ordinary evidence for AI extraction and medication reconciliation. This endpoint never parses the CSV into rows and never creates or modifies `Medication` records; that is a distinct feature (`POST /patients/{patient_id}/medications/import`, see above), unrelated to this one beyond both accepting a `.csv` file. As of Issue #58, the original CSV itself is also uploaded to storage - see `upload-txt` above.
 
 Accepted file type
 
@@ -840,13 +904,14 @@ Validation rules
 
 Success response
 
-`201 Created` - same shape as `POST /patients/{patient_id}/clinical-documents`, with `file_name` set to the uploaded file's name and `file_type` set to `"csv"`.
+`201 Created` - same shape as `POST /patients/{patient_id}/clinical-documents`, with `file_name` set to the uploaded file's name, `file_type` set to `"csv"`, `content_type` set to `"text/csv"`, and `file_size_bytes` set to the uploaded file's size in bytes.
 
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
 - `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
 - `422 Unprocessable Entity`: the file is not a `.csv`/`text/csv` file, is not valid UTF-8, or decodes to empty text.
+- `503 Service Unavailable` (Issue #58): the configured storage backend could not be reached - see `upload-txt` above.
 
 ---
 
@@ -895,11 +960,34 @@ Returned if `patient_id` does not exist or does not belong to the current user, 
 
 ---
 
+### GET /patients/{patient_id}/clinical-documents/{document_id}/download
+
+Purpose
+
+Streams the original uploaded file belonging to the given patient's document (Issue #58) - the raw bytes that were uploaded via `upload-txt`/`upload-pdf`/`upload-csv`, not the extracted `raw_text`. The response body passes through this server; it is never a redirect to a bucket URL, and the client never learns anything about where or how the file is actually stored.
+
+Response headers
+
+- `Content-Type`: the document's stored `content_type` (`text/plain`, `application/pdf`, or `text/csv`).
+- `Content-Disposition`: `attachment; filename="<the original file name>"`.
+
+Success response
+
+`200 OK` - the raw file bytes.
+
+Possible error responses
+
+- `401 Unauthorized`: missing or invalid access token.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user; `document_id` does not exist or belongs to a different patient (same `"Clinical document not found"` detail as `GET .../{document_id}`); **or** the document exists but has no stored file to download (`{"detail": "This document has no stored file to download"}`) - true for every document created via `POST /patients/{patient_id}/clinical-documents` (pasted text, no file was ever uploaded) and for any document uploaded before Issue #58 existed.
+- `503 Service Unavailable`: the configured storage backend could not be reached.
+
+---
+
 ### DELETE /patients/{patient_id}/clinical-documents/{document_id}
 
 Purpose
 
-Deletes a clinical document belonging to the given patient. This is a real, permanent delete.
+Deletes a clinical document belonging to the given patient. This is a real, permanent delete. As of Issue #58, if the document had a stored file, that object is also deleted from storage - the database record is removed first, and storage deletion is treated as best-effort afterward: if it fails, the request still succeeds (the document is genuinely gone from the API's point of view), and the failure is only logged server-side, never surfaced to the caller. See `docs/architecture.md` for the reasoning.
 
 Success response
 
@@ -1221,12 +1309,13 @@ Success response
   "resolved_by": {
     "id": 1,
     "name": "Jane Doe",
+    "username": "jane_doe",
     "email": "jane@example.com"
   }
 }
 ```
 
-`resolution_status` becomes `"resolved"` for `add_medication`/`update_medication`, or `"dismissed"` for `dismiss` - the same `ResolutionStatus` enum `docs/data-model.md` already documents, reused unchanged rather than introducing a parallel status. `resolution_action`, `resolved_at`, `resolution_note`, and `resolved_by` are the audit trail added by this endpoint; all four are `null`/absent until a discrepancy is resolved, and none of the fields the original reconciliation run computed (`title`, `ai_explanation`, `expected_value`, `observed_value`, ...) are ever changed by resolving - the finding itself remains a permanent, unaltered record.
+`resolution_status` becomes `"resolved"` for `add_medication`/`update_medication`, or `"dismissed"` for `dismiss` - the same `ResolutionStatus` enum `docs/data-model.md` already documents, reused unchanged rather than introducing a parallel status. `resolution_action`, `resolved_at`, `resolution_note`, and `resolved_by` are the audit trail added by this endpoint; all four are `null`/absent until a discrepancy is resolved, and none of the fields the original reconciliation run computed (`title`, `ai_explanation`, `expected_value`, `observed_value`, ...) are ever changed by resolving - the finding itself remains a permanent, unaltered record. `resolved_by.username` (Issue #191) is `null` for a resolver whose account predates usernames and hasn't set one since - the frontend falls back to `name`, then `email`, when it is.
 
 Possible error responses
 
@@ -1344,11 +1433,17 @@ Returned when a requested resource does not exist, or exists but does not belong
 
 ### 409 Conflict
 
-Returned by `POST /auth/register` when the given email is already registered.
+Returned by `POST /auth/register` and `PATCH /users/me` when the given email is already registered, or the given username is already taken (case-insensitively) by a different user.
 
 ```json
 {
   "detail": "A user with this email is already registered"
+}
+```
+
+```json
+{
+  "detail": "This username is already taken"
 }
 ```
 
@@ -1378,6 +1473,14 @@ Returned by `POST /patients/{patient_id}/analyses` when the configured AI provid
 }
 ```
 
+Also returned (Issue #58) by `POST /patients/{patient_id}/clinical-documents/upload-txt`/`upload-pdf`/`upload-csv` and `GET .../{document_id}/download` when the configured storage backend (local disk or S3) cannot be reached:
+
+```json
+{
+  "detail": "File storage is currently unavailable"
+}
+```
+
 ---
 
 ## Notes
@@ -1387,3 +1490,5 @@ This API currently supports authentication, application infrastructure, patient 
 Issue #157 added the first exception to "every analysis is reached through its patient": `GET /analyses/recent`, a cross-patient feed for the Dashboard's Recent Analyses section, scoped to the current user (via the same `get_current_user` dependency every other endpoint uses) rather than nested under a single `patient_id`.
 
 Two unrelated endpoints both accept a `.csv` file, and are easy to confuse: `POST /patients/{patient_id}/medications/import` (Sprint 3.5) parses the CSV into rows and directly creates `Medication` records, while `POST /patients/{patient_id}/clinical-documents/upload-csv` (Issue #164) stores the CSV's raw text as an ordinary clinical document - evidence for AI extraction and reconciliation, never imported into the patient's medication list. Uploading the same CSV to both is a legitimate, deliberate action (e.g. importing a medication list *and* including it as analysis evidence), not a bug; the two pipelines never call into each other.
+
+**File storage (Issue #58).** Uploading a document via `upload-txt`/`upload-pdf`/`upload-csv` now persists the *original file* (not just its extracted text) to a configured storage backend - local disk by default, or S3, selected by the `STORAGE_BACKEND` environment variable (see `docs/deployment.md`). `GET .../{document_id}/download` streams it back; the response never redirects to a bucket URL, and no endpoint anywhere ever returns an S3 URL or object key. A document created via the plain `POST /patients/{patient_id}/clinical-documents` (pasted text) has no file at all and 404s from the download endpoint. AI analysis is entirely unaffected - it has always read `raw_text` from Postgres and continues to; it never touches the storage backend, whether a document has a stored file or not.

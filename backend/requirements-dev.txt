@@ -3,3 +3,4 @@ pytest
 httpx
 reportlab
 ruff==0.16.1
+moto[s3]

@@ -53,7 +53,13 @@ describe('PublicOnlyRoute', () => {
 
   it('redirects an already-authenticated user to the dashboard instead of showing the page', () => {
     mockedUseAuth.mockReturnValue({
-      user: { id: 1, email: 'a@example.com', name: 'A', created_at: '2026-01-01T00:00:00Z' },
+      user: {
+        id: 1,
+        email: 'a@example.com',
+        name: 'A',
+        username: null,
+        created_at: '2026-01-01T00:00:00Z',
+      },
       token: 'token',
       isAuthenticated: true,
       isLoading: false,

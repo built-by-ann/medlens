@@ -4,6 +4,7 @@ import type { AuthToken, User } from '@/types/api'
 export interface RegisterPayload {
   email: string
   password: string
+  username: string
   name?: string
 }
 
@@ -33,6 +34,7 @@ export async function getCurrentUser(): Promise<User> {
 export interface UpdateUserPayload {
   name?: string | null
   email?: string
+  username?: string | null
 }
 
 export async function updateUser(payload: UpdateUserPayload): Promise<User> {

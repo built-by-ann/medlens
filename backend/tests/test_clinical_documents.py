@@ -5,7 +5,12 @@ from app.models.clinical_document import ClinicalDocument
 def _register_and_login(client, email, password="correcthorse123"):
     client.post(
         "/auth/register",
-        json={"email": email, "password": password, "name": "Doc Test User"},
+        json={
+            "email": email,
+            "password": password,
+            "username": email.split("@")[0].replace("-", "_")[:30],
+            "name": "Doc Test User",
+        },
     )
 
     login_response = client.post("/auth/login", json={"email": email, "password": password})
@@ -668,3 +673,263 @@ def test_upload_csv_accepts_malformed_medication_csv_content(client):
 
     assert response.status_code == 201
     assert "this is not a valid medication csv at all" in response.json()["raw_text"]
+
+
+# --- Storage (Issue #58) ---
+
+
+def test_create_document_from_pasted_text_has_no_storage_metadata(client):
+    # A pasted-text document (POST .../clinical-documents, no file
+    # involved) never has anything to store - content_type/file_size_bytes
+    # must stay null, not e.g. default to 0/"text/plain".
+    token = _register_and_login(client, "pastedmetadata@example.com")
+    patient = _create_patient(client, token).json()
+
+    response = _create_document(client, token, patient["id"])
+
+    body = response.json()
+    assert body["content_type"] is None
+    assert body["file_size_bytes"] is None
+
+
+def test_upload_txt_persists_storage_metadata(client):
+    token = _register_and_login(client, "txtmetadata@example.com")
+    patient = _create_patient(client, token).json()
+    content = b"Patient reports improvement."
+
+    response = _upload_txt(client, token, patient["id"], content=content)
+
+    body = response.json()
+    assert body["content_type"] == "text/plain"
+    assert body["file_size_bytes"] == len(content)
+
+
+def test_upload_pdf_persists_storage_metadata(client):
+    token = _register_and_login(client, "pdfmetadata@example.com")
+    patient = _create_patient(client, token).json()
+
+    response = _upload_pdf(client, token, patient["id"])
+
+    body = response.json()
+    assert body["content_type"] == "application/pdf"
+    assert body["file_size_bytes"] > 0
+
+
+def test_upload_csv_persists_storage_metadata(client):
+    token = _register_and_login(client, "csvmetadata@example.com")
+    patient = _create_patient(client, token).json()
+    content = b"medication_name,dose,route,frequency,status,source\nLisinopril,10mg,oral,daily,active,pharmacy"
+
+    response = _upload_csv(client, token, patient["id"], content=content)
+
+    body = response.json()
+    assert body["content_type"] == "text/csv"
+    assert body["file_size_bytes"] == len(content)
+
+
+def test_response_never_exposes_a_storage_key(client):
+    # storage_key is an internal backend/S3 implementation detail (Issue
+    # #58's own "do not expose bucket URLs directly" / "never make
+    # uploaded files public" intent extended to the key itself) - the
+    # frontend has no legitimate use for it, only for the fact that a file
+    # exists (file_size_bytes is not null) and the /download route.
+    token = _register_and_login(client, "nokeyexposed@example.com")
+    patient = _create_patient(client, token).json()
+
+    response = _upload_txt(client, token, patient["id"])
+
+    assert "storage_key" not in response.json()
+
+
+def test_download_txt_document_returns_the_original_bytes(client):
+    token = _register_and_login(client, "downloadtxt@example.com")
+    patient = _create_patient(client, token).json()
+    content = b"Patient reports improvement."
+    created = _upload_txt(client, token, patient["id"], content=content).json()
+
+    response = client.get(
+        f"/patients/{patient['id']}/clinical-documents/{created['id']}/download",
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    assert response.content == content
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "note.txt" in response.headers["content-disposition"]
+
+
+def test_download_pdf_document_returns_the_original_bytes(client):
+    token = _register_and_login(client, "downloadpdf@example.com")
+    patient = _create_patient(client, token).json()
+    pdf_bytes = _text_pdf_bytes()
+    created = _upload_pdf(client, token, patient["id"], content=pdf_bytes).json()
+
+    response = client.get(
+        f"/patients/{patient['id']}/clinical-documents/{created['id']}/download",
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    assert response.content == pdf_bytes
+    assert response.headers["content-type"] == "application/pdf"
+
+
+def test_download_requires_authentication(client):
+    response = client.get("/patients/1/clinical-documents/1/download")
+
+    assert response.status_code == 401
+
+
+def test_download_returns_404_for_a_pasted_text_document(client):
+    # A pasted-text document exists and is otherwise fully functional -
+    # only downloading it specifically has nothing to return, since no
+    # file was ever uploaded for it.
+    token = _register_and_login(client, "downloadpasted@example.com")
+    patient = _create_patient(client, token).json()
+    created = _create_document(client, token, patient["id"]).json()
+
+    response = client.get(
+        f"/patients/{patient['id']}/clinical-documents/{created['id']}/download",
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 404
+
+
+def test_download_returns_404_for_unknown_document(client):
+    token = _register_and_login(client, "downloadunknown@example.com")
+    patient = _create_patient(client, token).json()
+
+    response = client.get(
+        f"/patients/{patient['id']}/clinical-documents/999999/download",
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 404
+
+
+def test_download_returns_404_for_another_users_patient(client):
+    token_a = _register_and_login(client, "downloadownera@example.com")
+    token_b = _register_and_login(client, "downloadintruderb@example.com")
+    patient = _create_patient(client, token_a).json()
+    created = _upload_txt(client, token_a, patient["id"]).json()
+
+    response = client.get(
+        f"/patients/{patient['id']}/clinical-documents/{created['id']}/download",
+        headers=_auth_headers(token_b),
+    )
+
+    assert response.status_code == 404
+
+
+def test_delete_document_removes_it_from_storage_too(client):
+    # Proven at the storage boundary, not just the database: after
+    # deleting a document that had an uploaded file, the file is genuinely
+    # gone, not merely unreachable through this API - re-uploading a new
+    # document is what confirms the storage backend itself was actually
+    # invoked, not just the database row.
+    token = _register_and_login(client, "deletewithstorage@example.com")
+    patient = _create_patient(client, token).json()
+    created = _upload_txt(client, token, patient["id"]).json()
+
+    delete_response = client.delete(
+        f"/patients/{patient['id']}/clinical-documents/{created['id']}",
+        headers=_auth_headers(token),
+    )
+    assert delete_response.status_code == 204
+
+    download_response = client.get(
+        f"/patients/{patient['id']}/clinical-documents/{created['id']}/download",
+        headers=_auth_headers(token),
+    )
+    assert download_response.status_code == 404
+
+
+def test_delete_document_with_no_stored_file_succeeds(client):
+    # A pasted-text document has no storage object to clean up - deletion
+    # must not fail just because there's nothing there to delete.
+    token = _register_and_login(client, "deletenostorage@example.com")
+    patient = _create_patient(client, token).json()
+    created = _create_document(client, token, patient["id"]).json()
+
+    response = client.delete(
+        f"/patients/{patient['id']}/clinical-documents/{created['id']}",
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 204
+
+
+def test_upload_txt_returns_503_when_storage_backend_is_unavailable(client):
+    from app.main import app
+    from app.storage.base import StorageError
+    from app.storage.service import get_storage_service
+
+    class _AlwaysFailingStorage:
+        def upload(self, key, content, content_type):
+            raise StorageError("simulated outage")
+
+    app.dependency_overrides[get_storage_service] = lambda: _AlwaysFailingStorage()
+    try:
+        token = _register_and_login(client, "storagedown@example.com")
+        patient = _create_patient(client, token).json()
+
+        response = _upload_txt(client, token, patient["id"])
+
+        assert response.status_code == 503
+    finally:
+        del app.dependency_overrides[get_storage_service]
+
+
+def test_download_returns_404_when_the_stored_object_is_missing_from_storage(client):
+    # A dangling reference - the database has a storage_key, but the
+    # object it points to isn't actually in storage (e.g. deleted directly
+    # from the bucket, outside this application). Must be reported the
+    # same way as "no file was ever uploaded," not as a storage failure.
+    from app.main import app
+    from app.storage.base import ObjectNotFoundError
+    from app.storage.service import get_storage_service
+
+    token = _register_and_login(client, "danglingref@example.com")
+    patient = _create_patient(client, token).json()
+    created = _upload_txt(client, token, patient["id"]).json()
+
+    class _MissingObjectStorage:
+        def download(self, key):
+            raise ObjectNotFoundError(key)
+
+    app.dependency_overrides[get_storage_service] = lambda: _MissingObjectStorage()
+    try:
+        response = client.get(
+            f"/patients/{patient['id']}/clinical-documents/{created['id']}/download",
+            headers=_auth_headers(token),
+        )
+
+        assert response.status_code == 404
+    finally:
+        del app.dependency_overrides[get_storage_service]
+
+
+def test_download_returns_503_when_storage_backend_is_unavailable(client):
+    from app.main import app
+    from app.storage.base import StorageError
+    from app.storage.service import get_storage_service
+
+    token = _register_and_login(client, "downloadstoragedown@example.com")
+    patient = _create_patient(client, token).json()
+    created = _upload_txt(client, token, patient["id"]).json()
+
+    class _AlwaysFailingStorage:
+        def download(self, key):
+            raise StorageError("simulated outage")
+
+    app.dependency_overrides[get_storage_service] = lambda: _AlwaysFailingStorage()
+    try:
+        response = client.get(
+            f"/patients/{patient['id']}/clinical-documents/{created['id']}/download",
+            headers=_auth_headers(token),
+        )
+
+        assert response.status_code == 503
+    finally:
+        del app.dependency_overrides[get_storage_service]
