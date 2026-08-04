@@ -180,6 +180,9 @@ title
 raw_text
 file_name
 file_type
+storage_key
+content_type
+file_size_bytes
 created_at
 updated_at
 ```
@@ -215,6 +218,14 @@ file_type
 ```
 
 Stores file format information such as `txt`, `pdf`, or `manual_entry`.
+
+```text
+storage_key
+content_type
+file_size_bytes
+```
+
+Added in Issue #58, identifying and describing the original uploaded file in whichever `StorageService` backend is configured (see `docs/architecture.md`) - `storage_key` is a local filesystem path or an S3 object key, never a URL, so switching backends or renaming a bucket never requires touching stored data. All three are nullable together, and null for the same two reasons: a document created via pasted text (`POST /patients/{patient_id}/clinical-documents`) never had a file to begin with, and any document created before this column existed has nothing to backfill it with, since the original bytes for those rows were never persisted anywhere (see Design Decisions). `storage_key` is never exposed over the API (`docs/api.md`) - it is an internal detail the download endpoint resolves on the document's behalf, not something a client should ever need to construct a request around.
 
 ### Relationships
 
@@ -873,6 +884,16 @@ Uniqueness is enforced case-insensitively, which a plain `unique=True` column co
 - NULLs are exempt from the uniqueness check entirely - Postgres never considers two NULLs equal in a unique index (functional or otherwise), so any number of pre-Issue-#191 accounts can share `username IS NULL` with no conflict. This is exactly what "existing users should continue working after migration" requires, and it falls out of a standard Postgres behavior rather than needing special-case handling in application code.
 
 The application layer (`app/services/user_service.py`'s `get_user_by_username`) queries with the same `lower(...)` comparison the index uses, so the friendly, request-time uniqueness check (`app/api/routes/auth.py`/`users.py` returning a `409` before anything touches the database's own constraint) and the database's own guarantee can never disagree about whether a given username is taken.
+
+---
+
+### Issue #58: file storage added as a net-new capability, not a migration
+
+Before this issue, MedLens never persisted an uploaded document's original bytes anywhere - `upload-txt`/`upload-pdf`/`upload-csv` read the file into memory, extracted (or decoded) its text into `raw_text`, and discarded the bytes; `docs/api.md` said so explicitly ("the backend never stores an uploaded file's original bytes"). There was no local filesystem storage, no file-size field, and no download endpoint to remove. This issue is therefore additive - a new capability layered onto the unchanged `raw_text`/AI-analysis pipeline - not a replacement of a prior storage mechanism, despite the issue's own framing ("replace local filesystem storage... with S3").
+
+`storage_key`, `content_type`, and `file_size_bytes` are nullable for exactly the same two reasons `username` (above) is: every row that predates this migration has nothing to backfill them with (the original bytes for those documents were never captured, so there is nothing to retroactively upload to storage even in principle), and a pasted-text document created *after* this migration still has no file at all, by design. Nullable-with-no-backfill is the same pattern; the reason a backfill is impossible, rather than merely skipped, is what's different from `username`.
+
+`storage_key` deliberately holds a backend-relative identifier (a local path or an S3 key), never a full URL - the feature's own "do not store S3 URLs" requirement. This is what makes `docs/architecture.md`'s `StorageService` swap (local storage in development, S3 in production, chosen by one environment variable) transparent to the data already in Postgres: a `storage_key` written while `STORAGE_BACKEND=local` still means exactly the same thing if the backend is later switched to `s3` with the same key layout, since neither backend's key format encodes which backend produced it. (Switching backends after documents already exist under the other one is not itself supported by this issue - existing keys would need to be migrated to the new backend's storage, a data-migration concern distinct from the schema migration this issue makes.)
 
 ---
 

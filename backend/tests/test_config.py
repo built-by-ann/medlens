@@ -1,3 +1,5 @@
+import pytest
+
 from app.core.config import Settings
 
 
@@ -34,3 +36,82 @@ def test_settings_applies_defaults_when_optional_values_unset(monkeypatch):
     assert settings.jwt_algorithm == "HS256"
     assert settings.jwt_access_token_expire_minutes == 30
     assert settings.gemini_model == "gemini-2.5-flash"
+    assert settings.storage_backend == "local"
+
+
+# --- storage_backend validation (Issue #58) ---
+
+
+def _base_env(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@localhost:5432/db")
+    monkeypatch.setenv("JWT_SECRET_KEY", "unit-test-secret")
+
+
+def test_settings_defaults_to_local_storage_with_no_aws_configuration(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.delenv("STORAGE_BACKEND", raising=False)
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.delenv("S3_BUCKET_NAME", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.storage_backend == "local"
+
+
+def test_settings_accepts_s3_when_fully_configured(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("STORAGE_BACKEND", "s3")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("S3_BUCKET_NAME", "medlens-documents")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.storage_backend == "s3"
+    assert settings.aws_region == "us-east-1"
+    assert settings.s3_bucket_name == "medlens-documents"
+
+
+def test_settings_accepts_s3_without_explicit_credentials(monkeypatch):
+    # The production-recommended configuration (an IAM role attached to
+    # the EC2 instance, this feature's own "use IAM credentials"
+    # requirement) supplies no static access key at all - Settings must
+    # not require one.
+    _base_env(monkeypatch)
+    monkeypatch.setenv("STORAGE_BACKEND", "s3")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("S3_BUCKET_NAME", "medlens-documents")
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.aws_access_key_id is None
+    assert settings.aws_secret_access_key is None
+
+
+def test_settings_raises_at_construction_when_s3_selected_with_no_region_or_bucket(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("STORAGE_BACKEND", "s3")
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.delenv("S3_BUCKET_NAME", raising=False)
+
+    with pytest.raises(ValueError, match=r"AWS_REGION.*S3_BUCKET_NAME"):
+        Settings(_env_file=None)
+
+
+def test_settings_raises_at_construction_when_s3_selected_with_only_region_set(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("STORAGE_BACKEND", "s3")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.delenv("S3_BUCKET_NAME", raising=False)
+
+    with pytest.raises(ValueError, match="S3_BUCKET_NAME"):
+        Settings(_env_file=None)
+
+
+def test_settings_rejects_an_unrecognized_storage_backend(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("STORAGE_BACKEND", "azure_blob")
+
+    with pytest.raises(ValueError, match="STORAGE_BACKEND"):
+        Settings(_env_file=None)

@@ -31,6 +31,21 @@ services:
       # explicitly, or the deployed frontend's origin will be rejected.
       APP_ENV: ${APP_ENV:-development}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      # Issue #58: defaults to local-filesystem storage (inside this
+      # container - lost on every recreate, see infra/.env.example), zero
+      # extra configuration needed. Settings' own startup validation
+      # (app/core/config.py) fails the container immediately, with a clear
+      # error, if STORAGE_BACKEND=s3 is set here without AWS_REGION and
+      # S3_BUCKET_NAME also set - never a silent misconfiguration.
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      AWS_REGION: ${AWS_REGION:-}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+      # Left unset by default even when STORAGE_BACKEND=s3 - the
+      # recommended production setup is an IAM role attached to the EC2
+      # instance, which needs neither (see docs/deployment.md's Security
+      # section). Only set for local testing against a real bucket.
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     restart: unless-stopped
     healthcheck:
       # GET /health always returns HTTP 200, even when the database is

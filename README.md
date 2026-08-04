@@ -90,8 +90,10 @@ Implemented
 - Paste document text
 - Upload TXT files
 - Upload PDF files
+- Upload CSV files
 - View documents
-- Delete documents
+- Download original uploaded files, backed by pluggable file storage (local disk by default, or Amazon S3 - see `docs/deployment.md`)
+- Delete documents (also removes the stored file, if any)
 
 ## Medication Management
 
@@ -174,9 +176,9 @@ Planned: - OpenBioLLM - MedGemma
 
 - Docker
 - Docker Compose
-- GitHub Actions (frontend quality checks; backend workflow planned - see `docs/deployment.md`)
-
-Planned: - AWS EC2 - AWS S3
+- GitHub Actions (frontend and backend quality checks, plus Docker image build validation - see `docs/deployment.md`)
+- AWS EC2 (single-instance deployment via Docker Compose - see `docs/deployment.md`)
+- AWS S3 (optional file storage backend for uploaded clinical documents, behind a pluggable `StorageService` - local disk by default; see `docs/deployment.md` and `docs/architecture.md`)
 
 ## Testing
 

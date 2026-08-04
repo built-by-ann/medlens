@@ -468,28 +468,30 @@ Cons
 
 ---
 
-# Decision 21: Case-Insensitive Username Uniqueness via a Functional Index, Not a Normalized Column
+# Decision 21: Pluggable StorageService Interface for File Storage, Mirroring the AI Provider Pattern
 
 **Decision**
 
-Add `username` to `User` as a nullable `String` column with no column-level `unique` constraint. Uniqueness is enforced instead by a Postgres functional unique index on `lower(username)`, created in the Alembic migration. The application's own pre-check (`get_user_by_username`, `app/services/user_service.py`) queries with the same `lower(...)` comparison, so it can never disagree with what the database itself will actually accept.
+Introduce `StorageService`, an abstract interface (`upload`/`download`/`delete`) with two implementations - `LocalStorageService` (the default, writes to a local directory) and `S3StorageService` (uploads to a private S3 bucket via `boto3`) - selected by one setting, `Settings.storage_backend`, through a single factory function (`build_storage_service`). Every other part of the application (the clinical document routes and service) depends only on the `StorageService` interface, injected via FastAPI's dependency system, never on a concrete backend class.
 
 **Reasoning**
 
-The feature's own requirement is that usernames be unique case-insensitively - `jdoe` and `JDoe` must be treated as the same username. A plain `unique=True` column constraint can't express that; Postgres's default unique index compares raw bytes, so it would happily accept both. Two alternatives were considered and rejected: normalizing (lowercasing) the stored value itself would satisfy uniqueness but would silently discard whatever casing a user actually chose to type, which is a real, visible regression for a field whose entire purpose is being a human-facing handle; storing a second, always-lowercase shadow column purely for uniqueness checks would work but adds a column that exists solely to make an index possible, and a second write path that has to be kept in sync with the real one by hand. A functional index sidesteps both: Postgres computes and indexes `lower(username)` directly from the real column, so there's nothing to keep in sync and nothing about the stored value is ever altered.
+This application already had exactly this problem once, for AI providers (Decision 15): business logic needing an external capability whose concrete implementation should be swappable without touching that logic. `AIProvider` solved it with a minimal interface, a factory function, and dependency injection - `StorageService` reuses the identical shape rather than inventing a new pattern for a structurally identical problem. The alternative - `if settings.storage_backend == "s3": ... else: ...` conditionals wherever a file is read or written - would scatter the same branch across every call site and make adding a third backend (or testing against a fake one) require finding and updating every one of them individually.
+
+Before this feature, no file storage of any kind existed in the application - uploaded files were read into memory, text-extracted, and discarded (see `docs/data-model.md`'s Design Decisions). This is worth being explicit about because the interface was designed for the problem this application actually has (an original file plus its already-separately-stored extracted text) rather than adapted from a different one; `StorageService` has no method for anything analysis-related, since AI analysis was never going to read through it - it continues reading `raw_text` from Postgres exactly as before.
 
 **Trade-offs**
 
 Pros
 
-- The username a user typed is exactly the username stored, returned, and displayed - the uniqueness rule is invisible to them except in the one case it's meant to be visible (being told a name is taken)
-- No second column, no application-level normalization step that could drift from what the database actually enforces
-- NULLs are exempt from any unique index in Postgres by default, so every pre-existing account (necessarily `username IS NULL`) needed zero backfill to stay valid after the migration
+- A new backend (e.g. a different cloud provider, or Google Cloud Storage) is a new class implementing three methods, not a change to any route or service
+- `LocalStorageService` makes local development, CI, and this feature's own test suite fully independent of AWS - no account, no credentials, no network call, ever, unless a test explicitly opts into `S3StorageService` (via `moto`, which mocks the AWS API rather than calling it for real)
+- Settings validates S3 configuration at startup (a `model_validator`, not a lazy check on first upload) - a misconfigured `STORAGE_BACKEND=s3` fails immediately and clearly, the same "fail fast, not on first use" principle Decision 19 already established for a different startup-time failure mode
 
 Cons
 
-- A functional index is a less commonly reached-for tool than a plain unique constraint, so a future contributor unfamiliar with the pattern has to understand why `\d users` shows a `lower(username)` index rather than a straightforward one on the column itself
-- Case-insensitive matching happens in exactly two places by convention (the functional index, and `get_user_by_username`'s `func.lower(...)` query) rather than being enforced by a single reusable database type or constraint - a future query against `username` that forgets to lowercase both sides would silently miss a match rather than error
+- Two implementations to keep behaviorally consistent (e.g. both raise `ObjectNotFoundError`, not just a generic exception, for a missing key) - enforced only by a shared test suite (`tests/test_storage_service.py` runs the same assertions against both), not by the type system
+- `LocalStorageService`'s sidecar `.meta.json` file (recording content type, which a plain filesystem has no native concept of) is a small, backend-specific implementation detail that `S3StorageService` doesn't need at all, since S3 stores content type as real object metadata - an asymmetry between the two implementations that the shared interface itself doesn't surface
 
 ---
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -16,6 +16,20 @@ class ClinicalDocument(Base):
     raw_text = Column(Text, nullable=False)
     file_name = Column(String, nullable=True)
     file_type = Column(String, nullable=True)
+
+    # Issue #58: identifies the original file in whichever StorageService
+    # backend is active (a local path or an S3 key - see app/storage/) -
+    # never a URL, per that feature's own "do not store S3 URLs" rule, so
+    # a bucket rename or moving between backends never requires touching
+    # stored data. All three are nullable together: a pasted-text document
+    # (POST .../clinical-documents, no file at all) and any document
+    # created before this column existed have no stored object, and
+    # storage_key being null is exactly how the download endpoint
+    # distinguishes "nothing to download" from "download failed" - see
+    # app/services/clinical_document_service.py.
+    storage_key = Column(String, nullable=True)
+    content_type = Column(String, nullable=True)
+    file_size_bytes = Column(BigInteger, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
