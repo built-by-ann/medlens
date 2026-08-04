@@ -60,7 +60,7 @@ Response
 
 Description
 
-Reports API and database connectivity status.
+Reports application status, database connectivity, and the deployment configuration already loaded into memory (version, environment, storage backend, AI provider/model) - a single place to check "what is this instance actually running as" without SSHing in. Deliberately lightweight (Issue #61): the only I/O it performs is one `SELECT 1` against the database this process already holds a connection pool for. It never contacts Gemini, never makes an S3 request, and never performs any other network call - `storage`/`ai` below are read directly from configuration already in memory (and, for `ai.provider`, a plain class attribute), not by constructing a real storage backend or AI provider client.
 
 Request
 
@@ -68,24 +68,59 @@ No parameters or body.
 
 Response
 
+`200 OK`
+
 ```json
 {
   "status": "ok",
-  "database": "connected"
+  "version": "1.0.0",
+  "environment": "production",
+  "database": {
+    "status": "connected"
+  },
+  "storage": {
+    "backend": "s3"
+  },
+  "ai": {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash"
+  },
+  "timestamp": "2026-08-04T02:15:30Z"
 }
 ```
 
-If the database connection fails, the response body reflects the failure instead:
+If the database connection fails, `status` and `database` reflect the failure instead - every other field is still populated exactly the same way, since none of them ever depended on the database to begin with, and they remain useful (arguably more so) while diagnosing this exact failure:
 
 ```json
 {
   "status": "error",
-  "database": "disconnected",
-  "detail": "<error message>"
+  "version": "1.0.0",
+  "environment": "production",
+  "database": {
+    "status": "disconnected",
+    "detail": "<error message>"
+  },
+  "storage": {
+    "backend": "s3"
+  },
+  "ai": {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash"
+  },
+  "timestamp": "2026-08-04T02:15:30Z"
 }
 ```
 
-Note: the endpoint currently returns HTTP `200` in both cases. Callers should check the `status` field in the body rather than the HTTP status code.
+`503 Service Unavailable` is returned in this case - unlike an outdated assumption once written here, this endpoint does **not** always return `200`; callers can rely on the HTTP status code directly (a `503` should still be treated as a real signal by anything that scripts against this endpoint, e.g. a load balancer or orchestrator health check - see `docs/deployment.md`), and may additionally check the `status` field in the body for the same information.
+
+Field notes:
+
+- `version` - `Settings.app_version` (`APP_VERSION` environment variable, defaults to `"1.0.0"`). A plain configured string, not derived from git or the Docker image tag.
+- `environment` - `Settings.app_env` (`APP_ENV`), the same value that gates CORS behavior elsewhere (see `POST /auth/register` and friends).
+- `storage.backend` - `Settings.storage_backend` (`STORAGE_BACKEND`), `"local"` or `"s3"` - see `docs/deployment.md`'s File Storage (S3) section. Never `"s3"` because a request to S3 actually succeeded; it's the *configured* backend, reported without contacting it.
+- `ai.provider` - always `"gemini"` today (`GeminiProvider.name`, `app/ai/providers/gemini_provider.py`) - there is currently only one `AIProvider` implementation wired into the application (see `docs/design-decisions.md`, Decision 15), so this reflects which class is compiled in rather than a separate selectable setting.
+- `ai.model` - `Settings.gemini_model` (`GEMINI_MODEL`), the same value `POST /patients/{patient_id}/analyses` uses for real AI calls. Reporting it here requires no Gemini API key and makes no request to Gemini - unlike using AI features themselves, which fail with a `503` and a different message when the key is missing (see that endpoint above).
+- `timestamp` - UTC, formatted like `2026-08-04T02:15:30Z`.
 
 ---
 
