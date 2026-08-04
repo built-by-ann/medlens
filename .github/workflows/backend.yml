@@ -116,11 +116,34 @@ jobs:
       # Issue #56: the final step of this job, not a separate workflow or
       # job - a change that passes every check above but produces a
       # Dockerfile that can't actually be built would otherwise only be
-      # caught by hand, at deploy time. `docker build` alone (no push, no
-      # registry login, no compose) is enough to prove the production
-      # image still builds; it needs no environment variables; the ones
-      # Settings() requires (DATABASE_URL, JWT_SECRET_KEY) are only read
-      # when the built image is actually run, which this step doesn't do -
-      # see docker-compose up in docs/deployment.md for where those matter.
+      # caught by hand, at deploy time. Building (no push, no registry
+      # login, no compose) is enough to prove the production image still
+      # builds; it needs no environment variables; the ones Settings()
+      # requires (DATABASE_URL, JWT_SECRET_KEY) are only read when the
+      # built image is actually run, which this step doesn't do - see
+      # docker-compose up in docs/deployment.md for where those matter.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Issue #184: a plain `docker build` here had zero cache reuse
+      # between CI runs - every push rebuilt every layer (including a full
+      # pip install) from nothing, since each job starts on a fresh
+      # runner with no prior Docker state. type=gha stores the build
+      # cache (layers, and the pip cache mount backend/Dockerfile now
+      # uses) in GitHub's own Actions cache, keyed and restored
+      # automatically across runs - an unchanged backend/Dockerfile +
+      # requirements.txt skips the install step entirely on the next run;
+      # a requirements.txt-only change still reuses previously-downloaded
+      # wheels via the cache mount, the same win measured locally for
+      # this issue. load: true (not push: true) keeps this step doing
+      # exactly what the plain `docker build` did - building the image
+      # into the local Docker daemon, going nowhere else - since nothing
+      # here needs the resulting image to persist past this job.
       - name: Validate Docker image build
-        run: docker build -t medlens-backend:ci .
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          tags: medlens-backend:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

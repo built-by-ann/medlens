@@ -524,6 +524,19 @@ Cons
 
 ---
 
+# Decision 23: BuildKit Cache Mounts Instead of `--no-cache-dir`, Paired with GitHub Actions Cache in CI
+
+**Decision**
+
+`backend/Dockerfile`'s `pip install` and `frontend/Dockerfile`'s `npm ci` each run under a BuildKit cache mount (`--mount=type=cache,target=...`) rather than downloading fresh on every build. `backend/Dockerfile` drops `--no-cache-dir` (Decision 18's original flag) since the cache mount now serves the same purpose more effectively. Both Dockerfiles gain a `# syntax=docker/dockerfile:1` pragma, required for the mount syntax to resolve consistently. In CI, both `backend.yml` and `frontend.yml`'s "Validate Docker image build" step moves from a plain `docker build` to `docker/build-push-action` with `cache-from`/`cache-to: type=gha`.
+
+**Reasoning**
+
+Decision 18 chose `--no-cache-dir` deliberately, to keep pip's download cache out of the final image layer. That reasoning is still correct about the image, but it also means every single build - local or CI - re-downloads every dependency from PyPI, even when `requirements.txt` changed by one line. A BuildKit cache mount gets the same "nothing extra in the final image" property (a mount is never part of an exported layer, unlike a normal on-disk directory would be) while *also* persisting the downloaded packages between builds, in BuildKit's own cache store - strictly better than `--no-cache-dir` for this project's actual goal (a small image), not a trade-off against it.
+
+That local persistence alone doesn't help CI, though: each GitHub Actions job starts on a fresh runner with no prior BuildKit state at all, so a cache mount with nothing to restore from behaves exactly like `--no-cache-dir` did. `cache-from`/`cache-to: type=gha` closes that gap - it's what actually gives the mount something to be warm *from* on the next run, by storing and restoring the same BuildKit cache (both ordinary layers and cache-mount contents) through GitHub's own Actions cache rather than requiring the runner itself to persist anything.
+
+Neither change touches the Dockerfiles' runtime behavior at all: it's the same `pip install --prefix=/install`/`npm ci` producing the identical installed package set, only how the download step is cached. `docker/build-push-action` is used with `load: true`, never `push: true` - CI still only proves the image builds, exactly as the plain `docker build` it replaces did; nothing is published anywhere new.
 # Decision 23: Same-Origin Deployment via nginx Reverse Proxy, Backend Made Internal-Only
 
 **Decision**
@@ -547,6 +560,15 @@ A third, easy-to-miss correctness issue: without explicit forwarding, every requ
 
 Pros
 
+- Both a `requirements.txt`/`package-lock.json` change (verified locally: every package installed from `Using cached ...` wheels, zero PyPI network requests) and, once the GHA cache is warm, every CI run after the first benefit - not just an incremental improvement to the already-fast "source-only change" case Decision 18's layer ordering already handled well
+- No change to the final image's contents or size - a cache mount was chosen specifically because it doesn't reintroduce what `--no-cache-dir` was removing
+- Uses GitHub's own Actions cache - no new CI system, no external cache service, no additional secrets or registry login
+
+Cons
+
+- Requires a BuildKit-aware builder (the default in any current Docker Engine/Compose, and on `docker/setup-buildx-action`-equipped GitHub runners, but a genuinely old or non-BuildKit `docker build` would no longer understand the mount syntax at all - mitigated by the `# syntax=` pragma, not eliminated)
+- The GHA cache has its own eviction/size limits and is scoped per-repository, so a cache miss (a new branch, an evicted entry) still falls back to a full rebuild - an improvement to the common case, not a guarantee every build is fast
+- One more moving part in the CI workflow files (`docker/setup-buildx-action`, `docker/build-push-action`) in place of a single `docker build` line - more to understand when reading the workflow, in exchange for the caching behavior neither could express alone
 - One fewer thing to expose to the internet in production - the backend's own port is never reachable from outside the host at all, closing an attack surface that existed purely so the browser could reach it directly
 - The frontend image no longer needs the deployment's public hostname baked in at build time - `VITE_API_BASE_URL=/api` works unmodified for local Docker Compose *and* a real deployment, simplifying "Step 5: Configure environment variables" in `docs/deployment.md`'s AWS EC2 runbook to one fewer value to get right before building
 - Zero CORS preflight requests during normal application use (verified: no `Access-Control-*` response headers on any same-origin request through nginx) - one fewer request per API call in practice, and one fewer category of "why did this fail in production but work locally" bug class removed with it
