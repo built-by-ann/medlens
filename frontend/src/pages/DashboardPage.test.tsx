@@ -238,8 +238,11 @@ describe('DashboardPage', () => {
     mockedListPatients.mockResolvedValue(patients)
     renderDashboard()
 
-    await screen.findByRole('heading', { name: 'Recent patients' })
-    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+    // The heading itself renders on the very first paint, regardless of
+    // loading state (see DashboardPage.tsx) - it's not a reliable "patients
+    // have loaded" signal on its own, so the actual list items are what's
+    // awaited here.
+    expect(await screen.findAllByRole('listitem')).toHaveLength(3)
   })
 
   it('search updates live and searches the full patient list, not just the recent preview', async () => {
@@ -247,9 +250,12 @@ describe('DashboardPage', () => {
     const user = userEvent.setup()
     renderDashboard()
 
-    await screen.findByRole('heading', { name: 'Recent patients' })
-
-    await user.type(screen.getByLabelText('Search patients'), 'Jane')
+    // findByLabelText, not getByLabelText: the search box only renders once
+    // patients have actually loaded (patients.length > 0) - the "Recent
+    // patients" heading above it renders immediately regardless of loading
+    // state, so waiting on the heading alone doesn't guarantee the search
+    // box exists yet.
+    await user.type(await screen.findByLabelText('Search patients'), 'Jane')
 
     expect(await screen.findByRole('heading', { name: 'Search results' })).toBeInTheDocument()
     expect(screen.getByText('Jane Doe')).toBeInTheDocument()
@@ -261,8 +267,7 @@ describe('DashboardPage', () => {
     const user = userEvent.setup()
     renderDashboard()
 
-    await screen.findByRole('heading', { name: 'Recent patients' })
-    await user.type(screen.getByLabelText('Search patients'), 'MRN-002')
+    await user.type(await screen.findByLabelText('Search patients'), 'MRN-002')
 
     expect(await screen.findByText('John Smith')).toBeInTheDocument()
     expect(screen.queryByText('Jane Doe')).not.toBeInTheDocument()
@@ -273,8 +278,7 @@ describe('DashboardPage', () => {
     const user = userEvent.setup()
     renderDashboard()
 
-    await screen.findByRole('heading', { name: 'Recent patients' })
-    await user.type(screen.getByLabelText('Search patients'), 'nonexistent')
+    await user.type(await screen.findByLabelText('Search patients'), 'nonexistent')
 
     expect(await screen.findByText('No patients match your search.')).toBeInTheDocument()
   })
