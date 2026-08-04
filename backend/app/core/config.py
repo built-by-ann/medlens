@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     # plain string, not derived from git or the Docker image tag, since
     # neither is available to the running process today.
     app_version: str = "1.0.0"
+    # Issue #59: passed to configure_logging() (app/core/logging_config.py)
+    # as the root logger's level. "INFO" surfaces the per-request summary
+    # line and every application lifecycle event this issue adds; "DEBUG"
+    # would additionally surface third-party libraries' own debug output
+    # (SQLAlchemy query logs, etc.), which is why it isn't the default.
+    log_level: str = "INFO"
     database_url: str
 
     jwt_secret_key: str

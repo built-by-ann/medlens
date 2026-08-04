@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -38,6 +40,8 @@ from app.services.medication_discrepancy_service import (
     get_discrepancy_for_analysis,
     resolve_discrepancy,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/patients/{patient_id}/analyses", tags=["analyses"])
 
@@ -89,6 +93,15 @@ def summarize_clinical_documents(
             detail=NOT_FOUND_DETAIL,
         ) from None
 
+    logger.info(
+        "Analysis started",
+        extra={
+            "event": "analysis_started",
+            "patient_id": patient.id,
+            "analysis_id": analysis.id,
+        },
+    )
+
     try:
         mark_analysis_processing(db, analysis)
 
@@ -112,10 +125,39 @@ def summarize_clinical_documents(
         message = _safe_error_message(error)
         mark_analysis_failed(db, analysis, message)
 
+        # message is already sanitized by _safe_error_message - the same
+        # text returned to the client in the 503 below, never a raw
+        # exception message or traceback (that's logger.exception's job,
+        # already covered by GeminiProvider._log_failure for the AI-provider
+        # case, or by the global exception handler for anything else - see
+        # app/core/logging_config.py). This log's job is only to record
+        # *that*, and *which*, analysis failed and why in the sanitized,
+        # already-safe terms a client would also see.
+        logger.warning(
+            "Analysis failed: %s",
+            message,
+            extra={
+                "event": "analysis_failed",
+                "patient_id": patient.id,
+                "analysis_id": analysis.id,
+            },
+        )
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=message,
         ) from error
+
+    logger.info(
+        "Analysis completed",
+        extra={
+            "event": "analysis_completed",
+            "patient_id": patient.id,
+            "analysis_id": analysis.id,
+            "provider": result.provider,
+            "model": result.model,
+        },
+    )
 
     return ClinicalNoteSummaryResponse(
         analysis_id=analysis.id,

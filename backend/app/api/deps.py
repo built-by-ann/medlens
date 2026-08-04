@@ -1,8 +1,9 @@
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
+from app.core.logging_config import set_request_user_id
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.patient import Patient
@@ -20,6 +21,7 @@ credentials_exception = HTTPException(
 
 
 def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -40,6 +42,17 @@ def get_current_user(
 
     if user is None:
         raise credentials_exception
+
+    # request.state, not a ContextVar: every dependency and route handler
+    # in this app is a plain sync `def` (synchronous SQLAlchemy
+    # throughout), and Starlette runs each one via run_in_threadpool,
+    # which gives each sync call its own *copy* of the current context -
+    # a ContextVar.set() here would never become visible to the
+    # request-logging middleware's own (separately-run) code, even though
+    # it's logically "the same request". request.state is a plain
+    # attribute on the one Request object every dependency shares, so it
+    # propagates correctly across that boundary (app/core/logging_config.py).
+    set_request_user_id(request, user.id)
 
     return user
 

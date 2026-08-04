@@ -41,4 +41,10 @@ EXPOSE 8000
 # See alembic/env.py for how this resolves DATABASE_URL correctly whether
 # running here (Postgres reachable by its compose service name) or
 # directly on a developer's host (Postgres reachable at localhost).
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+#
+# --no-access-log (Issue #59): the application's own request-logging
+# middleware (app/core/logging_config.py) already logs exactly one
+# structured summary line per completed request - uvicorn's default access
+# log would otherwise add a second, differently-formatted line for the
+# same request, right alongside it.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]
