@@ -41,7 +41,7 @@ services:
       # that goes through the frontend container's nginx reverse proxy
       # (Issue #190) is same-origin and never triggers CORS at all, in
       # either environment, so there is no production equivalent of this
-      # setting to configure - see docs/design-decisions.md, Decision 23.
+      # setting to configure - see docs/design-decisions.md, Decision 24.
       APP_ENV: ${APP_ENV:-development}
       # Issue #61: reported as-is by GET /health - purely informational,
       # never used to gate any behavior.
@@ -103,16 +103,60 @@ services:
         # compose build frontend`) after changing this - restarting the
         # container alone has no effect, since it's already baked in.
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+        # Issue #189: which certificate path nginx.conf is built to
+        # expect (/etc/letsencrypt/live/$DOMAIN/... - certbot's own fixed
+        # convention) - must match whatever domain the `certbot` service
+        # below actually issues a certificate for, or nginx will look in
+        # the wrong place inside the shared certbot_certs volume. Rebuild
+        # (`docker compose build frontend`), not just restart, after
+        # changing this - same reasoning as VITE_API_BASE_URL above.
+        DOMAIN: ${DOMAIN:-medlenshealth.com}
     ports:
       - "${FRONTEND_PORT:-80}:80"
+      # Issue #189: HTTPS - the port 80 server block (frontend/nginx.conf)
+      # only redirects here and serves the ACME challenge now; everything
+      # else (the SPA, /api/*) is served over this port.
+      - "${FRONTEND_HTTPS_PORT:-443}:443"
+    volumes:
+      # Issue #189: certbot_certs is NOT read-only from this side, despite
+      # certbot (below) being the one that writes the *real* certificate -
+      # ensure-dummy-cert.sh (frontend/Dockerfile) also needs to write the
+      # placeholder certificate here whenever a real one doesn't exist yet
+      # (every local `docker compose up`, and a brand new production
+      # instance before certbot's first run). Both are named volumes, not
+      # bind mounts, so this works identically in local development and
+      # production with no path to configure per environment.
+      - certbot_certs:/etc/nginx/ssl
+      # This one genuinely is read-only from here - nginx only ever reads
+      # ACME challenge files certbot wrote, never creates them itself.
+      - certbot_www:/var/www/certbot:ro
     restart: unless-stopped
     healthcheck:
+      # https://127.0.0.1/, not http (Issue #189) - port 80 now only
+      # redirects, so a plain HTTP check would still pass (a redirect
+      # response is itself a sign of life), but checking 443 directly
+      # verifies the thing users and /api/ traffic actually go through.
+      # --no-check-certificate: this check only cares whether nginx is
+      # responding, not whether the certificate is one a browser would
+      # trust - in local development (and briefly, on a brand new
+      # production instance before certbot's first run) it's the
+      # self-signed placeholder ensure-dummy-cert.sh generates, which is
+      # never going to validate against a real CA and isn't supposed to.
       # 127.0.0.1, not localhost: this image's nginx only listens on
-      # IPv4 (0.0.0.0:80), but the container's /etc/hosts resolves
-      # "localhost" to ::1 (IPv6) first, which wget then tries first and
-      # gets connection-refused on - a real failure caught during
+      # IPv4, but the container's /etc/hosts resolves "localhost" to ::1
+      # (IPv6) first, which wget then tries first and gets
+      # connection-refused on - a real failure caught during
       # verification, not a hypothetical.
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--no-check-certificate",
+          "--spider",
+          "https://127.0.0.1/",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -126,7 +170,7 @@ services:
     # a static `proxy_pass http://backend:8000` would instead fail to
     # start entirely without this container waiting on backend first. See
     # frontend/nginx.conf's own comments and docs/design-decisions.md,
-    # Decision 23, for the full reasoning. Waiting here anyway would
+    # Decision 24, for the full reasoning. Waiting here anyway would
     # needlessly delay this container's own (independent) readiness for
     # serving the SPA - see Issue #183 for why that specifically matters.
 
@@ -162,5 +206,32 @@ services:
       # failure; matches backend's/frontend's own start_period above.
       start_period: 10s
 
+  # Issue #189: `profiles` (not started by a plain `docker compose up` or
+  # `up -d --build`, including this issue's own validation run of those
+  # exact commands - `docker compose run` still works regardless of
+  # profiles, since it names this service explicitly) - this container
+  # isn't meant to run continuously, only on demand, e.g.
+  # `docker compose run --rm certbot certonly --webroot -w
+  # /var/www/certbot -d medlenshealth.com ...` for initial issuance, or
+  # `docker compose run --rm certbot renew` for renewal - see
+  # docs/deployment.md's HTTPS section for the full commands and the cron
+  # entry that runs the second one automatically. Sharing the same two
+  # named volumes `frontend` mounts (above) is the entire integration
+  # between the two containers: certbot writes a certificate, `frontend`'s
+  # nginx reads it from the same place, and nginx's own ACME-challenge
+  # location block (frontend/nginx.conf) serves whatever certbot writes to
+  # the webroot volume so Let's Encrypt's HTTP-01 validation can reach it.
+  certbot:
+    image: certbot/certbot
+    profiles: ["certbot"]
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+
 volumes:
   medlens_postgres_data:
+  # Issue #189: never a bind mount to a path in this repository - a real
+  # certificate (and its private key) only ever lives in Docker's own
+  # volume storage, never in a git-tracked directory. See docs/deployment.md.
+  certbot_certs:
+  certbot_www:

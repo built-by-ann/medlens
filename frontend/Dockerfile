@@ -41,9 +41,35 @@ RUN npm run build
 # source, no node_modules in the final image.
 FROM nginx:alpine
 
+# Issue #189: only used by ensure-dummy-cert.sh below, to let nginx bind
+# to 443 before a real certificate exists (local development, or a brand
+# new production instance before certbot has run for the first time) -
+# not present in nginx:alpine by default.
+RUN apk add --no-cache openssl
+
+# The production domain this app is served from - baked in at build time,
+# the same "override with --build-arg, rebuild (not restart) to change
+# it" pattern VITE_API_BASE_URL above already established (Decision 18).
+# ENV, not just ARG, so ensure-dummy-cert.sh (a runtime script, not part
+# of this build) can also read it. Used below to fill in nginx.conf's
+# certificate path, matching the directory certbot itself writes to
+# inside the certbot_certs volume (infra/docker-compose.yml) -
+# /etc/letsencrypt/live/<domain>/ is certbot's own fixed convention, not
+# one this file invented.
+ARG DOMAIN=medlenshealth.com
+ENV DOMAIN=$DOMAIN
+
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN sed -i "s/__DOMAIN__/${DOMAIN}/g" /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+# Runs automatically before nginx starts (nginx:alpine's own
+# /docker-entrypoint.d/ convention - every *.sh script here runs, in
+# filename order, before the main process). See the script itself for why
+# this exists.
+COPY ensure-dummy-cert.sh /docker-entrypoint.d/40-ensure-dummy-cert.sh
+RUN chmod +x /docker-entrypoint.d/40-ensure-dummy-cert.sh
+
+EXPOSE 80 443
 
 CMD ["nginx", "-g", "daemon off;"]

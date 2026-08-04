@@ -537,7 +537,24 @@ Decision 18 chose `--no-cache-dir` deliberately, to keep pip's download cache ou
 That local persistence alone doesn't help CI, though: each GitHub Actions job starts on a fresh runner with no prior BuildKit state at all, so a cache mount with nothing to restore from behaves exactly like `--no-cache-dir` did. `cache-from`/`cache-to: type=gha` closes that gap - it's what actually gives the mount something to be warm *from* on the next run, by storing and restoring the same BuildKit cache (both ordinary layers and cache-mount contents) through GitHub's own Actions cache rather than requiring the runner itself to persist anything.
 
 Neither change touches the Dockerfiles' runtime behavior at all: it's the same `pip install --prefix=/install`/`npm ci` producing the identical installed package set, only how the download step is cached. `docker/build-push-action` is used with `load: true`, never `push: true` - CI still only proves the image builds, exactly as the plain `docker build` it replaces did; nothing is published anywhere new.
-# Decision 23: Same-Origin Deployment via nginx Reverse Proxy, Backend Made Internal-Only
+
+**Trade-offs**
+
+Pros
+
+- Both a `requirements.txt`/`package-lock.json` change (verified locally: every package installed from `Using cached ...` wheels, zero PyPI network requests) and, once the GHA cache is warm, every CI run after the first benefit - not just an incremental improvement to the already-fast "source-only change" case Decision 18's layer ordering already handled well
+- No change to the final image's contents or size - a cache mount was chosen specifically because it doesn't reintroduce what `--no-cache-dir` was removing
+- Uses GitHub's own Actions cache - no new CI system, no external cache service, no additional secrets or registry login
+
+Cons
+
+- Requires a BuildKit-aware builder (the default in any current Docker Engine/Compose, and on `docker/setup-buildx-action`-equipped GitHub runners, but a genuinely old or non-BuildKit `docker build` would no longer understand the mount syntax at all - mitigated by the `# syntax=` pragma, not eliminated)
+- The GHA cache has its own eviction/size limits and is scoped per-repository, so a cache miss (a new branch, an evicted entry) still falls back to a full rebuild - an improvement to the common case, not a guarantee every build is fast
+- One more moving part in the CI workflow files (`docker/setup-buildx-action`, `docker/build-push-action`) in place of a single `docker build` line - more to understand when reading the workflow, in exchange for the caching behavior neither could express alone
+
+---
+
+# Decision 24: Same-Origin Deployment via nginx Reverse Proxy, Backend Made Internal-Only
 
 **Decision**
 
@@ -560,15 +577,6 @@ A third, easy-to-miss correctness issue: without explicit forwarding, every requ
 
 Pros
 
-- Both a `requirements.txt`/`package-lock.json` change (verified locally: every package installed from `Using cached ...` wheels, zero PyPI network requests) and, once the GHA cache is warm, every CI run after the first benefit - not just an incremental improvement to the already-fast "source-only change" case Decision 18's layer ordering already handled well
-- No change to the final image's contents or size - a cache mount was chosen specifically because it doesn't reintroduce what `--no-cache-dir` was removing
-- Uses GitHub's own Actions cache - no new CI system, no external cache service, no additional secrets or registry login
-
-Cons
-
-- Requires a BuildKit-aware builder (the default in any current Docker Engine/Compose, and on `docker/setup-buildx-action`-equipped GitHub runners, but a genuinely old or non-BuildKit `docker build` would no longer understand the mount syntax at all - mitigated by the `# syntax=` pragma, not eliminated)
-- The GHA cache has its own eviction/size limits and is scoped per-repository, so a cache miss (a new branch, an evicted entry) still falls back to a full rebuild - an improvement to the common case, not a guarantee every build is fast
-- One more moving part in the CI workflow files (`docker/setup-buildx-action`, `docker/build-push-action`) in place of a single `docker build` line - more to understand when reading the workflow, in exchange for the caching behavior neither could express alone
 - One fewer thing to expose to the internet in production - the backend's own port is never reachable from outside the host at all, closing an attack surface that existed purely so the browser could reach it directly
 - The frontend image no longer needs the deployment's public hostname baked in at build time - `VITE_API_BASE_URL=/api` works unmodified for local Docker Compose *and* a real deployment, simplifying "Step 5: Configure environment variables" in `docs/deployment.md`'s AWS EC2 runbook to one fewer value to get right before building
 - Zero CORS preflight requests during normal application use (verified: no `Access-Control-*` response headers on any same-origin request through nginx) - one fewer request per API call in practice, and one fewer category of "why did this fail in production but work locally" bug class removed with it
@@ -577,6 +585,36 @@ Cons
 
 - One more moving part in `frontend/nginx.conf` - a resolver, a rewrite, and forwarded headers, none of which are needed for `nginx.conf`'s previous job (serving static files) - all directly required to reverse-proxy correctly, not incidental complexity, but genuinely more nginx configuration to reason about than before
 - `npm run dev`'s dev-server flow and the Docker Compose/production flow now differ in an important way (one is cross-origin and needs CORS + an absolute backend URL, the other is same-origin and needs neither) - worth knowing about before assuming they behave identically, though each is now documented at its own env var (`frontend/.env.example`, `infra/.env.example`)
+
+---
+
+# Decision 25: Dummy-Certificate Bootstrap for HTTPS, Certbot Integrated as an On-Demand Compose Service
+
+**Decision**
+
+`frontend/nginx.conf` gains a second server block on port 443 with TLS termination (the port 80 block now only redirects to it and serves Let's Encrypt's ACME HTTP-01 challenge), reading its certificate from a fixed path inside a named Docker volume (`certbot_certs`, `infra/docker-compose.yml`) rather than anywhere in the repository. A new `certbot` service, using the official `certbot/certbot` image and sharing that same volume (plus a second, `certbot_www`, for the ACME challenge files), provides the certificate - but only when explicitly invoked (`docker compose run --rm certbot ...`), never by a plain `docker compose up`, via Compose's `profiles`. Because that volume starts empty on every fresh `docker compose up` (local development, CI, or a brand new production instance before certbot has ever run), a new `ensure-dummy-cert.sh` script - installed into `nginx:alpine`'s own `/docker-entrypoint.d/` auto-run mechanism, no Dockerfile `CMD`/`ENTRYPOINT` override needed - generates a short-lived self-signed placeholder certificate at that same path whenever a real one isn't already there, so nginx always has *something* to bind port 443 with.
+
+**Reasoning**
+
+The core tension this decision resolves: `infra/docker-compose.yml` is deliberately the *same* file for local development and production (Decision 4 and every deployment issue since), but a real TLS certificate can only exist where the actual production domain is reachable over the public internet - it can never be issued, and shouldn't be faked, in local development or in this repository's own CI/testing. Without some accommodation, `nginx.conf` referencing a certificate path that's empty in every environment except real production would mean `docker compose up` simply doesn't work anywhere else - breaking the exact "one file, every environment" property this project has maintained since Issue #56. The dummy-certificate bootstrap is the standard, well-established answer to precisely this problem (the same pattern used by, among others, the widely-referenced wmnnd/nginx-certbot Docker recipe): nginx never has to special-case "do I have a real certificate or not," because there's always a file at the expected path either way - only *which* certificate ends up there differs, and that's decided entirely by what's mounted into the shared volume, not by any conditional logic in `nginx.conf` itself.
+
+The certificate's *path* still has to agree between nginx and certbot, though, and certbot's own directory convention (`/etc/letsencrypt/live/<domain>/`) is namespaced by domain, not something this project's Dockerfiles invented or can avoid. Rather than runtime `envsubst` templating (nginx:alpine supports this natively, but by default substitutes *every* `$word` its process environment happens to also define - a real risk of silently blanking out nginx's own native variables like `$host`/`$scheme` used throughout the `/api/` proxy block, unless carefully scoped), the domain is baked in at image build time via a `DOMAIN` build arg, extending the exact pattern `VITE_API_BASE_URL` already established (Decision 18) rather than introducing a second templating mechanism alongside it.
+
+Certbot is integrated as a Compose service, not a separate manual Docker invocation, so it shares the project's existing `infra/.env`-driven configuration (the same `DOMAIN` value) and its volumes are defined once, in the one file that already owns every other piece of this deployment's container wiring. `profiles: ["certbot"]` keeps it from starting - and, on a machine with no real domain yet, immediately exiting non-zero - every time someone runs `docker compose up`; `docker compose run` still reaches it directly by name regardless, which is the only way it's ever meant to be invoked (an ACME issuance or renewal is not a long-running process). Renewal itself is a host-level cron entry (`docs/deployment.md`'s HTTPS section), not a fourth always-running container with a sleep loop - consistent with this project's already-manual, non-automated deployment model (Issue #57's Continuous Deployment section already documents deploys as a manual SSH session), and cron is infrastructure every Linux host already has, not something new to introduce.
+
+**Trade-offs**
+
+Pros
+
+- `docker compose up` behaves identically in every environment - local development, CI, and a brand new production instance all see *a* working HTTPS listener immediately, real certificate or not, with zero environment-specific branching in `nginx.conf`
+- No certificate material of any kind - real or the self-signed placeholder - ever touches a git-tracked path; both live exclusively in a named Docker volume
+- Reuses this project's own established patterns throughout rather than introducing new ones: build-time domain baking mirrors `VITE_API_BASE_URL` (Decision 18), on-demand invocation via Compose `profiles` needs no new tooling, and cron-based renewal matches the project's already-manual deployment model instead of adding a persistent renewal container
+
+Cons
+
+- The self-signed placeholder means a browser will show a certificate warning against any environment that hasn't had a real certificate issued yet (every local `docker compose up`) - expected and harmless, but worth knowing about before assuming a certificate warning always signals a real problem
+- `DOMAIN` has to be kept in sync in two places that don't validate each other - the build arg baked into the frontend image, and the `-d` flag in whatever `certbot certonly`/`renew` command is actually run - a mismatch here means nginx looks for a certificate certbot never wrote to that name, not a build-time or start-time error
+- Certificate renewal depends on a cron entry configured directly on the EC2 instance (`docs/deployment.md`), outside version control and outside anything this repository's own tooling can verify is actually installed and firing - a manual setup step with no automated check that it's still correct months later
 
 ---
 
