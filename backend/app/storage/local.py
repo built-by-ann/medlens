@@ -1,7 +1,11 @@
 import json
+import logging
+import time
 from pathlib import Path
 
 from app.storage.base import ObjectNotFoundError, StorageError, StorageService, StoredObject
+
+logger = logging.getLogger(__name__)
 
 
 class LocalStorageService(StorageService):
@@ -30,6 +34,7 @@ class LocalStorageService(StorageService):
 
     def upload(self, key: str, content: bytes, content_type: str) -> None:
         content_path = self._content_path(key)
+        started_at = time.monotonic()
 
         try:
             content_path.parent.mkdir(parents=True, exist_ok=True)
@@ -37,6 +42,16 @@ class LocalStorageService(StorageService):
             self._meta_path(key).write_text(json.dumps({"content_type": content_type}))
         except OSError as error:
             raise StorageError(f"Failed to write local object: {key}") from error
+
+        logger.info(
+            "Local storage upload completed",
+            extra={
+                "event": "storage_upload_completed",
+                "storage_backend": "local",
+                "storage_key": key,
+                "duration_ms": round((time.monotonic() - started_at) * 1000, 1),
+            },
+        )
 
     def download(self, key: str) -> StoredObject:
         content_path = self._content_path(key)

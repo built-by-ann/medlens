@@ -1,3 +1,5 @@
+import logging
+
 from app.models.analysis import Analysis
 from app.models.clinical_document import ClinicalDocument
 
@@ -559,6 +561,97 @@ def _upload_csv(
         files={"file": (filename, content, content_type)},
         headers=_auth_headers(token),
     )
+
+
+# --- Timing (Issue #60) -------------------------------------------------
+
+
+def test_upload_txt_logs_document_uploaded_duration_ms(client, caplog):
+    token = _register_and_login(client, "txttimingupload@example.com")
+    patient = _create_patient(client, token).json()
+
+    caplog.set_level(logging.INFO)
+    response = _upload_txt(client, token, patient["id"])
+
+    assert response.status_code == 201
+    (record,) = [r for r in caplog.records if getattr(r, "event", None) == "document_uploaded"]
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+    assert record.patient_id == patient["id"]
+    assert record.document_id == response.json()["id"]
+
+
+def test_upload_txt_logs_document_text_extracted_duration_ms(client, caplog):
+    token = _register_and_login(client, "txttimingextract@example.com")
+    patient = _create_patient(client, token).json()
+
+    caplog.set_level(logging.INFO)
+    response = _upload_txt(client, token, patient["id"])
+
+    assert response.status_code == 201
+    (record,) = [
+        r for r in caplog.records if getattr(r, "event", None) == "document_text_extracted"
+    ]
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+    assert record.file_type == "txt"
+    assert record.patient_id == patient["id"]
+
+
+def test_upload_pdf_logs_document_uploaded_and_text_extracted_duration_ms(client, caplog):
+    token = _register_and_login(client, "pdftiming@example.com")
+    patient = _create_patient(client, token).json()
+
+    caplog.set_level(logging.INFO)
+    response = _upload_pdf(client, token, patient["id"])
+
+    assert response.status_code == 201
+
+    (uploaded,) = [r for r in caplog.records if getattr(r, "event", None) == "document_uploaded"]
+    assert isinstance(uploaded.duration_ms, float)
+    assert uploaded.duration_ms >= 0
+
+    (extracted,) = [
+        r for r in caplog.records if getattr(r, "event", None) == "document_text_extracted"
+    ]
+    assert isinstance(extracted.duration_ms, float)
+    assert extracted.duration_ms >= 0
+    assert extracted.file_type == "pdf"
+
+    # document_text_extracted (pdf parsing only) is logged strictly before
+    # document_uploaded (storage + persistence, a later, separate span) -
+    # not the same timing event logged twice under two names.
+    assert caplog.records.index(extracted) < caplog.records.index(uploaded)
+
+
+def test_upload_csv_logs_document_uploaded_duration_ms(client, caplog):
+    token = _register_and_login(client, "csvtiming@example.com")
+    patient = _create_patient(client, token).json()
+
+    caplog.set_level(logging.INFO)
+    response = _upload_csv(client, token, patient["id"])
+
+    assert response.status_code == 201
+    (record,) = [r for r in caplog.records if getattr(r, "event", None) == "document_uploaded"]
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+    assert record.document_id == response.json()["id"]
+
+
+def test_upload_csv_logs_document_text_extracted_duration_ms(client, caplog):
+    token = _register_and_login(client, "csvtimingextract@example.com")
+    patient = _create_patient(client, token).json()
+
+    caplog.set_level(logging.INFO)
+    response = _upload_csv(client, token, patient["id"])
+
+    assert response.status_code == 201
+    (record,) = [
+        r for r in caplog.records if getattr(r, "event", None) == "document_text_extracted"
+    ]
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+    assert record.file_type == "csv"
 
 
 def test_upload_csv_succeeds(client):
