@@ -182,18 +182,9 @@ Planned: - OpenBioLLM - MedGemma
 
 ## Testing
 
-- pytest
-- Unit tests
-- Service tests
-- Route tests
-- Integration tests
-- Authentication tests
-- Medication CRUD tests
-- Clinical document CRUD tests
-- Reconciliation engine tests
-- Analysis workflow tests
+Backend: `pytest` against a real, isolated PostgreSQL database (537 tests) - model, service, and route-level tests, plus a deliberate end-to-end integration test. Frontend: Vitest + React Testing Library (around 600 tests) - hooks, components, pages, and the route table. Both run in CI on every push and PR (see Continuous Integration above).
 
-Frontend planned: - Vitest - React Testing Library - Playwright
+**See `docs/testing.md` for the complete picture** - testing philosophy, how the backend and frontend suites are organized, fixtures and test-database isolation, how AI providers and storage backends are mocked, how to run and add tests, and an honest summary of what's extensively vs. minimally tested.
 
 ------------------------------------------------------------------------
 
