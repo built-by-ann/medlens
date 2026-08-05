@@ -12,7 +12,7 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 **[Live demo: medlenshealth.com](http://medlenshealth.com)**
 
-**Status:** Active development (Sprint 4 - production engineering)
+**Status:** Active development (Sprint 4: production engineering)
 
 > MedLens uses synthetic clinical data only. It is an educational software engineering portfolio project: it is not HIPAA compliant, does not provide medical advice, and is not intended for clinical use.
 
@@ -20,33 +20,33 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 ## Screenshots
 
-**Dashboard** - recent patients and the cross-patient Recent Analyses feed.
+**Dashboard:** recent patients and the cross-patient Recent Analyses feed.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
-**Patient overview** - identity details, quick actions, and recent clinical documents for one patient.
+**Patient overview:** identity details, quick actions, and recent clinical documents for one patient.
 
 ![Patient overview](docs/screenshots/patient-overview.png)
 
-**Medication list** - a patient's current medications, searchable, with edit/delete.
+**Medication list:** a patient's current medications, searchable, with edit/delete.
 
 ![Medication list](docs/screenshots/medications.png)
 
-**CSV import** - importing a medication list from a CSV file, alongside the manual add-medication form.
+**CSV import:** importing a medication list from a CSV file, alongside the manual add-medication form.
 
 ![Medication CSV import](docs/screenshots/medications-csv-import.png)
 
-**Create Analysis** - selecting existing documents and uploading new ones into the same analysis.
+**Create Analysis:** selecting existing documents and uploading new ones into the same analysis.
 
 ![Create Analysis](docs/screenshots/create-analysis.png)
 
 ![Create Analysis - uploading additional documents](docs/screenshots/create-analysis-upload.png)
 
-**Reconciliation findings** - discrepancies grouped by severity, each with supporting evidence and resolution actions.
+**Reconciliation findings:** discrepancies grouped by severity, each with supporting evidence and resolution actions.
 
 ![Reconciliation findings](docs/screenshots/analysis-reconciliation.png)
 
-**AI summary** - the extracted, structured medication data behind a completed analysis.
+**AI summary:** the extracted, structured medication data behind a completed analysis.
 
 ![AI summary](docs/screenshots/analysis-ai-summary.png)
 
@@ -68,7 +68,7 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 **AI-powered extraction.** Google Gemini reads each document and extracts structured medication mentions (name, dose, route, frequency, status) plus a narrative summary, validated against a strict schema before anything is persisted.
 
-**Deterministic reconciliation.** A separate, non-AI comparison engine checks the AI-extracted mentions against the patient's own medication list and produces evidence-backed discrepancies - no fuzzy matching, no hallucination risk in the comparison itself.
+**Deterministic reconciliation.** A separate, non-AI comparison engine checks the AI-extracted mentions against the patient's own medication list and produces evidence-backed discrepancies. This ensures no fuzzy matching, no hallucination risk in the comparison itself.
 
 **Discrepancy resolution workflow.** Each finding can be accepted (creating or updating the medication list), dismissed, or left open, with a full audit trail of who resolved it, when, and why.
 
@@ -78,9 +78,9 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 ## Why MedLens?
 
-Medication information is often scattered across a patient's chart - a visit note, a discharge summary, a medication list - and these sources can quietly drift out of sync. MedLens was inspired by research at Vanderbilt University Medical Center on medication documentation inconsistencies within electronic health records: the same problem, explored as a portfolio-scale engineering project rather than a research artifact.
+Medication information is often scattered across a patient's chart (a visit note, a discharge summary, a medication list) and these sources can quietly drift out of sync. MedLens was inspired by research at Vanderbilt University Medical Center on medication documentation inconsistencies within electronic health records: the same problem, explored as a portfolio-scale engineering project rather than a research artifact.
 
-The core idea is a deliberate split of responsibility. AI is good at reading unstructured text and pulling out structured facts, so that's all it's asked to do. Deciding whether two structured facts actually conflict is a comparison problem, not a language problem - handled by explicit, deterministic backend logic that's reproducible and unit-testable, with no risk of an LLM silently merging two different medications or inventing an equivalence that isn't there.
+The core idea is a deliberate split of responsibility. AI is good at reading unstructured text and pulling out structured facts, so that's all it's asked to do in this application. Deciding whether two structured facts actually conflict is a comparison problem, not a language problem, and this is handled by explicit, deterministic backend logic that is reproducible and unit-testable, with no risk of an LLM silently merging two different medications or inventing an equivalence that isn't there.
 
 **How it works, end to end:**
 
@@ -151,15 +151,15 @@ Ruff (lint + format) · ESLint (flat config, typescript-eslint) · Prettier · T
 
 ## Technical Highlights
 
-- **Provider and storage abstraction** - AI providers and file storage backends (local disk / S3) are both selected behind the same interface-plus-factory pattern, so swapping either is a configuration change, not a code change.
-- **Deterministic reconciliation** - the one place a wrong answer would matter most is deliberately not left to a language model; it's explicit, reproducible, unit-tested Python logic.
-- **Structured logging with a field allowlist** - every log record is rendered through a fixed allowlist of field names; a credential or clinical-text field can't reach a log line even if a future call site mistakenly tries to pass one.
+- **Provider and storage abstraction:** AI providers and file storage backends (local disk / S3) are both selected behind the same interface-plus-factory pattern, so swapping either is a configuration change, not a code change.
+- **Deterministic reconciliation:** the one place a wrong answer would matter most is deliberately not left to a language model; it's explicit, reproducible, unit-tested Python logic.
+- **Structured logging with a field allowlist:** every log record is rendered through a fixed allowlist of field names; a credential or clinical-text field can't reach a log line even if a future call site mistakenly tries to pass one.
 - **Timing metrics** on nested request spans (AI call, reconciliation, full request) via `duration_ms`, correlated by request id.
-- **JWT authentication with ownership-based authorization** - no roles, no server-side session store; a resource that exists but isn't yours 404s, never 403s, so the API can't be used to enumerate other users' data.
+- **JWT authentication with ownership-based authorization:** no roles, no server-side session store; a resource that exists but isn't yours 404s, never 403s, so the API can't be used to enumerate other users' data.
 - **Multi-stage, non-root Docker images** with BuildKit cache mounts and GitHub Actions cache for fast, reproducible builds.
-- **HTTPS by default** - a self-signed certificate bootstraps immediately on `docker compose up`, replaced by a real Let's Encrypt certificate via an on-demand Certbot service once DNS is configured.
-- **Private-only S3 integration** - uploaded files are never made public, credentials come from an IAM role in production, and no endpoint ever returns a bucket URL.
-- **Comprehensive, real-dependency testing** - both suites exercise real infrastructure (a real Postgres database, real rendered components) rather than mocking through the layer actually being tested.
+- **HTTPS by default:** a self-signed certificate bootstraps immediately on `docker compose up`, replaced by a real Let's Encrypt certificate via an on-demand Certbot service once DNS is configured.
+- **Private-only S3 integration:** uploaded files are never made public, credentials come from an IAM role in production, and no endpoint ever returns a bucket URL.
+- **Comprehensive, real-dependency testing:** both suites exercise real infrastructure (a real Postgres database, real rendered components) rather than mocking through the layer actually being tested.
 
 ---
 
@@ -251,11 +251,11 @@ See [docs/roadmap.md](docs/roadmap.md) for the full sprint-by-sprint breakdown.
 
 ## Design Principles
 
-- **Modularity** - routers, services, models, and schemas each have one job; a new resource gets its own router, service, and schema rather than being folded into an existing one.
-- **Explicit validation** - every request body is validated by Pydantic before a route handler runs; every AI response is validated against a strict schema before it's trusted.
-- **Deterministic business logic** - medication reconciliation is explicit, testable, non-AI logic, kept that way on purpose.
-- **Provider abstractions** - external dependencies (an AI provider, a storage backend) are reached through an interface, never a concrete implementation, so swapping one is a configuration change.
-- **Testability** - every external dependency is reached through a seam a test can substitute with a fake, with no live network call anywhere in either test suite.
+- **Modularity:** routers, services, models, and schemas each have one job; a new resource gets its own router, service, and schema rather than being folded into an existing one.
+- **Explicit validation:** every request body is validated by Pydantic before a route handler runs; every AI response is validated against a strict schema before it's trusted.
+- **Deterministic business logic:** medication reconciliation is explicit, testable, non-AI logic, kept that way on purpose.
+- **Provider abstractions:** external dependencies (an AI provider, a storage backend) are reached through an interface, never a concrete implementation, so swapping one is a configuration change.
+- **Testability:** every external dependency is reached through a seam a test can substitute with a fake, with no live network call anywhere in either test suite.
 
 ---
 
