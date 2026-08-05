@@ -75,23 +75,9 @@ Deferred to a future iteration, in explicit scope per Issue #57's own instructio
 
 ## Environment Variables
 
-Configuration values will be managed through environment variables.
+Every environment variable `infra/docker-compose.yml` reads is documented in one place: the complete reference table under Docker Image Builds, below. It covers all 18 variables Compose actually substitutes - `VITE_API_BASE_URL`, `DATABASE_URL`, `JWT_SECRET_KEY`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `APP_ENV`, `POSTGRES_PASSWORD`, `FRONTEND_PORT`, `FRONTEND_HTTPS_PORT`, `DOMAIN`, `BACKEND_PORT`, `STORAGE_BACKEND`, `AWS_REGION`, `S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `APP_VERSION`, and `LOG_LEVEL` - each with where it's needed, whether it's required, and its default. Sensitive values are never committed to the repository: real values live only in `infra/.env` (gitignored), never in `docker-compose.yml` itself; only `infra/.env.example` (placeholders) is tracked.
 
-Examples include:
-
-- DATABASE_URL
-- JWT_SECRET_KEY
-- GEMINI_API_KEY
-- AWS_ACCESS_KEY_ID
-- AWS_SECRET_ACCESS_KEY
-- AWS_REGION
-- S3_BUCKET_NAME
-
-Sensitive values will never be committed to the repository.
-
-An `.env.example` file will document required variables.
-
-See Docker Image Builds below for `VITE_API_BASE_URL`, `DATABASE_URL`, `JWT_SECRET_KEY`, and `GEMINI_API_KEY` as they apply specifically to building and running the Docker images - including the one variable that's a *build* argument rather than a runtime one. `CORS_ALLOWED_ORIGINS` no longer exists (Issue #190) - see the Reverse Proxy section below for why.
+`CORS_ALLOWED_ORIGINS` no longer exists (Issue #190) - see the Reverse Proxy section below for why. See Docker Image Builds below for the full table, including the one variable that's a Docker *build* argument rather than a container-runtime one.
 
 ---
 
@@ -412,7 +398,7 @@ docker compose down -v             # also remove the postgres volume - genuinely
 - **API calls in the browser go to the wrong place, e.g. a `:8000` origin instead of the app's own.** `VITE_API_BASE_URL` was overridden to something other than its default (`/api`) when the frontend image was built - there's normally no reason to set it at all anymore (see Environment Variables above). Fix `infra/.env` (remove the override, or set it back to `/api`) and **rebuild** (`docker compose build frontend`) - restarting the container alone does nothing, since this value is baked into the JS bundle at build time.
 - **`docker: permission denied` on every command.** The `usermod -aG docker` group change from Step 3 needs a fresh login to take effect - log out and back in (or run `newgrp docker` in the current shell as a one-session workaround).
 - **Registering a user (or any database write) fails with a 500.** Almost certainly a missed migration - check `docker compose logs backend` for `alembic` output near the top of the log; a real error there (not just the normal "Running upgrade..." lines) means the schema didn't apply. This should be automatic on every backend start (see Production Configuration below), so a persistent failure here is worth investigating directly rather than working around.
-- **Creating an analysis always fails with a 503, "Gemini request failed: ClientError."** Check `docker compose logs backend` for the accompanying `detail=` field (see `docs/ai.md`'s Logging section) - `"models/<name> is not found"` means Google has retired the configured model server-side, exactly what happened to `gemini-2.0-flash` in production. Fix: set `GEMINI_MODEL` in `infra/.env` to a current model name and restart the backend (`docker compose up -d backend`) - no rebuild needed, this is a runtime variable (see Environment Variables above).
+- **Creating an analysis always fails with a 503, "Gemini request failed: ClientError."** Check `docker compose logs backend` for the accompanying `detail=` field (see the Logging paragraph in `docs/ai.md`'s Error Handling section) - `"models/<name> is not found"` means Google has retired the configured model server-side, exactly what happened to `gemini-2.0-flash` in production. Fix: set `GEMINI_MODEL` in `infra/.env` to a current model name and restart the backend (`docker compose up -d backend`) - no rebuild needed, this is a runtime variable (see Environment Variables above).
 
 ### Production Configuration Changes (Issue #57)
 
@@ -599,7 +585,7 @@ AWS_SECRET_ACCESS_KEY=<your own AWS secret key>
 
 ## Structured Application Logging (Issue #59)
 
-See `docs/architecture.md`'s "Structured Logging" section for how this is implemented; this section covers what's relevant when actually running or operating the application.
+See `docs/architecture.md`'s "Logging" section for how this is implemented; this section covers what's relevant when actually running or operating the application.
 
 ### Environment variables
 
@@ -634,7 +620,7 @@ The `backend` container's `CMD` runs `uvicorn ... --no-access-log` (`backend/Doc
 
 ### Never logged
 
-Passwords, JWTs, `Authorization` headers, AWS credentials, Gemini prompts, and clinical document/file content are never logged anywhere in the codebase - not filtered out after the fact, simply never passed to a `logger` call in the first place. As defense in depth, every log record is additionally rendered through a fixed field allowlist (`ALLOWED_FIELDS`, `app/core/logging_config.py`) - a field outside that list is silently dropped even if some future call site passed it via `extra=`. See `docs/design-decisions.md`'s Decision 22 and `docs/architecture.md`'s Structured Logging section for the full reasoning, and `backend/tests/test_logging_config.py`/`test_request_logging_middleware.py` for the tests verifying it.
+Passwords, JWTs, `Authorization` headers, AWS credentials, Gemini prompts, and clinical document/file content are never logged anywhere in the codebase - not filtered out after the fact, simply never passed to a `logger` call in the first place. As defense in depth, every log record is additionally rendered through a fixed field allowlist (`ALLOWED_FIELDS`, `app/core/logging_config.py`) - a field outside that list is silently dropped even if some future call site passed it via `extra=`. See `docs/design-decisions.md`'s Decision 22 and `docs/architecture.md`'s Logging section for the full reasoning, and `backend/tests/test_logging_config.py`/`test_request_logging_middleware.py` for the tests verifying it.
 
 ### Viewing logs
 
