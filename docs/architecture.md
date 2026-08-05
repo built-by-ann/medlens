@@ -130,7 +130,7 @@ Implemented as a deterministic backend service, not an AI component. Given a pat
 
 AI is responsible only for producing the medication data the reconciliation engine reads. The comparison logic itself never calls an AI provider, so its output is reproducible and directly testable (Decision 12, `docs/design-decisions.md`) - see `docs/ai.md`'s Reconciliation Pipeline section for the full AI-decision-vs-deterministic-logic breakdown.
 
-As of Issue #148, this engine is invoked automatically as part of analysis creation - see "Clinical Document Analysis" under Request Flow, below. `run_medication_reconciliation` (`app/services/medication_reconciliation_service.py`) remains a second, independent entry point into the same engine: given a patient and a set of clinical document ids, it creates its own Analysis, queries `MedicationMention` rows already persisted against those documents (rather than bridging AI-extracted ones), and completes or fails that Analysis on its own. As of this audit, no API route calls it - the shared logic it always used (`build_discrepancy_findings`, `create_medication_discrepancies`, severity counting) was extracted into a `reconcile_medications` helper so the AI-summary flow could reuse the exact same engine rather than duplicating it.
+This engine is invoked automatically as part of analysis creation - see "Clinical Document Analysis" under Request Flow, below. `run_medication_reconciliation` (`app/services/medication_reconciliation_service.py`) remains a second, independent entry point into the same engine: given a patient and a set of clinical document ids, it creates its own Analysis, queries `MedicationMention` rows already persisted against those documents (rather than bridging AI-extracted ones), and completes or fails that Analysis on its own. Today, no API route calls it directly - the shared logic it always used (`build_discrepancy_findings`, `create_medication_discrepancies`, severity counting) was extracted into a `reconcile_medications` helper so the AI-summary flow could reuse the exact same engine rather than duplicating it.
 
 **Resolution is a distinct, separate step from detection.** This engine only ever *detects* discrepancies; a provider actually reviewing, accepting, or dismissing one is additive functionality layered on the same `MedicationDiscrepancy` rows (`app/services/medication_discrepancy_service.py`), not a second pipeline - the engine itself has no notion of "resolved" and never re-runs to reflect one. Resolution is one-way (`open` → `resolved`/`dismissed`, never back) and always a deliberate human action through a dedicated endpoint, never automatic. See `docs/api.md`'s discrepancy-resolution endpoint documentation for the full request/response contract and the action-validity rules.
 
@@ -146,9 +146,9 @@ A single PostgreSQL database, accessed through SQLAlchemy's ORM. `app/db/session
 
 Schema changes are managed as versioned Alembic migrations under `backend/alembic/versions/`. Migrations are **not** a separate, manually-run deployment step: `backend/Dockerfile`'s container start command runs `alembic upgrade head` before starting `uvicorn`, on every container start (Decision 19, `docs/design-decisions.md`) - a fresh database gets its schema automatically on first boot, and re-running against an already-current schema is a documented no-op. `backend/alembic/env.py` reads `DATABASE_URL` from the environment when present, so this resolves correctly whether running inside the container (Postgres reachable by its Compose service name) or directly on a developer's host (`localhost`). See `docs/deployment.md` for the operational detail (what a failed migration looks like, rollback procedure).
 
-### Storage Abstraction (Issue #58)
+### Storage Abstraction
 
-Before this issue, no uploaded file's original bytes were ever persisted anywhere - `upload-txt`/`upload-pdf`/`upload-csv` read a file into memory, extracted its text into `raw_text`, and discarded the bytes (see `docs/data-model.md`'s Design Decisions for the full "additive, not a migration" framing). This section describes the file-persistence capability added on top of that unchanged pipeline.
+File persistence is a capability layered on top of an unchanged extraction pipeline: `upload-txt`/`upload-pdf`/`upload-csv` still read a file into memory and extract its text into `raw_text` exactly as before; the original bytes are additionally uploaded to a configured storage backend rather than discarded. See `docs/data-model.md`'s Design Decisions for the full "additive, not a migration" framing.
 
 `StorageService` (`app/storage/base.py`) is an abstract interface with three methods - `upload(key, content, content_type)`, `download(key) -> StoredObject`, `delete(key)` - and two exceptions, `StorageError` (the operation failed) and `ObjectNotFoundError` (a `StorageError` subtype specifically for "no object at this key"). It is deliberately the same shape as `AIProvider` (`app/ai/providers/base.py`, see Decision 15 in `docs/design-decisions.md`): business logic depends only on the interface, never on a concrete backend, so which backend is active is a matter of configuration, not conditionals scattered through upload/download/delete code (Decision 21).
 
@@ -201,7 +201,7 @@ See `docs/api.md` for the complete endpoint reference this architecture serves.
 
 ## Logging
 
-Before Issue #59, the backend had no central logging configuration at all - four scattered `logging.getLogger(__name__)` loggers (AI service, Gemini provider, clinical document routes/service) ran on Python's unconfigured default root logger, no HTTP request was ever logged, and there was no way to correlate log lines from the same request. This was replaced with one centrally-configured structured logging system, without changing any of the standard-library `logging.getLogger(__name__)` calls elsewhere in the codebase (Decision 22, `docs/design-decisions.md`).
+The backend uses one centrally-configured structured logging system, without needing to change any of the standard-library `logging.getLogger(__name__)` calls scattered throughout the codebase (Decision 22, `docs/design-decisions.md`).
 
 **`app/core/logging_config.py`** is the single place that ever touches handler/formatter setup - `configure_logging(app_env, log_level)` is called once, at import time in `app/main.py`, before anything else runs. It installs one `StreamHandler` on the *root* logger (so every `logging.getLogger(__name__)` call anywhere in the process - application code and any third-party library alike - shares the same handler and format), and selects between two formatters based on `Settings.app_env`:
 
@@ -359,7 +359,7 @@ app/api/routes/   ──depends on──►   app/services/   ──depends on�
 
 ## Data Model
 
-Every clinical resource is owned through `Patient`, not directly by `User` - see `docs/data-model.md` for the full entity reference and the Sprint 3.5 migration that got the schema here.
+Every clinical resource is owned through `Patient`, not directly by `User` - see `docs/data-model.md` for the full entity reference and the ownership migration that got the schema here.
 
 ```text
 User
@@ -418,7 +418,7 @@ The application includes:
 - Environment variables for every secret (`JWT_SECRET_KEY`, `GEMINI_API_KEY`, database credentials, AWS credentials) - never hardcoded, never committed.
 - Input validation via Pydantic on every request body, and strict (`extra="forbid"`) schema validation on every AI response before it's trusted (`docs/ai.md`).
 - Structured logging with a field allowlist (Logging, above) - credentials, tokens, prompts, and clinical document content are never logged.
-- Private-only file storage (Issue #58) - uploaded documents are never made public; every object is uploaded with an explicit private ACL, the API only ever streams file bytes through the backend itself (never a bucket URL), and production credentials are expected to come from an IAM role rather than long-lived access keys - see the Storage Abstraction section above and `docs/deployment.md`.
+- Private-only file storage - uploaded documents are never made public; every object is uploaded with an explicit private ACL, the API only ever streams file bytes through the backend itself (never a bucket URL), and production credentials are expected to come from an IAM role rather than long-lived access keys - see the Storage Abstraction section above and `docs/deployment.md`.
 - Non-root Docker containers (Decision 18, `docs/design-decisions.md`) - the backend runs as a dedicated non-root user; neither image bundles build tooling, dev dependencies, or `.env` files (`.dockerignore`).
 
 Only synthetic clinical data is used throughout the application.
