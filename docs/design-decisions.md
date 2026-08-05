@@ -68,6 +68,19 @@ Use React with TypeScript for the frontend.
 
 TypeScript improves maintainability by catching errors at compile time and providing stronger editor support. React offers a component-based architecture suitable for scalable frontend development.
 
+**Trade-offs**
+
+Pros
+
+- Compile-time type checking catches a whole class of bugs (wrong prop shape, a typo'd field name) before they reach the browser
+- Large ecosystem and community support for both React and TypeScript
+- Component-based architecture matches this application's page/shared-component structure (see `docs/frontend.md`'s Folder Structure)
+
+Cons
+
+- A build step (TypeScript compilation, bundling) is required even in development
+- More upfront ceremony (type annotations, interfaces) than an equivalent plain-JavaScript app
+
 ---
 
 # Decision 4: Docker for Development
@@ -87,6 +100,18 @@ Benefits include:
 - Simplified deployment
 - Isolated dependencies
 
+**Trade-offs**
+
+Pros
+
+- The same `infra/docker-compose.yml` runs local development and production (see Decisions 19, 24, 25), so there is no separate "how production actually runs" to keep in sync by hand
+- New contributors run one command (`docker compose up --build`) instead of installing Python, Node, and PostgreSQL themselves at matching versions
+
+Cons
+
+- Requires Docker itself as a prerequisite, and a rebuild (not just a restart) after certain changes (e.g. a new Python/Node dependency)
+- An extra layer of indirection when debugging - a problem inside a container is not always as immediately visible as one running directly on the host
+
 ---
 
 # Decision 5: Structured AI Responses
@@ -99,18 +124,19 @@ Require the AI model to return structured JSON rather than free-form text.
 
 Structured responses can be validated, tested, and safely integrated into downstream application logic.
 
-Instead of:
+Instead of a long free-form paragraph, the model is asked to return a single JSON object with a fixed set of fields - as actually implemented (`app/ai/schemas.py`'s `ClinicalSummary`): a list of extracted `medications`, a list of `possible_inconsistencies`, and a short `summary`. This improves reliability and reduces parsing errors. See Decision 16 for how that shape is enforced once the response comes back, and `docs/ai.md`'s Structured Output section for the full implementation.
 
-- Long paragraphs
+**Trade-offs**
 
-Return:
+Pros
 
-- Summary
-- Conditions
-- Medications
-- Follow-up actions
+- A fixed, known shape can be validated automatically (Decision 16) rather than requiring a human to read prose and judge whether it "looks right"
+- Downstream code (persistence, reconciliation) can consume specific fields directly instead of parsing them back out of natural language
 
-This improves reliability and reduces parsing errors.
+Cons
+
+- Constrains what the model can express - a genuinely useful observation that doesn't fit one of the defined fields has nowhere to go
+- The JSON shape and the prompt's own description of it must be kept in sync by hand (see Decision 16's Cons)
 
 ---
 
@@ -122,7 +148,19 @@ Treat AI responses as untrusted input.
 
 **Reasoning**
 
-Large language models can return malformed or unexpected responses. Every AI response should be validated before being stored or displayed.
+Large language models can return malformed or unexpected responses. Every AI response should be validated before being stored or displayed. This is the general principle; see Decision 16 for how it was concretely implemented (`extra="forbid"` schemas, a single `AIProviderError` funnel) once the AI response shape was finalized.
+
+**Trade-offs**
+
+Pros
+
+- A validation failure is caught immediately, in one place, rather than surfacing later as a confusing downstream error (a `None` where a string was expected, a missing dict key)
+- Applies uniformly regardless of which AI provider is active, since validation happens after the provider returns, not inside it
+
+Cons
+
+- Adds a validation step (and a failure mode) to every AI request that a naive "trust the response" implementation wouldn't have
+- A model output that's substantively fine but doesn't match the exact expected shape is rejected the same as a genuinely broken response (see Decision 16's own Cons)
 
 ---
 
@@ -149,6 +187,20 @@ Benefits:
 - Better organization
 - Improved maintainability
 
+See `docs/architecture.md`'s Backend Architecture section for how this split is organized today (routers, services, models, schemas, and the dependency-injection pattern that connects them), and Decision 17 for the one deliberate exception to "routes stay thin."
+
+**Trade-offs**
+
+Pros
+
+- A service function is testable by calling it directly, with no HTTP layer or running server involved (`docs/testing.md`)
+- A route can be understood by reading roughly a dozen lines (validate → call service → return), without also holding the business logic itself
+
+Cons
+
+- Indirection: understanding what a route actually does often means following the call into its service function rather than reading it in place
+- Requires discipline to keep logic out of routes as the codebase grows - nothing mechanically prevents a route from reaching into the database directly
+
 ---
 
 # Decision 8: Synthetic Data Only
@@ -161,11 +213,18 @@ Use only synthetic clinical notes and medication lists.
 
 The project is intended as a portfolio application and should not process real patient information.
 
-Benefits:
+**Trade-offs**
+
+Pros
 
 - No HIPAA concerns
 - Easier sharing and deployment
 - Safe public demonstrations
+
+Cons
+
+- Synthetic data can't fully represent the messiness of real clinical documentation (inconsistent formatting, ambiguous abbreviations, genuinely contradictory real-world records), so the reconciliation engine and prompt have only ever been exercised against data written to be plausible, not against data that actually is what it's simulating
+- The application is not, and cannot become, HIPAA-compliant simply by adding features later - this is a permanent scope boundary, not a temporary one
 
 ---
 
@@ -178,6 +237,18 @@ Manage development using GitHub Issues, Milestones, Project Boards, feature bran
 **Reasoning**
 
 The goal is to simulate a professional software engineering workflow rather than simply producing working code.
+
+**Trade-offs**
+
+Pros
+
+- Every feature has a traceable issue number, referenced throughout the codebase's own comments and this document - useful for understanding *why* something is the way it is, not just what it is
+- Feature branches and pull requests keep `main` always in a working state
+
+Cons
+
+- More process overhead than committing directly to a single branch, for a project with one contributor
+- Issue numbers accumulate as a permanent part of the codebase's own comments (e.g. "Issue #148"), which only stay meaningful as long as this document and the issue history behind them remain available
 
 ---
 
@@ -242,6 +313,8 @@ Implement medication reconciliation as explicit, deterministic backend logic. Me
 **Reasoning**
 
 AI is responsible for producing MedicationMention records from clinical text. Deciding whether two already-structured records conflict is a comparison problem, not an extraction problem, and does not need a language model. A deterministic implementation is reproducible, directly unit testable, and does not risk inventing brand or generic equivalence, correcting misspellings, or merging medications on partial string similarity, all of which could silently hide a real documentation inconsistency instead of surfacing it.
+
+See `docs/ai.md`'s AI Philosophy and Reconciliation Pipeline sections for the full AI-decision-vs-deterministic-logic boundary this decision establishes, and `docs/architecture.md`'s Reconciliation Engine section for how it fits into the wider request flow.
 
 **Trade-offs**
 
@@ -317,6 +390,8 @@ Define an abstract `AIProvider` interface with a single method, `generate_summar
 
 The project intends to evaluate multiple providers, including OpenAI, MedGemma, and OpenBioLLM. If business logic called a specific SDK directly, adding or swapping a provider would mean changing the service layer itself. Behind a single interface, a new provider is a new class that implements one method and translates its own SDK's exceptions into `AIProviderError`. Nothing else in the application needs to change, and nothing else needs to know which SDK is in use.
 
+See `docs/ai.md`'s Provider Abstraction and Extending the AI Layer sections for the full implementation reference and the exact steps to add a new provider.
+
 **Trade-offs**
 
 Pros
@@ -361,7 +436,7 @@ Cons
 
 **Decision**
 
-`POST /ai/summarize` orchestrates the full flow: create the Analysis, mark it processing, call `AISummaryService` for a validated result, then call a separate persistence function, `persist_analysis_result`, to store it. `AISummaryService` gained no database access to do this. Persistence lives in its own module, `analysis_result_service.py`, which knows about the validated `ClinicalSummary` shape and the database models, but nothing about Gemini or any provider.
+`POST /patients/{patient_id}/analyses` orchestrates the full flow: create the Analysis, mark it processing, call `AISummaryService` for a validated result, then call a separate persistence function, `persist_analysis_result`, to store it. `AISummaryService` gained no database access to do this. Persistence lives in its own module, `analysis_result_service.py`, which knows about the validated `ClinicalSummary` shape and the database models, but nothing about Gemini or any provider.
 
 **Reasoning**
 
@@ -463,7 +538,7 @@ Pros
 
 Cons
 
-- `detail` is one more thing to trust `APIError.message` to never contain - a hard boundary to prove permanently at the library level, only reasoned about here (Google's SDK sends the API key via header, never in a URL or an exception message, and a validation/safety-block error surfaces through an empty response, not this exception path - see `docs/ai.md`'s Logging section) rather than mechanically enforced
+- `detail` is one more thing to trust `APIError.message` to never contain - a hard boundary to prove permanently at the library level, only reasoned about here (Google's SDK sends the API key via header, never in a URL or an exception message, and a validation/safety-block error surfaces through an empty response, not this exception path - see the Logging paragraph in `docs/ai.md`'s Error Handling section) rather than mechanically enforced
 - `str(error)` for a non-`APIError` exception is unstructured and could, for some unanticipated exception type, be more verbose than intended - accepted as a reasonable trade-off for visibility into failure modes this code can't fully enumerate in advance
 
 ---
@@ -479,6 +554,8 @@ Introduce `StorageService`, an abstract interface (`upload`/`download`/`delete`)
 This application already had exactly this problem once, for AI providers (Decision 15): business logic needing an external capability whose concrete implementation should be swappable without touching that logic. `AIProvider` solved it with a minimal interface, a factory function, and dependency injection - `StorageService` reuses the identical shape rather than inventing a new pattern for a structurally identical problem. The alternative - `if settings.storage_backend == "s3": ... else: ...` conditionals wherever a file is read or written - would scatter the same branch across every call site and make adding a third backend (or testing against a fake one) require finding and updating every one of them individually.
 
 Before this feature, no file storage of any kind existed in the application - uploaded files were read into memory, text-extracted, and discarded (see `docs/data-model.md`'s Design Decisions). This is worth being explicit about because the interface was designed for the problem this application actually has (an original file plus its already-separately-stored extracted text) rather than adapted from a different one; `StorageService` has no method for anything analysis-related, since AI analysis was never going to read through it - it continues reading `raw_text` from Postgres exactly as before.
+
+See `docs/architecture.md`'s Persistence section for how this fits alongside PostgreSQL/SQLAlchemy/Alembic in the wider persistence layer.
 
 **Trade-offs**
 
@@ -508,6 +585,8 @@ The alternative to centralizing configuration - each module calling `logging.bas
 The allowlist is the more consequential decision. This application handles synthetic clinical data, but the logging code that handles it doesn't get to assume every future call site will remember that credentials, tokens, prompts, and document text must never be logged - a project convention enforced only by developer discipline doesn't survive a rushed debugging session where someone adds `extra={"raw_response": response}` to see what a failure looked like. Making the field list an allowlist, not a denylist, means that mistake fails safe: the added field simply never appears in the rendered output until someone deliberately adds it to `ALLOWED_FIELDS`, a small, visible, single-file change that's easy to catch in review. A denylist (block known-bad field names) would have the opposite failure mode - safe only until someone invents a new sensitive field name the denylist doesn't yet know about.
 
 `user_id` specifically could not be carried the same way as `request_id`/`method`/`path`/`client_ip` (all via a `contextvars.ContextVar`, set once by the request-logging middleware and read by every log call during that request). Every dependency and route handler in this codebase is a synchronous `def`, and Starlette runs each one via `run_in_threadpool`, which executes it inside its own *copy* of the current context - a `ContextVar.set()` made inside `get_current_user` (itself a sync dependency) is invisible to sibling dependencies or to the middleware's own code, even within the same request, even on the same thread (verified empirically: a minimal diagnostic FastAPI app with three sync dependencies sharing one OS thread still couldn't see one dependency's `ContextVar.set()` from another). `request.state` - a plain mutable attribute on the one `Request` object every dependency and the middleware share - is not subject to that per-call context-copy isolation, so `user_id` rides `request.state` instead, read back by the middleware after `call_next()` returns.
+
+See `docs/architecture.md`'s Logging section for how this fits into the backend architecture as a whole.
 
 **Trade-offs**
 
@@ -618,13 +697,73 @@ Cons
 
 ---
 
+# Decision 26: JWT Bearer Authentication with Ownership-Based Authorization, No Roles
+
+**Decision**
+
+Authenticate every protected request with a stateless JWT bearer token (`Authorization: Bearer <token>`), issued at login and containing only the authenticated user's id (`sub` claim) - no role, permission, or other claim. There is no server-side session store of any kind. Authorization throughout the API is ownership-based, not role-based: a resource is accessible only if it belongs to the authenticated user, directly (`Patient.user_id`) or transitively (`patient_id`), enforced through shared dependencies (`get_current_user`, `get_owned_patient`) rather than a per-route role check. A resource that exists but belongs to a different user returns `404`, the same response used for a resource that doesn't exist at all - never `403`.
+
+**Reasoning**
+
+Every user of this application is symmetric: a single "provider" role managing their own patients, with no admin, staff, or reviewer distinction anywhere in the domain. A role/permission system would model a distinction the application doesn't actually have, so authorization reduces entirely to one question - does this resource belong to this caller - answered the same way everywhere rather than through a general-purpose permission system built for a shape of problem this application doesn't have.
+
+A stateless JWT was chosen over a server-side session (a session id in a cookie, looked up against a session store on every request) because it needs no additional infrastructure - no session table, no Redis, no sticky-session concern for a future multi-instance deployment - and a request is authenticated by decoding and verifying a signature, not by a database round-trip. The `404`-not-`403` choice is deliberate, not an oversight: returning `403` for "exists, but not yours" would let an authenticated caller enumerate other users' resource ids by observing which ones 403 instead of 404; returning the same `404` either way means this API never confirms or denies another user's data exists at all.
+
+See `docs/architecture.md`'s Authentication section for the full implementation reference (token handling, the dependency chain, the ownership model), and `docs/api.md`'s Authentication and Authentication Flow sections for the HTTP-level contract.
+
+**Trade-offs**
+
+Pros
+
+- No session-store infrastructure to run, back up, or scale - a request is authenticated by cryptographic verification alone
+- The `404`-not-`403` ownership pattern is enforced in exactly one or two shared dependencies, not re-implemented per route, so it can't be forgotten on a new endpoint
+- Stateless tokens work identically whether the backend is one process or, in principle, several - no shared session state to coordinate
+
+Cons
+
+- No server-side revocation: a leaked or stolen token remains valid until it naturally expires (30 minutes by default) - there is no way to invalidate a specific token early, unlike a session store a compromised session could simply be deleted from
+- The ownership model has no path to a future "shared patient" or "care team" feature without a real redesign - today, a resource has exactly one owning user, full stop
+- A role system, if the application ever needs one (e.g. a future admin or read-only reviewer account type), doesn't extend this design incrementally - it would be a genuinely new authorization axis alongside ownership, not an extension of it
+
+---
+
+# Decision 27: Real, Isolated PostgreSQL Test Database Instead of Mocking or SQLite
+
+**Decision**
+
+The backend test suite runs every test against a real, isolated PostgreSQL database (`medlens_test_db`, created automatically if it doesn't already exist), never a mock of the database layer and never a different, lighter-weight database engine such as SQLite. `DATABASE_URL` is rewritten to point at this database in `conftest.py`, before `app` is ever imported - so the entire application under test, not only the test fixtures themselves, transparently uses it. The schema is built via `Base.metadata.create_all`, not by running the real Alembic migrations against it.
+
+**Reasoning**
+
+Several real constraints in this schema are enforced at the database level, not in application code, and only actually fire against a real PostgreSQL engine - most directly, Decision 10's `ON DELETE SET NULL` behavior on `MedicationDiscrepancy`'s foreign keys. SQLite doesn't enforce foreign key constraints by default at all, and even with them enabled, its behavior is its own separate implementation, not a guarantee of matching Postgres's - a test suite running against SQLite could pass while the actual, production database-level behavior it's meant to verify was silently broken or never even exercised. Mocking the database layer entirely would be worse in the same direction: a test asserting a mocked query function was called with certain arguments never actually proves a query behaves correctly, only that application code attempted to run one.
+
+Using the exact same engine as production also avoids maintaining a second, SQLite-compatible schema-generation path alongside the real one, and means a passing test suite is evidence about the persistence layer that will actually run in production, not about a structurally similar but distinct one.
+
+See `docs/testing.md` for the full fixture/isolation implementation (session-scoped schema creation, per-test cleanup) and its explicit note that this same choice means there are no automated migration tests - schema is built directly from the models, not by running Alembic, so nothing here verifies a migration file itself is correct.
+
+**Trade-offs**
+
+Pros
+
+- Catches real database-level bugs (constraint violations, cascade and `SET NULL` behavior, foreign key errors) that a mock or a different engine could hide entirely
+- A passing test suite is direct evidence the persistence layer works against the actual database engine used in production, not a structurally different stand-in
+- No second, SQLite-specific schema or query-compatibility path to maintain alongside the real PostgreSQL one
+
+Cons
+
+- Requires a running PostgreSQL instance to run the test suite at all - a real environment dependency for every developer machine and CI runner, rather than a dependency-free, install-and-go suite
+- Slower than an in-memory database would be, though not prohibitively so for this project's current size (`docs/testing.md`)
+- Building the schema via `Base.metadata.create_all` rather than running real migrations means the test suite verifies the *models* are correct but never verifies that an actual Alembic migration file produces the same schema - a gap `docs/testing.md` states explicitly rather than leaving implicit
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:
 
 - Background job processing
 - Caching
-- AWS architecture
-- Deployment strategy
 - Monitoring
 - Performance optimization
+
+AWS deployment architecture and deployment strategy were originally listed here as future topics; both are now implemented and documented as Decisions 19, 24, and 25.
