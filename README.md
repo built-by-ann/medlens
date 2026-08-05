@@ -10,6 +10,8 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-React-3178c6.svg)
 
+**[Live demo: medlenshealth.com](http://medlenshealth.com)**
+
 **Status:** Active development (Sprint 4 - production engineering)
 
 > MedLens uses synthetic clinical data only. It is an educational software engineering portfolio project: it is not HIPAA compliant, does not provide medical advice, and is not intended for clinical use.
@@ -18,51 +20,49 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 ## Screenshots
 
-<!-- SCREENSHOT:
-Main dashboard after login.
-Shows patient list, quick actions, and the cross-patient Recent Analyses feed.
-Suggested size: full-width landscape.
--->
+**Dashboard** - recent patients and the cross-patient Recent Analyses feed.
 
-<!-- SCREENSHOT:
-Patient overview page with medications, clinical documents, and analyses.
-Suggested size: full-width landscape.
--->
+![Dashboard](docs/screenshots/dashboard.png)
 
-<!-- SCREENSHOT:
-Medication management page showing active medications and CSV import.
-Suggested size: full-width landscape.
--->
+**Patient overview** - identity details, quick actions, and recent clinical documents for one patient.
 
-<!-- SCREENSHOT:
-Upload TXT/PDF/CSV workflow (Create Analysis page, existing + new documents).
-Suggested size: full-width landscape.
--->
+![Patient overview](docs/screenshots/patient-overview.png)
 
-<!-- SCREENSHOT:
-Medication reconciliation results with discrepancies grouped by severity and evidence.
-Suggested size: full-width landscape.
--->
+**Medication list** - a patient's current medications, searchable, with edit/delete.
 
-<!-- SCREENSHOT:
-Detailed discrepancy card with supporting evidence and resolution actions.
-Suggested size: medium, portrait or square.
--->
+![Medication list](docs/screenshots/medications.png)
 
-<!-- SCREENSHOT:
-Login page.
-Suggested size: medium, portrait.
--->
+**CSV import** - importing a medication list from a CSV file, alongside the manual add-medication form.
 
-<!-- SCREENSHOT OR DIAGRAM:
-High-level architecture diagram (see Architecture Overview below for an ASCII version).
-Suggested size: full-width landscape.
--->
+![Medication CSV import](docs/screenshots/medications-csv-import.png)
 
-<!-- SCREENSHOT:
-Responsive mobile layout of the dashboard or patient overview.
-Suggested size: narrow, portrait.
--->
+**Create Analysis** - selecting existing documents and uploading new ones into the same analysis.
+
+![Create Analysis](docs/screenshots/create-analysis.png)
+
+![Create Analysis - uploading additional documents](docs/screenshots/create-analysis-upload.png)
+
+**Reconciliation findings** - discrepancies grouped by severity, each with supporting evidence and resolution actions.
+
+![Reconciliation findings](docs/screenshots/analysis-reconciliation.png)
+
+**AI summary** - the extracted, structured medication data behind a completed analysis.
+
+![AI summary](docs/screenshots/analysis-ai-summary.png)
+
+**Login**
+
+<img src="docs/screenshots/login.png" width="320" alt="Login page">
+
+**Responsive mobile layout**
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/mobile-1.png" width="260" alt="Mobile layout 1"></td>
+    <td><img src="docs/screenshots/mobile-2.png" width="260" alt="Mobile layout 2"></td>
+    <td><img src="docs/screenshots/mobile-3.png" width="260" alt="Mobile layout 3"></td>
+  </tr>
+</table>
 
 ---
 
@@ -232,7 +232,9 @@ For production deployment (AWS EC2, HTTPS/TLS, S3, monitoring) see [docs/deploym
 
 ## Demo
 
-<!-- TODO: Add a link to a hosted demo or a short walkthrough video once one is available. -->
+MedLens is live at [medlenshealth.com](http://medlenshealth.com) (also linked at the top of this README).
+
+<!-- TODO: Add a short walkthrough video once one is available. -->
 
 ---
 
