@@ -68,6 +68,19 @@ Use React with TypeScript for the frontend.
 
 TypeScript improves maintainability by catching errors at compile time and providing stronger editor support. React offers a component-based architecture suitable for scalable frontend development.
 
+**Trade-offs**
+
+Pros
+
+- Compile-time type checking catches a whole class of bugs (wrong prop shape, a typo'd field name) before they reach the browser
+- Large ecosystem and community support for both React and TypeScript
+- Component-based architecture matches this application's page/shared-component structure (see `docs/frontend.md`'s Folder Structure)
+
+Cons
+
+- A build step (TypeScript compilation, bundling) is required even in development
+- More upfront ceremony (type annotations, interfaces) than an equivalent plain-JavaScript app
+
 ---
 
 # Decision 4: Docker for Development
@@ -87,6 +100,18 @@ Benefits include:
 - Simplified deployment
 - Isolated dependencies
 
+**Trade-offs**
+
+Pros
+
+- The same `infra/docker-compose.yml` runs local development and production (see Decisions 19, 24, 25), so there is no separate "how production actually runs" to keep in sync by hand
+- New contributors run one command (`docker compose up --build`) instead of installing Python, Node, and PostgreSQL themselves at matching versions
+
+Cons
+
+- Requires Docker itself as a prerequisite, and a rebuild (not just a restart) after certain changes (e.g. a new Python/Node dependency)
+- An extra layer of indirection when debugging - a problem inside a container is not always as immediately visible as one running directly on the host
+
 ---
 
 # Decision 5: Structured AI Responses
@@ -99,18 +124,19 @@ Require the AI model to return structured JSON rather than free-form text.
 
 Structured responses can be validated, tested, and safely integrated into downstream application logic.
 
-Instead of:
+Instead of a long free-form paragraph, the model is asked to return a single JSON object with a fixed set of fields - as actually implemented (`app/ai/schemas.py`'s `ClinicalSummary`): a list of extracted `medications`, a list of `possible_inconsistencies`, and a short `summary`. This improves reliability and reduces parsing errors. See Decision 16 for how that shape is enforced once the response comes back, and `docs/ai.md`'s Structured Output section for the full implementation.
 
-- Long paragraphs
+**Trade-offs**
 
-Return:
+Pros
 
-- Summary
-- Conditions
-- Medications
-- Follow-up actions
+- A fixed, known shape can be validated automatically (Decision 16) rather than requiring a human to read prose and judge whether it "looks right"
+- Downstream code (persistence, reconciliation) can consume specific fields directly instead of parsing them back out of natural language
 
-This improves reliability and reduces parsing errors.
+Cons
+
+- Constrains what the model can express - a genuinely useful observation that doesn't fit one of the defined fields has nowhere to go
+- The JSON shape and the prompt's own description of it must be kept in sync by hand (see Decision 16's Cons)
 
 ---
 
@@ -122,7 +148,19 @@ Treat AI responses as untrusted input.
 
 **Reasoning**
 
-Large language models can return malformed or unexpected responses. Every AI response should be validated before being stored or displayed.
+Large language models can return malformed or unexpected responses. Every AI response should be validated before being stored or displayed. This is the general principle; see Decision 16 for how it was concretely implemented (`extra="forbid"` schemas, a single `AIProviderError` funnel) once the AI response shape was finalized.
+
+**Trade-offs**
+
+Pros
+
+- A validation failure is caught immediately, in one place, rather than surfacing later as a confusing downstream error (a `None` where a string was expected, a missing dict key)
+- Applies uniformly regardless of which AI provider is active, since validation happens after the provider returns, not inside it
+
+Cons
+
+- Adds a validation step (and a failure mode) to every AI request that a naive "trust the response" implementation wouldn't have
+- A model output that's substantively fine but doesn't match the exact expected shape is rejected the same as a genuinely broken response (see Decision 16's own Cons)
 
 ---
 
@@ -149,6 +187,20 @@ Benefits:
 - Better organization
 - Improved maintainability
 
+See `docs/architecture.md`'s Backend Architecture section for how this split is organized today (routers, services, models, schemas, and the dependency-injection pattern that connects them), and Decision 17 for the one deliberate exception to "routes stay thin."
+
+**Trade-offs**
+
+Pros
+
+- A service function is testable by calling it directly, with no HTTP layer or running server involved (`docs/testing.md`)
+- A route can be understood by reading roughly a dozen lines (validate → call service → return), without also holding the business logic itself
+
+Cons
+
+- Indirection: understanding what a route actually does often means following the call into its service function rather than reading it in place
+- Requires discipline to keep logic out of routes as the codebase grows - nothing mechanically prevents a route from reaching into the database directly
+
 ---
 
 # Decision 8: Synthetic Data Only
@@ -161,11 +213,18 @@ Use only synthetic clinical notes and medication lists.
 
 The project is intended as a portfolio application and should not process real patient information.
 
-Benefits:
+**Trade-offs**
+
+Pros
 
 - No HIPAA concerns
 - Easier sharing and deployment
 - Safe public demonstrations
+
+Cons
+
+- Synthetic data can't fully represent the messiness of real clinical documentation (inconsistent formatting, ambiguous abbreviations, genuinely contradictory real-world records), so the reconciliation engine and prompt have only ever been exercised against data written to be plausible, not against data that actually is what it's simulating
+- The application is not, and cannot become, HIPAA-compliant simply by adding features later - this is a permanent scope boundary, not a temporary one
 
 ---
 
@@ -178,6 +237,18 @@ Manage development using GitHub Issues, Milestones, Project Boards, feature bran
 **Reasoning**
 
 The goal is to simulate a professional software engineering workflow rather than simply producing working code.
+
+**Trade-offs**
+
+Pros
+
+- Every feature has a traceable issue number, referenced throughout the codebase's own comments and this document - useful for understanding *why* something is the way it is, not just what it is
+- Feature branches and pull requests keep `main` always in a working state
+
+Cons
+
+- More process overhead than committing directly to a single branch, for a project with one contributor
+- Issue numbers accumulate as a permanent part of the codebase's own comments, which only stay meaningful as long as this document and the issue history behind them remain available
 
 ---
 
@@ -242,6 +313,8 @@ Implement medication reconciliation as explicit, deterministic backend logic. Me
 **Reasoning**
 
 AI is responsible for producing MedicationMention records from clinical text. Deciding whether two already-structured records conflict is a comparison problem, not an extraction problem, and does not need a language model. A deterministic implementation is reproducible, directly unit testable, and does not risk inventing brand or generic equivalence, correcting misspellings, or merging medications on partial string similarity, all of which could silently hide a real documentation inconsistency instead of surfacing it.
+
+See `docs/ai.md`'s AI Philosophy and Reconciliation Pipeline sections for the full AI-decision-vs-deterministic-logic boundary this decision establishes, and `docs/architecture.md`'s Reconciliation Engine section for how it fits into the wider request flow.
 
 **Trade-offs**
 
@@ -317,6 +390,8 @@ Define an abstract `AIProvider` interface with a single method, `generate_summar
 
 The project intends to evaluate multiple providers, including OpenAI, MedGemma, and OpenBioLLM. If business logic called a specific SDK directly, adding or swapping a provider would mean changing the service layer itself. Behind a single interface, a new provider is a new class that implements one method and translates its own SDK's exceptions into `AIProviderError`. Nothing else in the application needs to change, and nothing else needs to know which SDK is in use.
 
+See `docs/ai.md`'s Provider Abstraction and Extending the AI Layer sections for the full implementation reference and the exact steps to add a new provider.
+
 **Trade-offs**
 
 Pros
@@ -361,7 +436,7 @@ Cons
 
 **Decision**
 
-`POST /ai/summarize` orchestrates the full flow: create the Analysis, mark it processing, call `AISummaryService` for a validated result, then call a separate persistence function, `persist_analysis_result`, to store it. `AISummaryService` gained no database access to do this. Persistence lives in its own module, `analysis_result_service.py`, which knows about the validated `ClinicalSummary` shape and the database models, but nothing about Gemini or any provider.
+`POST /patients/{patient_id}/analyses` orchestrates the full flow: create the Analysis, mark it processing, call `AISummaryService` for a validated result, then call a separate persistence function, `persist_analysis_result`, to store it. `AISummaryService` gained no database access to do this. Persistence lives in its own module, `analysis_result_service.py`, which knows about the validated `ClinicalSummary` shape and the database models, but nothing about Gemini or any provider.
 
 **Reasoning**
 
@@ -390,7 +465,7 @@ Rebuild `backend/Dockerfile` and the newly-added `frontend/Dockerfile` as multi-
 
 **Reasoning**
 
-Auditing the existing setup for Issue #56 found that `backend/Dockerfile`'s single-stage `COPY . .` had no `.dockerignore` excluding it - a real `docker build` would copy the developer's actual local secrets (`backend/.env`: `DATABASE_URL`, `JWT_SECRET_KEY`, `GEMINI_API_KEY`) directly into an image layer, along with 182 MB of `.venv` and Python/pytest/ruff caches. This is treated as a security fix, not a cleanup nice-to-have: an image is something that gets pushed to a registry and potentially run outside the machine it was built on, and a leaked `.env` baked into a layer stays recoverable from that layer's history even if a later layer overwrites the file. `frontend/Dockerfile` gets the same treatment for the same reason (`frontend/.env`, `node_modules`), and both `.dockerignore` files additionally exclude `tests/`/test-only artifacts and dev caches purely for image size, a secondary concern to the leak itself.
+`backend/Dockerfile`'s original single-stage `COPY . .` had no `.dockerignore` excluding it - a real `docker build` would copy the developer's actual local secrets (`backend/.env`: `DATABASE_URL`, `JWT_SECRET_KEY`, `GEMINI_API_KEY`) directly into an image layer, along with 182 MB of `.venv` and Python/pytest/ruff caches. This is treated as a security fix, not a cleanup nice-to-have: an image is something that gets pushed to a registry and potentially run outside the machine it was built on, and a leaked `.env` baked into a layer stays recoverable from that layer's history even if a later layer overwrites the file. `frontend/Dockerfile` gets the same treatment for the same reason (`frontend/.env`, `node_modules`), and both `.dockerignore` files additionally exclude `tests/`/test-only artifacts and dev caches purely for image size, a secondary concern to the leak itself.
 
 Multi-stage was chosen over the previous single-stage backend Dockerfile because splitting "install dependencies" from "run the application" means the final image never contains pip's build cache or any transient install artifacts - `pip install --prefix=/install` in a `builder` stage, then only `/install` (not the whole stage) is copied into the runtime stage. The backend's runtime stage also drops root: nothing in this application writes to the filesystem at runtime (confirmed by inspection - all persistence goes through the database, not local files), so there is no reason a compromised dependency or a request-handling bug should have root inside the container.
 
@@ -421,7 +496,7 @@ Cons
 
 **Reasoning**
 
-Deploying to a real EC2 instance for Issue #57 surfaced a gap Issue #56's own build-only validation couldn't have caught: nothing anywhere ran migrations against a genuinely fresh database. Verifying the deployment against a clean Postgres volume hit `relation "users" does not exist` on the first registration attempt - `alembic.ini`'s static `sqlalchemy.url` (correct only when `alembic` runs directly on a developer's host, where the local dev Postgres really is at `localhost:5432`) meant even running `alembic upgrade head` by hand inside the container would have failed to connect at all, since Postgres is a separate container reachable by its Compose service name, not `localhost`.
+A genuinely fresh database exposed a gap build-only validation couldn't have caught: nothing anywhere ran migrations against it. Verifying the deployment against a clean Postgres volume hit `relation "users" does not exist` on the first registration attempt - `alembic.ini`'s static `sqlalchemy.url` (correct only when `alembic` runs directly on a developer's host, where the local dev Postgres really is at `localhost:5432`) meant even running `alembic upgrade head` by hand inside the container would have failed to connect at all, since Postgres is a separate container reachable by its Compose service name, not `localhost`.
 
 Running migrations automatically as part of container startup, rather than as a manual step in the deployment runbook, was chosen because a manual step is a manual step someone eventually forgets - and for a single-instance deployment with no concurrent backend replicas, there's no race condition to worry about from running `alembic upgrade head` on every start (a second, third, or hundredth run against an already-current schema is a documented no-op). This is different advice than a multi-replica deployment would need, where multiple containers racing to run migrations simultaneously on startup is a real hazard - but this project is explicitly one EC2 instance, one backend container, by this same issue's own scope.
 
@@ -463,7 +538,7 @@ Pros
 
 Cons
 
-- `detail` is one more thing to trust `APIError.message` to never contain - a hard boundary to prove permanently at the library level, only reasoned about here (Google's SDK sends the API key via header, never in a URL or an exception message, and a validation/safety-block error surfaces through an empty response, not this exception path - see `docs/ai.md`'s Logging section) rather than mechanically enforced
+- `detail` is one more thing to trust `APIError.message` to never contain - a hard boundary to prove permanently at the library level, only reasoned about here (Google's SDK sends the API key via header, never in a URL or an exception message, and a validation/safety-block error surfaces through an empty response, not this exception path - see the Logging paragraph in `docs/ai.md`'s Error Handling section) rather than mechanically enforced
 - `str(error)` for a non-`APIError` exception is unstructured and could, for some unanticipated exception type, be more verbose than intended - accepted as a reasonable trade-off for visibility into failure modes this code can't fully enumerate in advance
 
 ---
@@ -480,6 +555,8 @@ This application already had exactly this problem once, for AI providers (Decisi
 
 Before this feature, no file storage of any kind existed in the application - uploaded files were read into memory, text-extracted, and discarded (see `docs/data-model.md`'s Design Decisions). This is worth being explicit about because the interface was designed for the problem this application actually has (an original file plus its already-separately-stored extracted text) rather than adapted from a different one; `StorageService` has no method for anything analysis-related, since AI analysis was never going to read through it - it continues reading `raw_text` from Postgres exactly as before.
 
+See `docs/architecture.md`'s Persistence section for how this fits alongside PostgreSQL/SQLAlchemy/Alembic in the wider persistence layer.
+
 **Trade-offs**
 
 Pros
@@ -495,13 +572,198 @@ Cons
 
 ---
 
+# Decision 22: Centrally-Configured Structured Logging with an Allowlist for Log Fields
+
+**Decision**
+
+One module, `app/core/logging_config.py`, owns all logging configuration for the entire backend - handler, formatter, and a `logging.Filter` that injects request-scoped context - configured once at import time (`configure_logging`, called from `app/main.py`) on the root logger, so every existing `logging.getLogger(__name__)` call in the codebase is picked up without being changed itself. Every log record is rendered through a fixed allowlist of field names (`ALLOWED_FIELDS`): a field passed via `extra={...}` that isn't in this tuple is silently dropped by both formatters, rather than reaching a log line.
+
+**Reasoning**
+
+The alternative to centralizing configuration - each module calling `logging.basicConfig` or configuring its own handler - was already implicitly ruled out by the starting state: no logging configuration at all, four loggers running on Python's default, unconfigured root logger. A single `configure_x(app, ...)` function wired up once from `app/main.py` is the pattern this codebase already uses for other cross-cutting concerns (`configure_cors`); logging fits the same shape rather than inventing a new one.
+
+The allowlist is the more consequential decision. This application handles synthetic clinical data, but the logging code that handles it doesn't get to assume every future call site will remember that credentials, tokens, prompts, and document text must never be logged - a project convention enforced only by developer discipline doesn't survive a rushed debugging session where someone adds `extra={"raw_response": response}` to see what a failure looked like. Making the field list an allowlist, not a denylist, means that mistake fails safe: the added field simply never appears in the rendered output until someone deliberately adds it to `ALLOWED_FIELDS`, a small, visible, single-file change that's easy to catch in review. A denylist (block known-bad field names) would have the opposite failure mode - safe only until someone invents a new sensitive field name the denylist doesn't yet know about.
+
+`user_id` specifically could not be carried the same way as `request_id`/`method`/`path`/`client_ip` (all via a `contextvars.ContextVar`, set once by the request-logging middleware and read by every log call during that request). Every dependency and route handler in this codebase is a synchronous `def`, and Starlette runs each one via `run_in_threadpool`, which executes it inside its own *copy* of the current context - a `ContextVar.set()` made inside `get_current_user` (itself a sync dependency) is invisible to sibling dependencies or to the middleware's own code, even within the same request, even on the same thread (verified empirically: a minimal diagnostic FastAPI app with three sync dependencies sharing one OS thread still couldn't see one dependency's `ContextVar.set()` from another). `request.state` - a plain mutable attribute on the one `Request` object every dependency and the middleware share - is not subject to that per-call context-copy isolation, so `user_id` rides `request.state` instead, read back by the middleware after `call_next()` returns.
+
+See `docs/architecture.md`'s Logging section for how this fits into the backend architecture as a whole.
+
+**Trade-offs**
+
+Pros
+
+- A field can never leak into a log line by accident - it must be added to `ALLOWED_FIELDS` first, a deliberate, reviewable step, not a runtime configuration flag someone could get wrong
+- Zero new third-party dependencies - the standard library's `logging` module, already in use, is centrally configured rather than replaced
+- JSON in production (`JSONFormatter`), a readable single line in development (`ConsoleFormatter`) - the same underlying fields either way, so a log aggregator and a developer's terminal never disagree about what's available, only how it's displayed
+
+Cons
+
+- The allowlist is one more place to update when a genuinely new, safe field is needed - a small but real tax on adding new structured log data going forward
+- `user_id`'s `request.state`-based path is asymmetric with every other context field (which use the `ContextVar` uniformly) - a direct consequence of this codebase's synchronous-dependency architecture rather than a free design choice, and worth knowing about before assuming a new context field can simply be added to `RequestContextFilter._CONTEXT_FIELDS` without checking whether it's set from inside a sync dependency the same way `user_id` is
+
+---
+
+# Decision 23: BuildKit Cache Mounts Instead of `--no-cache-dir`, Paired with GitHub Actions Cache in CI
+
+**Decision**
+
+`backend/Dockerfile`'s `pip install` and `frontend/Dockerfile`'s `npm ci` each run under a BuildKit cache mount (`--mount=type=cache,target=...`) rather than downloading fresh on every build. `backend/Dockerfile` drops `--no-cache-dir` (Decision 18's original flag) since the cache mount now serves the same purpose more effectively. Both Dockerfiles gain a `# syntax=docker/dockerfile:1` pragma, required for the mount syntax to resolve consistently. In CI, both `backend.yml` and `frontend.yml`'s "Validate Docker image build" step moves from a plain `docker build` to `docker/build-push-action` with `cache-from`/`cache-to: type=gha`.
+
+**Reasoning**
+
+Decision 18 chose `--no-cache-dir` deliberately, to keep pip's download cache out of the final image layer. That reasoning is still correct about the image, but it also means every single build - local or CI - re-downloads every dependency from PyPI, even when `requirements.txt` changed by one line. A BuildKit cache mount gets the same "nothing extra in the final image" property (a mount is never part of an exported layer, unlike a normal on-disk directory would be) while *also* persisting the downloaded packages between builds, in BuildKit's own cache store - strictly better than `--no-cache-dir` for this project's actual goal (a small image), not a trade-off against it.
+
+That local persistence alone doesn't help CI, though: each GitHub Actions job starts on a fresh runner with no prior BuildKit state at all, so a cache mount with nothing to restore from behaves exactly like `--no-cache-dir` did. `cache-from`/`cache-to: type=gha` closes that gap - it's what actually gives the mount something to be warm *from* on the next run, by storing and restoring the same BuildKit cache (both ordinary layers and cache-mount contents) through GitHub's own Actions cache rather than requiring the runner itself to persist anything.
+
+Neither change touches the Dockerfiles' runtime behavior at all: it's the same `pip install --prefix=/install`/`npm ci` producing the identical installed package set, only how the download step is cached. `docker/build-push-action` is used with `load: true`, never `push: true` - CI still only proves the image builds, exactly as the plain `docker build` it replaces did; nothing is published anywhere new.
+
+**Trade-offs**
+
+Pros
+
+- Both a `requirements.txt`/`package-lock.json` change (verified locally: every package installed from `Using cached ...` wheels, zero PyPI network requests) and, once the GHA cache is warm, every CI run after the first benefit - not just an incremental improvement to the already-fast "source-only change" case Decision 18's layer ordering already handled well
+- No change to the final image's contents or size - a cache mount was chosen specifically because it doesn't reintroduce what `--no-cache-dir` was removing
+- Uses GitHub's own Actions cache - no new CI system, no external cache service, no additional secrets or registry login
+
+Cons
+
+- Requires a BuildKit-aware builder (the default in any current Docker Engine/Compose, and on `docker/setup-buildx-action`-equipped GitHub runners, but a genuinely old or non-BuildKit `docker build` would no longer understand the mount syntax at all - mitigated by the `# syntax=` pragma, not eliminated)
+- The GHA cache has its own eviction/size limits and is scoped per-repository, so a cache miss (a new branch, an evicted entry) still falls back to a full rebuild - an improvement to the common case, not a guarantee every build is fast
+- One more moving part in the CI workflow files (`docker/setup-buildx-action`, `docker/build-push-action`) in place of a single `docker build` line - more to understand when reading the workflow, in exchange for the caching behavior neither could express alone
+
+---
+
+# Decision 24: Same-Origin Deployment via nginx Reverse Proxy, Backend Made Internal-Only
+
+**Decision**
+
+The frontend's nginx container now reverse-proxies `/api/*` to the backend over the Docker network (`frontend/nginx.conf`), and the backend's host port is bound to `127.0.0.1` only (`infra/docker-compose.yml`), the same treatment `postgres` already had. The browser now reaches the entire application - SPA and API alike - through one origin; it never talks to the backend's own port at all. `VITE_API_BASE_URL` (baked into the frontend bundle at image build time) changes from an absolute URL to a relative path, `/api`, so the frontend never needs to know the backend's hostname, port, or protocol. `CORS_ALLOWED_ORIGINS` - the setting that let a deployed frontend's origin call the backend cross-origin - is removed entirely; nothing needs it anymore.
+
+**Reasoning**
+
+Before this, the backend's port had to be published publicly (`0.0.0.0`, reachable from the internet) purely so the browser could reach it directly, and the frontend had to be told that URL at image build time - which is also why a real deployment (`docs/deployment.md`'s AWS EC2 section) needed the instance's public IP known *before* building the frontend image, and why CORS existed as a whole layer of configuration in the first place. A reverse proxy removes the reason for all three: the backend is reachable by a fixed Docker Compose service name from inside the same container network nginx already runs in, so there's no reason for anything outside that network to reach it directly, and no cross-origin request for the browser to ever make.
+
+The CORS middleware itself is *not* removed, despite that - `npm run dev` (Vite's dev server, `docs/deployment.md`'s Local Development section) runs directly on a developer's host with no reverse proxy in front of it at all, and still makes a real cross-origin request to the backend's own port. That's the one genuine cross-origin case left in this application, and it still needs CORS to work; `configure_cors` (`app/main.py`) is scoped down to exactly that case (the existing `LOCALHOST_ORIGIN_REGEX`, unchanged, restricted to `app_env == "development"`) rather than removed outright.
+
+Two problems specific to reverse-proxying a service by its Compose name, not obvious from the requirement alone, had to be solved directly in `frontend/nginx.conf`:
+
+- **Stale upstream DNS after a partial redeploy.** `docs/deployment.md`'s own documented update flow rebuilds and recreates only the container whose image changed - a backend-only change never touches the running frontend container. A plain `proxy_pass http://backend:8000` resolves `backend`'s address once, at nginx startup, and caches it for the life of the worker process; after backend is recreated (a new container, typically a new IP), nginx would keep proxying to the dead address until it was *also* restarted - an outage this application's own deployment workflow would trigger on every backend-only update. Fixed with `resolver 127.0.0.11` (Docker's embedded DNS, present on every Compose network) plus a variable in `proxy_pass`, which defers resolution to request time instead of caching it from startup.
+- **The same fix also removes the need for `frontend: depends_on: backend`.** A static `proxy_pass` would need `backend`'s DNS name to exist by the time nginx starts, or nginx fails to start entirely (a fatal "host not found in upstream" error) - which would otherwise force `depends_on: backend` back in as a workaround, undoing the "no unnecessary waiting" startup ordering `docs/deployment.md`'s Production Configuration section describes. The dynamic resolver above doesn't have this problem: nginx starts successfully even if `backend` doesn't exist yet, serves `/api/*` as `502` until it does, and self-heals with no restart needed once it appears - verified directly (`docker compose rm -f backend`, restart `frontend`, confirm it stays healthy and serves the SPA; bring `backend` back, confirm `/api/health` starts working with no action on `frontend`).
+
+A third, easy-to-miss correctness issue: without explicit forwarding, every request the backend sees would show nginx's own Docker-network address as its `client_ip` (structured logging, `docs/architecture.md`'s Logging section), not the real visitor's - `proxy_set_header X-Real-IP`/`X-Forwarded-For`/`X-Forwarded-Proto` in nginx, paired with `--forwarded-allow-ips='*'` on the backend's `uvicorn` invocation (`backend/Dockerfile`), fixes this. Trusting every source for that flag is safe specifically *because* of this same decision - the backend's port is no longer reachable by anything except nginx (and the host itself, for direct local access), so there's no untrusted party in a position to spoof those headers in the first place.
+
+**Trade-offs**
+
+Pros
+
+- One fewer thing to expose to the internet in production - the backend's own port is never reachable from outside the host at all, closing an attack surface that existed purely so the browser could reach it directly
+- The frontend image no longer needs the deployment's public hostname baked in at build time - `VITE_API_BASE_URL=/api` works unmodified for local Docker Compose *and* a real deployment, simplifying "Step 5: Configure environment variables" in `docs/deployment.md`'s AWS EC2 runbook to one fewer value to get right before building
+- Zero CORS preflight requests during normal application use (verified: no `Access-Control-*` response headers on any same-origin request through nginx) - one fewer request per API call in practice, and one fewer category of "why did this fail in production but work locally" bug class removed with it
+
+Cons
+
+- One more moving part in `frontend/nginx.conf` - a resolver, a rewrite, and forwarded headers, none of which are needed for `nginx.conf`'s previous job (serving static files) - all directly required to reverse-proxy correctly, not incidental complexity, but genuinely more nginx configuration to reason about than before
+- `npm run dev`'s dev-server flow and the Docker Compose/production flow now differ in an important way (one is cross-origin and needs CORS + an absolute backend URL, the other is same-origin and needs neither) - worth knowing about before assuming they behave identically, though each is now documented at its own env var (`frontend/.env.example`, `infra/.env.example`)
+
+---
+
+# Decision 25: Dummy-Certificate Bootstrap for HTTPS, Certbot Integrated as an On-Demand Compose Service
+
+**Decision**
+
+`frontend/nginx.conf` gains a second server block on port 443 with TLS termination (the port 80 block now only redirects to it and serves Let's Encrypt's ACME HTTP-01 challenge), reading its certificate from a fixed path inside a named Docker volume (`certbot_certs`, `infra/docker-compose.yml`) rather than anywhere in the repository. A new `certbot` service, using the official `certbot/certbot` image and sharing that same volume (plus a second, `certbot_www`, for the ACME challenge files), provides the certificate - but only when explicitly invoked (`docker compose run --rm certbot ...`), never by a plain `docker compose up`, via Compose's `profiles`. Because that volume starts empty on every fresh `docker compose up` (local development, CI, or a brand new production instance before certbot has ever run), a new `ensure-dummy-cert.sh` script - installed into `nginx:alpine`'s own `/docker-entrypoint.d/` auto-run mechanism, no Dockerfile `CMD`/`ENTRYPOINT` override needed - generates a short-lived self-signed placeholder certificate at that same path whenever a real one isn't already there, so nginx always has *something* to bind port 443 with.
+
+**Reasoning**
+
+The core tension this decision resolves: `infra/docker-compose.yml` is deliberately the *same* file for local development and production (Decision 4 and every deployment issue since), but a real TLS certificate can only exist where the actual production domain is reachable over the public internet - it can never be issued, and shouldn't be faked, in local development or in this repository's own CI/testing. Without some accommodation, `nginx.conf` referencing a certificate path that's empty in every environment except real production would mean `docker compose up` simply doesn't work anywhere else - breaking the "one file, every environment" property this project deliberately maintains. The dummy-certificate bootstrap is the standard, well-established answer to precisely this problem (the same pattern used by, among others, the widely-referenced wmnnd/nginx-certbot Docker recipe): nginx never has to special-case "do I have a real certificate or not," because there's always a file at the expected path either way - only *which* certificate ends up there differs, and that's decided entirely by what's mounted into the shared volume, not by any conditional logic in `nginx.conf` itself.
+
+The certificate's *path* still has to agree between nginx and certbot, though, and certbot's own directory convention (`/etc/letsencrypt/live/<domain>/`) is namespaced by domain, not something this project's Dockerfiles invented or can avoid. Rather than runtime `envsubst` templating (nginx:alpine supports this natively, but by default substitutes *every* `$word` its process environment happens to also define - a real risk of silently blanking out nginx's own native variables like `$host`/`$scheme` used throughout the `/api/` proxy block, unless carefully scoped), the domain is baked in at image build time via a `DOMAIN` build arg, extending the exact pattern `VITE_API_BASE_URL` already established (Decision 18) rather than introducing a second templating mechanism alongside it.
+
+Certbot is integrated as a Compose service, not a separate manual Docker invocation, so it shares the project's existing `infra/.env`-driven configuration (the same `DOMAIN` value) and its volumes are defined once, in the one file that already owns every other piece of this deployment's container wiring. `profiles: ["certbot"]` keeps it from starting - and, on a machine with no real domain yet, immediately exiting non-zero - every time someone runs `docker compose up`; `docker compose run` still reaches it directly by name regardless, which is the only way it's ever meant to be invoked (an ACME issuance or renewal is not a long-running process). Renewal itself is a host-level cron entry (`docs/deployment.md`'s HTTPS section), not a fourth always-running container with a sleep loop - consistent with this project's already-manual, non-automated deployment model (`docs/deployment.md`'s Continuous Deployment section documents deploys as a manual SSH session), and cron is infrastructure every Linux host already has, not something new to introduce.
+
+**Trade-offs**
+
+Pros
+
+- `docker compose up` behaves identically in every environment - local development, CI, and a brand new production instance all see *a* working HTTPS listener immediately, real certificate or not, with zero environment-specific branching in `nginx.conf`
+- No certificate material of any kind - real or the self-signed placeholder - ever touches a git-tracked path; both live exclusively in a named Docker volume
+- Reuses this project's own established patterns throughout rather than introducing new ones: build-time domain baking mirrors `VITE_API_BASE_URL` (Decision 18), on-demand invocation via Compose `profiles` needs no new tooling, and cron-based renewal matches the project's already-manual deployment model instead of adding a persistent renewal container
+
+Cons
+
+- The self-signed placeholder means a browser will show a certificate warning against any environment that hasn't had a real certificate issued yet (every local `docker compose up`) - expected and harmless, but worth knowing about before assuming a certificate warning always signals a real problem
+- `DOMAIN` has to be kept in sync in two places that don't validate each other - the build arg baked into the frontend image, and the `-d` flag in whatever `certbot certonly`/`renew` command is actually run - a mismatch here means nginx looks for a certificate certbot never wrote to that name, not a build-time or start-time error
+- Certificate renewal depends on a cron entry configured directly on the EC2 instance (`docs/deployment.md`), outside version control and outside anything this repository's own tooling can verify is actually installed and firing - a manual setup step with no automated check that it's still correct months later
+
+---
+
+# Decision 26: JWT Bearer Authentication with Ownership-Based Authorization, No Roles
+
+**Decision**
+
+Authenticate every protected request with a stateless JWT bearer token (`Authorization: Bearer <token>`), issued at login and containing only the authenticated user's id (`sub` claim) - no role, permission, or other claim. There is no server-side session store of any kind. Authorization throughout the API is ownership-based, not role-based: a resource is accessible only if it belongs to the authenticated user, directly (`Patient.user_id`) or transitively (`patient_id`), enforced through shared dependencies (`get_current_user`, `get_owned_patient`) rather than a per-route role check. A resource that exists but belongs to a different user returns `404`, the same response used for a resource that doesn't exist at all - never `403`.
+
+**Reasoning**
+
+Every user of this application is symmetric: a single "provider" role managing their own patients, with no admin, staff, or reviewer distinction anywhere in the domain. A role/permission system would model a distinction the application doesn't actually have, so authorization reduces entirely to one question - does this resource belong to this caller - answered the same way everywhere rather than through a general-purpose permission system built for a shape of problem this application doesn't have.
+
+A stateless JWT was chosen over a server-side session (a session id in a cookie, looked up against a session store on every request) because it needs no additional infrastructure - no session table, no Redis, no sticky-session concern for a future multi-instance deployment - and a request is authenticated by decoding and verifying a signature, not by a database round-trip. The `404`-not-`403` choice is deliberate, not an oversight: returning `403` for "exists, but not yours" would let an authenticated caller enumerate other users' resource ids by observing which ones 403 instead of 404; returning the same `404` either way means this API never confirms or denies another user's data exists at all.
+
+See `docs/architecture.md`'s Authentication section for the full implementation reference (token handling, the dependency chain, the ownership model), and `docs/api.md`'s Authentication and Authentication Flow sections for the HTTP-level contract.
+
+**Trade-offs**
+
+Pros
+
+- No session-store infrastructure to run, back up, or scale - a request is authenticated by cryptographic verification alone
+- The `404`-not-`403` ownership pattern is enforced in exactly one or two shared dependencies, not re-implemented per route, so it can't be forgotten on a new endpoint
+- Stateless tokens work identically whether the backend is one process or, in principle, several - no shared session state to coordinate
+
+Cons
+
+- No server-side revocation: a leaked or stolen token remains valid until it naturally expires (30 minutes by default) - there is no way to invalidate a specific token early, unlike a session store a compromised session could simply be deleted from
+- The ownership model has no path to a future "shared patient" or "care team" feature without a real redesign - today, a resource has exactly one owning user, full stop
+- A role system, if the application ever needs one (e.g. a future admin or read-only reviewer account type), doesn't extend this design incrementally - it would be a genuinely new authorization axis alongside ownership, not an extension of it
+
+---
+
+# Decision 27: Real, Isolated PostgreSQL Test Database Instead of Mocking or SQLite
+
+**Decision**
+
+The backend test suite runs every test against a real, isolated PostgreSQL database (`medlens_test_db`, created automatically if it doesn't already exist), never a mock of the database layer and never a different, lighter-weight database engine such as SQLite. `DATABASE_URL` is rewritten to point at this database in `conftest.py`, before `app` is ever imported - so the entire application under test, not only the test fixtures themselves, transparently uses it. The schema is built via `Base.metadata.create_all`, not by running the real Alembic migrations against it.
+
+**Reasoning**
+
+Several real constraints in this schema are enforced at the database level, not in application code, and only actually fire against a real PostgreSQL engine - most directly, Decision 10's `ON DELETE SET NULL` behavior on `MedicationDiscrepancy`'s foreign keys. SQLite doesn't enforce foreign key constraints by default at all, and even with them enabled, its behavior is its own separate implementation, not a guarantee of matching Postgres's - a test suite running against SQLite could pass while the actual, production database-level behavior it's meant to verify was silently broken or never even exercised. Mocking the database layer entirely would be worse in the same direction: a test asserting a mocked query function was called with certain arguments never actually proves a query behaves correctly, only that application code attempted to run one.
+
+Using the exact same engine as production also avoids maintaining a second, SQLite-compatible schema-generation path alongside the real one, and means a passing test suite is evidence about the persistence layer that will actually run in production, not about a structurally similar but distinct one.
+
+See `docs/testing.md` for the full fixture/isolation implementation (session-scoped schema creation, per-test cleanup) and its explicit note that this same choice means there are no automated migration tests - schema is built directly from the models, not by running Alembic, so nothing here verifies a migration file itself is correct.
+
+**Trade-offs**
+
+Pros
+
+- Catches real database-level bugs (constraint violations, cascade and `SET NULL` behavior, foreign key errors) that a mock or a different engine could hide entirely
+- A passing test suite is direct evidence the persistence layer works against the actual database engine used in production, not a structurally different stand-in
+- No second, SQLite-specific schema or query-compatibility path to maintain alongside the real PostgreSQL one
+
+Cons
+
+- Requires a running PostgreSQL instance to run the test suite at all - a real environment dependency for every developer machine and CI runner, rather than a dependency-free, install-and-go suite
+- Slower than an in-memory database would be, though not prohibitively so for this project's current size (`docs/testing.md`)
+- Building the schema via `Base.metadata.create_all` rather than running real migrations means the test suite verifies the *models* are correct but never verifies that an actual Alembic migration file produces the same schema - a gap `docs/testing.md` states explicitly rather than leaving implicit
+
+---
+
 # Future Decisions
 
 Additional architectural decisions will be documented as the project evolves, including topics such as:
 
 - Background job processing
 - Caching
-- AWS architecture
-- Deployment strategy
 - Monitoring
 - Performance optimization
+
+AWS deployment architecture and deployment strategy were originally listed here as future topics; both are now implemented and documented as Decisions 19, 24, and 25.

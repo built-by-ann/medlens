@@ -18,7 +18,12 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 NOT_FOUND_DETAIL = "Patient not found"
 
 
-@router.post("", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=PatientResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create patient",
+)
 def create_patient_route(
     patient_in: PatientCreate,
     current_user: User = Depends(get_current_user),
@@ -27,7 +32,7 @@ def create_patient_route(
     return create_patient(db, current_user.id, patient_in)
 
 
-@router.get("", response_model=list[PatientResponse])
+@router.get("", response_model=list[PatientResponse], summary="List patients")
 def list_patients_route(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -52,7 +57,7 @@ def read_patient(
     return patient
 
 
-@router.patch("/{patient_id}", response_model=PatientResponse)
+@router.patch("/{patient_id}", response_model=PatientResponse, summary="Update patient")
 def patch_patient(
     patient_id: int,
     patient_in: PatientUpdate,
@@ -70,7 +75,7 @@ def patch_patient(
     return patient
 
 
-@router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Archive patient")
 def archive_patient_route(
     patient_id: int,
     current_user: User = Depends(get_current_user),

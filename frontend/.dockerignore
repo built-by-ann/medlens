@@ -11,11 +11,15 @@
 node_modules
 dist
 coverage
+*.log
 
-# Version control and editor/OS metadata.
+# Version control, editor, and OS metadata.
 .git
 .gitignore
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
 .dockerignore
 Dockerfile
 

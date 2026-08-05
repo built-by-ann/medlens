@@ -1,402 +1,268 @@
 # MedLens
 
-An AI-powered clinical documentation reconciliation platform that
-extracts medication information from multiple clinical documents,
-identifies potential documentation inconsistencies, and demonstrates
-production-grade software engineering practices.
+AI-powered medication reconciliation for clinical documentation: extracts structured medication data from clinical notes and finds discrepancies between them using a deterministic comparison engine.
 
-**Status:** Active Development (Sprint 3)
+MedLens reads synthetic clinical documents (visit notes, discharge summaries, medication lists), extracts structured medication information with an LLM, and compares it against a patient's medication list to surface documentation inconsistencies, each finding backed by the specific evidence that produced it. It's a full-stack, production-style application: FastAPI + PostgreSQL backend, React + TypeScript frontend, Docker Compose deployment with HTTPS on AWS EC2, and a real automated test suite on both sides.
 
-------------------------------------------------------------------------
+[![Backend CI](https://github.com/built-by-ann/medlens/actions/workflows/backend.yml/badge.svg)](https://github.com/built-by-ann/medlens/actions/workflows/backend.yml)
+[![Frontend CI](https://github.com/built-by-ann/medlens/actions/workflows/frontend.yml/badge.svg)](https://github.com/built-by-ann/medlens/actions/workflows/frontend.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-React-3178c6.svg)
 
-# Overview
+**[Live demo: medlenshealth.com](http://medlenshealth.com)**
 
-MedLens is a full-stack AI application inspired by research conducted at
-Vanderbilt University Medical Center on medication documentation
-inconsistencies within electronic health records.
+**Status:** Active development (Sprint 4 - production engineering)
 
-Users securely authenticate, upload synthetic clinical documents by
-pasting text or uploading TXT and PDF files, and generate AI-powered
-medication reconciliation analyses.
+> MedLens uses synthetic clinical data only. It is an educational software engineering portfolio project: it is not HIPAA compliant, does not provide medical advice, and is not intended for clinical use.
 
-The application extracts structured medication information from multiple
-clinical documents (including medication lists, visit notes, discharge
-summaries, progress notes, and medication reconciliation forms) and
-compares information across documentation sources to identify potential
-documentation inconsistencies with evidence supporting each finding.
+---
 
-Rather than functioning as an AI chatbot, MedLens demonstrates how large
-language models can be integrated into a realistic clinical
-documentation workflow through a production-style software architecture.
+## Screenshots
 
-The project showcases modern software engineering practices including:
+**Dashboard** - recent patients and the cross-patient Recent Analyses feed.
 
-- Full-stack web development
-- REST API design
-- Provider-agnostic AI integration
-- Containerization with Docker
-- PostgreSQL database design
-- Automated testing
-- CI/CD-ready architecture
-- Cloud deployment planning
+![Dashboard](docs/screenshots/dashboard.png)
 
-------------------------------------------------------------------------
+**Patient overview** - identity details, quick actions, and recent clinical documents for one patient.
 
-# Motivation
+![Patient overview](docs/screenshots/patient-overview.png)
 
-Medication information often exists in multiple locations throughout a
-patient's healthcare record. During research at Vanderbilt University
-Medical Center, I studied medication documentation inconsistencies
-within electronic health records. MedLens was inspired by that work and
-explores how AI can assist by extracting medication information from
-multiple clinical documents, comparing documentation sources, and
-surfacing potential reconciliation issues for human review.
+**Medication list** - a patient's current medications, searchable, with edit/delete.
 
-**MedLens uses synthetic clinical data only and is intended solely for
-educational and portfolio purposes.**
+![Medication list](docs/screenshots/medications.png)
 
-------------------------------------------------------------------------
+**CSV import** - importing a medication list from a CSV file, alongside the manual add-medication form.
 
-# How It Works
+![Medication CSV import](docs/screenshots/medications-csv-import.png)
 
-1. Register and authenticate using JWT.
-2. Upload one or more synthetic clinical documents.
-3. AI extracts structured medication information.
-4. Medication information is normalized.
-5. A deterministic reconciliation engine compares documentation
- sources.
-6. Potential discrepancies are identified.
-7. Evidence-backed reports are generated.
-8. Completed analyses are saved, retrieved, and managed.
+**Create Analysis** - selecting existing documents and uploading new ones into the same analysis.
 
-------------------------------------------------------------------------
+![Create Analysis](docs/screenshots/create-analysis.png)
 
-# Current Features
+![Create Analysis - uploading additional documents](docs/screenshots/create-analysis-upload.png)
 
-## Authentication
+**Reconciliation findings** - discrepancies grouped by severity, each with supporting evidence and resolution actions.
 
-Implemented
+![Reconciliation findings](docs/screenshots/analysis-reconciliation.png)
 
-- User registration, with a required, unique username (case-insensitive) chosen at signup
-- User login (always by email and password - a username is a profile field, not a credential)
-- Changing your username later from Settings
-- JWT authentication
-- Protected API endpoints
+**AI summary** - the extracted, structured medication data behind a completed analysis.
 
-## Clinical Documents
+![AI summary](docs/screenshots/analysis-ai-summary.png)
 
-Implemented
+**Login**
 
-- Paste document text
-- Upload TXT files
-- Upload PDF files
-- Upload CSV files
-- View documents
-- Download original uploaded files, backed by pluggable file storage (local disk by default, or Amazon S3 - see `docs/deployment.md`)
-- Delete documents (also removes the stored file, if any)
+<img src="docs/screenshots/login.png" width="320" alt="Login page">
 
-## Medication Management
+**Responsive mobile layout**
 
-Implemented
+<table>
+  <tr>
+    <td><img src="docs/screenshots/mobile-1.png" width="260" alt="Mobile layout 1"></td>
+    <td><img src="docs/screenshots/mobile-2.png" width="260" alt="Mobile layout 2"></td>
+    <td><img src="docs/screenshots/mobile-3.png" width="260" alt="Mobile layout 3"></td>
+  </tr>
+</table>
 
-- Full medication CRUD
-- User-owned medication lists
-- CSV import support
+---
 
-## AI Analysis
+## Features
 
-Implemented
+**Patients and clinical documentation.** Provider-managed patient charts; clinical documents added by pasting text or uploading TXT, PDF, or CSV files, stored via a pluggable backend (local disk or Amazon S3).
 
-- Google Gemini integration
-- Provider-agnostic AI architecture
-- Prompt template system
-- Structured JSON validation
-- Medication extraction
-- Analysis persistence
-- Analysis retrieval
-- Analysis deletion
+**AI-powered extraction.** Google Gemini reads each document and extracts structured medication mentions (name, dose, route, frequency, status) plus a narrative summary, validated against a strict schema before anything is persisted.
 
-Planned
+**Deterministic reconciliation.** A separate, non-AI comparison engine checks the AI-extracted mentions against the patient's own medication list and produces evidence-backed discrepancies - no fuzzy matching, no hallucination risk in the comparison itself.
 
-- OpenBioLLM integration
-- MedGemma integration
-- Provider benchmarking
+**Discrepancy resolution workflow.** Each finding can be accepted (creating or updating the medication list), dismissed, or left open, with a full audit trail of who resolved it, when, and why.
 
-## Reconciliation
+**Authentication and account management.** JWT-based auth, unique usernames, and profile/appearance/accessibility settings, including 27 selectable color themes.
 
-Implemented
+---
 
-- Deterministic reconciliation engine
-- Medication discrepancy detection
-- Evidence-backed findings
-- AI-generated summaries
+## Why MedLens?
 
-## Dashboard
+Medication information is often scattered across a patient's chart - a visit note, a discharge summary, a medication list - and these sources can quietly drift out of sync. MedLens was inspired by research at Vanderbilt University Medical Center on medication documentation inconsistencies within electronic health records: the same problem, explored as a portfolio-scale engineering project rather than a research artifact.
 
-In Development
+The core idea is a deliberate split of responsibility. AI is good at reading unstructured text and pulling out structured facts, so that's all it's asked to do. Deciding whether two structured facts actually conflict is a comparison problem, not a language problem - handled by explicit, deterministic backend logic that's reproducible and unit-testable, with no risk of an LLM silently merging two different medications or inventing an equivalence that isn't there.
 
-- Authentication UI
-- Document management
-- Analysis history
-- Analysis detail view
-- Responsive dashboard
+**How it works, end to end:**
 
-------------------------------------------------------------------------
+1. Register and authenticate (JWT).
+2. Add a patient and upload or paste one or more clinical documents.
+3. Gemini extracts structured medication data from each document.
+4. A deterministic reconciliation engine compares that data against the patient's medication list.
+5. Discrepancies are surfaced with the exact evidence (source document, quoted text) behind each one.
+6. A provider reviews each finding and resolves, dismisses, or updates the medication list accordingly.
 
-# Technology Stack
+---
 
-## Frontend
+## Architecture Overview
 
-- React
-- TypeScript
-- Vite
-- React Router
-
-## Backend
-
-- FastAPI
-- Python
-- SQLAlchemy
-- Alembic
-- Pydantic
-- JWT Authentication
-
-## Database
-
-- PostgreSQL
-
-## AI
-
-- Google Gemini
-- Provider abstraction layer
-
-Planned: - OpenBioLLM - MedGemma
-
-## Infrastructure
-
-- Docker
-- Docker Compose
-- GitHub Actions (frontend and backend quality checks, plus Docker image build validation - see `docs/deployment.md`)
-- AWS EC2 (single-instance deployment via Docker Compose - see `docs/deployment.md`)
-- AWS S3 (optional file storage backend for uploaded clinical documents, behind a pluggable `StorageService` - local disk by default; see `docs/deployment.md` and `docs/architecture.md`)
-
-## Testing
-
-- pytest
-- Unit tests
-- Service tests
-- Route tests
-- Integration tests
-- Authentication tests
-- Medication CRUD tests
-- Clinical document CRUD tests
-- Reconciliation engine tests
-- Analysis workflow tests
-
-Frontend planned: - Vitest - React Testing Library - Playwright
-
-------------------------------------------------------------------------
-
-# Documentation
-
-Documentation is available in the `docs/` directory:
-
-- Product Requirements
-- Architecture
-- Frontend Architecture
-- AI Pipeline
-- Evaluation Plan
-- Data Model
-- API Specification
-- Testing Strategy
-- Deployment Plan
-- Design Decisions
-- Roadmap
-
-------------------------------------------------------------------------
-
-# Roadmap
-
-## Sprint 1 --- Backend Foundation 
-
-- FastAPI backend
-- PostgreSQL
-- SQLAlchemy
-- Alembic
-- Docker
-- JWT authentication
-- Health endpoint
-- Backend testing foundation
-
-## Sprint 2 --- AI Analysis Backend 
-
-- Clinical document CRUD
-- Medication CRUD
-- TXT/PDF upload
-- AI provider architecture
-- Gemini integration
-- Prompt templates
-- Medication extraction
-- Reconciliation engine
-- Analysis persistence
-- Analysis retrieval
-- Analysis deletion
-- Comprehensive backend testing
-
-## Sprint 3 --- Frontend Application 
-
-- React frontend
-- Authentication
-- Dashboard
-- Upload workflow
-- Analysis history
-- Analysis details
-- Responsive UI
-- Frontend testing
-
-## Sprint 4 --- Production Engineering
-
-- AWS deployment
-- CI/CD
-- Monitoring
-- Performance optimization
-
-## Sprint 5 --- Model Evaluation
-
-- OpenBioLLM
-- MedGemma
-- Multi-model benchmarking
-- Accuracy, latency, and cost evaluation
-
-------------------------------------------------------------------------
-
-# Local Development
-
-Clone the repository:
-
-``` bash
-git clone https://github.com/built-by-ann/medlens.git
-cd medlens
+```text
+Browser
+   │
+   ▼
+nginx (single public entry point, HTTPS)
+   ├─ serves the React SPA
+   └─ reverse-proxies /api/* ──▶ FastAPI backend
+                                       │
+                         ┌─────────────┼─────────────┐
+                         ▼             ▼             ▼
+                    PostgreSQL     Gemini API    Storage (local or S3)
+                                                       │
+                                                       ▼
+                                     Deterministic Reconciliation Engine
+                                        (no AI - plain Python logic)
 ```
 
-Start the backend and database:
+A layered FastAPI backend (routers → services → models/schemas) serves a React SPA, both coordinated by the same Docker Compose file in local development and production. See [docs/architecture.md](docs/architecture.md) for component interaction, request flows, and the full set of architectural principles.
 
-``` bash
+---
+
+## AI Pipeline
+
+Gemini, behind a swappable `AIProvider` interface, reads clinical note text and returns structured JSON: extracted medications and a short summary. Every response is validated against a strict Pydantic schema (`extra="forbid"`) before it's trusted - a malformed or unexpected response fails the request rather than being silently accepted.
+
+That's the entire scope of what AI does here. It never compares documents, decides whether two records conflict, or makes a clinical decision - that boundary is enforced structurally, not just by convention: the reconciliation engine's own code has no dependency on the AI layer at all. See [docs/ai.md](docs/ai.md) for the provider abstraction, prompt design, structured output validation, and the full AI/deterministic boundary.
+
+---
+
+## Technology Stack
+
+**Frontend**
+React · TypeScript (strict) · Vite · React Router · Axios · Tailwind CSS v4
+
+**Backend**
+FastAPI · Python 3.12 · SQLAlchemy · Alembic · Pydantic · JWT authentication
+
+**Database**
+PostgreSQL
+
+**AI**
+Google Gemini, behind a provider-abstraction layer (OpenBioLLM and MedGemma planned)
+
+**Infrastructure**
+Docker · Docker Compose · nginx (reverse proxy, TLS termination) · Let's Encrypt / Certbot · AWS EC2 · AWS S3 (optional storage backend) · GitHub Actions
+
+**Testing**
+pytest against a real, isolated PostgreSQL database (537 backend tests) · Vitest + React Testing Library (~600 frontend tests) · moto (mocked AWS S3)
+
+**Developer Tools**
+Ruff (lint + format) · ESLint (flat config, typescript-eslint) · Prettier · TypeScript strict mode · actionlint
+
+---
+
+## Technical Highlights
+
+- **Provider and storage abstraction** - AI providers and file storage backends (local disk / S3) are both selected behind the same interface-plus-factory pattern, so swapping either is a configuration change, not a code change.
+- **Deterministic reconciliation** - the one place a wrong answer would matter most is deliberately not left to a language model; it's explicit, reproducible, unit-tested Python logic.
+- **Structured logging with a field allowlist** - every log record is rendered through a fixed allowlist of field names; a credential or clinical-text field can't reach a log line even if a future call site mistakenly tries to pass one.
+- **Timing metrics** on nested request spans (AI call, reconciliation, full request) via `duration_ms`, correlated by request id.
+- **JWT authentication with ownership-based authorization** - no roles, no server-side session store; a resource that exists but isn't yours 404s, never 403s, so the API can't be used to enumerate other users' data.
+- **Multi-stage, non-root Docker images** with BuildKit cache mounts and GitHub Actions cache for fast, reproducible builds.
+- **HTTPS by default** - a self-signed certificate bootstraps immediately on `docker compose up`, replaced by a real Let's Encrypt certificate via an on-demand Certbot service once DNS is configured.
+- **Private-only S3 integration** - uploaded files are never made public, credentials come from an IAM role in production, and no endpoint ever returns a bucket URL.
+- **Comprehensive, real-dependency testing** - both suites exercise real infrastructure (a real Postgres database, real rendered components) rather than mocking through the layer actually being tested.
+
+---
+
+## Repository Structure
+
+```text
+medlens/
+├── backend/     FastAPI application - routes, services, models, schemas, AI layer, storage layer
+├── frontend/    React + TypeScript single-page application
+├── infra/       Docker Compose, nginx config, environment templates
+├── docs/        Architecture, API, AI, frontend, testing, deployment, and design documentation
+├── README.md
+└── LICENSE
+```
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/built-by-ann/medlens.git
+cd medlens
+
+# Backend + database (also builds a production frontend image for validation)
 cd infra
 docker compose up --build
 ```
 
-This also builds and starts a `frontend` container (a production build served by nginx, at http://localhost:8080) for validating that image - see `docs/deployment.md`'s "Docker Image Builds" section. For active frontend development, run it directly instead, which hot-reloads:
+For active frontend development with hot reload:
 
-``` bash
+```bash
 cd frontend
 cp .env.example .env
 npm install
 npm run dev
 ```
 
-Run backend tests:
+Run the backend test suite:
 
-``` bash
+```bash
 cd backend
 source .venv/bin/activate
 python -m pytest -v
 ```
 
-------------------------------------------------------------------------
+For production deployment (AWS EC2, HTTPS/TLS, S3, monitoring) see [docs/deployment.md](docs/deployment.md).
 
-# Deployment
+---
 
-MedLens deploys to a single AWS EC2 instance running the same three Docker containers (`frontend`, `backend`, `postgres`) as local development, coordinated by the same `infra/docker-compose.yml` - no separate production-only configuration, no reverse proxy, no container orchestration platform.
+## Documentation
 
-``` text
-Internet
-    │
-    ├── :8080 ─▶ frontend container (nginx, static build)
-    └── :8000 ─▶ backend container (uvicorn)
-                      │
-                      ▼
-              postgres container
-           (127.0.0.1 only - never
-            reachable from outside)
-```
+| Document | Description |
+|---|---|
+| [Product Requirements](docs/PRD.md) | The original problem statement, goals, and scope |
+| [Architecture](docs/architecture.md) | How the frontend, backend, database, and AI layer fit together |
+| [AI Architecture](docs/ai.md) | Provider abstraction, prompts, structured output, and the AI/deterministic boundary |
+| [API Reference](docs/api.md) | Every endpoint, request/response schema, and error format |
+| [Frontend](docs/frontend.md) | Routing, component organization, state management, and conventions |
+| [Data Model](docs/data-model.md) | Entities, relationships, and schema reasoning |
+| [Testing](docs/testing.md) | Testing philosophy, organization, and how to run and add tests |
+| [Deployment](docs/deployment.md) | Infrastructure, Docker, nginx, HTTPS, S3, and operations |
+| [Design Decisions](docs/design-decisions.md) | Why major architectural choices were made, with trade-offs |
+| [Roadmap](docs/roadmap.md) | Sprint-by-sprint development milestones |
 
-Short version, on a fresh Ubuntu EC2 instance:
+---
 
-``` bash
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER    # log out and back in after this line
+## Demo
 
-git clone https://github.com/built-by-ann/medlens.git
-cd medlens/infra
-cp .env.example .env
-nano .env   # set JWT_SECRET_KEY, POSTGRES_PASSWORD, VITE_API_BASE_URL, APP_ENV=production, CORS_ALLOWED_ORIGINS
+MedLens is live at [medlenshealth.com](http://medlenshealth.com) (also linked at the top of this README).
 
-docker compose build
-docker compose up -d
-```
+<!-- TODO: Add a short walkthrough video once one is available. -->
 
-**See `docs/deployment.md`'s "AWS EC2 Deployment" section for the complete runbook** - launching and sizing the instance, security group configuration, every environment variable and where it's used, updating a running deployment, rollback, viewing logs, troubleshooting, and the full list of what's intentionally deferred (HTTPS, a custom domain, a reverse proxy, automated deployment, monitoring, and backups - all explicitly out of scope for now, not overlooked).
+---
 
-------------------------------------------------------------------------
+## Future Improvements
 
-# Project Status
+- Additional LLM providers (OpenBioLLM, MedGemma) and multi-model benchmarking
+- Production monitoring and alerting (e.g. CloudWatch, Sentry, performance dashboards)
+- A custom domain actually resolving to the production instance (HTTPS and the reverse proxy are already implemented)
+- Automated, CI-triggered deployment
+- FHIR and RxNorm integration
+- Medication timeline visualization
+- Background job processing
+- PDF/CSV export and prompt versioning
 
-## Completed
+See [docs/roadmap.md](docs/roadmap.md) for the full sprint-by-sprint breakdown.
 
-- Backend architecture
-- Authentication
-- Clinical document management
-- Medication management
-- AI provider abstraction
-- Gemini integration
-- Medication extraction
-- Reconciliation engine
-- Analysis lifecycle
-- Comprehensive backend test suite
-- CI/CD (frontend/backend quality checks plus Docker image build validation, on every push and PR)
-- Cloud deployment (single AWS EC2 instance via Docker Compose - see Deployment above)
+---
 
-## In Progress
+## Design Principles
 
-- React frontend
-- Dashboard
-- User experience
-- Frontend testing
+- **Modularity** - routers, services, models, and schemas each have one job; a new resource gets its own router, service, and schema rather than being folded into an existing one.
+- **Explicit validation** - every request body is validated by Pydantic before a route handler runs; every AI response is validated against a strict schema before it's trusted.
+- **Deterministic business logic** - medication reconciliation is explicit, testable, non-AI logic, kept that way on purpose.
+- **Provider abstractions** - external dependencies (an AI provider, a storage backend) are reached through an interface, never a concrete implementation, so swapping one is a configuration change.
+- **Testability** - every external dependency is reached through a seam a test can substitute with a fake, with no live network call anywhere in either test suite.
 
-## Planned
+---
 
-- Additional LLM providers
-- Production monitoring
-- HTTPS, a custom domain, and a reverse proxy
-- Automated (CI-triggered) deployment
-
-------------------------------------------------------------------------
-
-# Future Enhancements
-
-- FHIR integration
-- RxNorm integration
-- Timeline visualization
-- Background jobs
-- PDF reports
-- CSV export
-- Prompt versioning
-- Multi-model evaluation dashboard
-
-------------------------------------------------------------------------
-
-# Disclaimer
-
-MedLens is an educational software engineering project.
-
-- Uses synthetic clinical data only
-- Is not HIPAA compliant
-- Does not provide medical advice
-- Is not intended for clinical use
-
-------------------------------------------------------------------------
-
-# License
+## License
 
 This project is licensed under the MIT License.

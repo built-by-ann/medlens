@@ -4,17 +4,28 @@
 
 MedLens exposes a REST API built with FastAPI. This document describes the endpoints that are currently implemented.
 
-All endpoints return JSON.
+All endpoints return JSON (`Content-Type: application/json`), except `GET /patients/{patient_id}/clinical-documents/{document_id}/download`, which streams the original uploaded file back with its own stored `Content-Type` (see File Uploads below). Every JSON request body is also `application/json`, except the three `upload-txt`/`upload-pdf`/`upload-csv` endpoints, which take `multipart/form-data`.
+
+Error responses always have a JSON body with a `detail` key - either a string (most errors) or a structured value (request validation failures, and the CSV import endpoint's row-level errors). See Error Responses below for the exact shape returned by each status code.
+
+This document is a companion to, not a replacement for, the OpenAPI schema FastAPI generates automatically from the code itself - see OpenAPI / Interactive Docs at the end of this document.
 
 ---
 
 ## Base URL
 
+Every endpoint in this document is documented by its path alone (e.g. `POST /auth/login`) - which base URL that path is relative to depends on how you're reaching the backend:
+
 ```text
-http://localhost:8000
+http://localhost:8000       # direct access - running the backend with `uvicorn app.main:app --reload`,
+                             # or Docker Compose's backend container (127.0.0.1 only - see docs/deployment.md)
+http://<app-origin>/api      # through the app itself - the frontend's own origin, prefixed
+                             # with /api, e.g. https://medlenshealth.com/api/auth/login. This is what the
+                             # browser actually uses; nginx reverse-proxies /api/* to the backend and
+                             # strips the prefix, so POST /api/auth/login here means POST /auth/login below.
 ```
 
-This is the local development URL when running the backend directly (`uvicorn app.main:app --reload`) or through Docker Compose (`docker compose up --build` from `infra/`).
+The browser never uses the first form - only tools talking to the backend directly (`curl`, Postman, the API docs above) do, and even then only from the same host the backend is running on, or over the Docker network - see `docs/deployment.md`'s Reverse Proxy section for why.
 
 ---
 
@@ -31,6 +42,54 @@ Authorization: Bearer <access_token>
 ```
 
 If the header is missing, the token is malformed or expired, or the token references a user that no longer exists, the request is rejected with `401 Unauthorized`.
+
+There is no refresh token and no logout endpoint: a token is simply valid until it expires, and a client discarding it is the only "logout" that exists today.
+
+---
+
+## Authentication Flow
+
+```text
+POST /auth/register          Create an account (email, password, username)
+        │
+        ▼
+POST /auth/login              Exchange email + password for a JWT
+        │
+        ▼
+   Receive JWT                 { "access_token": "<jwt>", "token_type": "bearer" }
+        │
+        ▼
+Authorization: Bearer <jwt>   Attach to every subsequent request
+        │
+        ▼
+Access protected endpoints    GET /users/me, /patients, /patients/{id}/medications, ...
+```
+
+Registering does **not** log the new account in - `POST /auth/register` returns the created user's profile (`UserResponse`), not a token. A client must call `POST /auth/login` immediately afterward to obtain one, the same as any other login. Every endpoint except `GET /`, `GET /health`, `POST /auth/register`, and `POST /auth/login` requires the header above; see each endpoint's own "Authentication requirements" for confirmation.
+
+---
+
+## Schemas
+
+Every request and response body below is shown as a full worked JSON example under its endpoint - this section only covers the shapes that are *shared* across more than one endpoint, so their shape is documented once rather than repeated. For the exact field types, constraints (min length, nullability), and full enum definitions straight from the Pydantic models themselves, see `GET /docs` or `GET /openapi.json` (OpenAPI / Interactive Docs, below) - those are generated directly from the code and can never drift from it the way hand-written field tables can.
+
+Reused/nested response shapes:
+
+- **`PatientSummaryResponse`** (`id`, `first_name`, `last_name`) - a minimal patient citation, used wherever a resource needs to identify its owning patient without embedding the full `PatientResponse`. Appears in `GET /analyses/recent`.
+- **`ClinicalDocumentSummaryResponse`** (`id`, `title`, `document_type`) - a minimal document citation with no `raw_text`, used when citing a document as supporting evidence. Appears nested inside `medication_mention.clinical_document` in `GET /patients/{patient_id}/analyses/{analysis_id}`.
+- **`MedicationResponse`** - the same full medication shape returned by `GET /patients/{patient_id}/medications/{medication_id}` is also embedded directly (not summarized) in a resolved discrepancy's `medication` field, since a provider reviewing a finding needs the complete row, not a citation.
+
+Enums used across more than one field (full definitions in `app/schemas/`):
+
+| Enum | Values |
+|---|---|
+| `AnalysisStatus` | `pending`, `processing`, `completed`, `failed` |
+| `DiscrepancyType` | `missing_from_medication_list`, `discontinued_status_conflict`, `dose_conflict`, `route_conflict`, `frequency_conflict`, `status_conflict`, `unsupported_medication_list_entry` |
+| `DiscrepancySeverity` | `low`, `medium`, `high` |
+| `ResolutionStatus` | `open`, `reviewed`, `resolved`, `dismissed` |
+| `ResolutionAction` | `add_medication`, `update_medication`, `dismiss` |
+
+All five are serialized as plain strings in JSON (Pydantic `str` enums) - a client never needs to decode an integer or otherwise-encoded value.
 
 ---
 
@@ -60,7 +119,7 @@ Response
 
 Description
 
-Reports API and database connectivity status.
+Reports application status, database connectivity, and the deployment configuration already loaded into memory (version, environment, storage backend, AI provider/model) - a single place to check "what is this instance actually running as" without SSHing in. Deliberately lightweight: the only I/O it performs is one `SELECT 1` against the database this process already holds a connection pool for. It never contacts Gemini, never makes an S3 request, and never performs any other network call - `storage`/`ai` below are read directly from configuration already in memory (and, for `ai.provider`, a plain class attribute), not by constructing a real storage backend or AI provider client.
 
 Request
 
@@ -68,24 +127,59 @@ No parameters or body.
 
 Response
 
+`200 OK`
+
 ```json
 {
   "status": "ok",
-  "database": "connected"
+  "version": "1.0.0",
+  "environment": "production",
+  "database": {
+    "status": "connected"
+  },
+  "storage": {
+    "backend": "s3"
+  },
+  "ai": {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash"
+  },
+  "timestamp": "2026-08-04T02:15:30Z"
 }
 ```
 
-If the database connection fails, the response body reflects the failure instead:
+If the database connection fails, `status` and `database` reflect the failure instead - every other field is still populated exactly the same way, since none of them ever depended on the database to begin with, and they remain useful (arguably more so) while diagnosing this exact failure:
 
 ```json
 {
   "status": "error",
-  "database": "disconnected",
-  "detail": "<error message>"
+  "version": "1.0.0",
+  "environment": "production",
+  "database": {
+    "status": "disconnected",
+    "detail": "<error message>"
+  },
+  "storage": {
+    "backend": "s3"
+  },
+  "ai": {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash"
+  },
+  "timestamp": "2026-08-04T02:15:30Z"
 }
 ```
 
-Note: the endpoint currently returns HTTP `200` in both cases. Callers should check the `status` field in the body rather than the HTTP status code.
+`503 Service Unavailable` is returned in this case - unlike an outdated assumption once written here, this endpoint does **not** always return `200`; callers can rely on the HTTP status code directly (a `503` should still be treated as a real signal by anything that scripts against this endpoint, e.g. a load balancer or orchestrator health check - see `docs/deployment.md`), and may additionally check the `status` field in the body for the same information.
+
+Field notes:
+
+- `version` - `Settings.app_version` (`APP_VERSION` environment variable, defaults to `"1.0.0"`). A plain configured string, not derived from git or the Docker image tag.
+- `environment` - `Settings.app_env` (`APP_ENV`), the same value that gates CORS behavior elsewhere (see `POST /auth/register` and friends).
+- `storage.backend` - `Settings.storage_backend` (`STORAGE_BACKEND`), `"local"` or `"s3"` - see `docs/deployment.md`'s File Storage (S3) section. Never `"s3"` because a request to S3 actually succeeded; it's the *configured* backend, reported without contacting it.
+- `ai.provider` - always `"gemini"` today (`GeminiProvider.name`, `app/ai/providers/gemini_provider.py`) - there is currently only one `AIProvider` implementation wired into the application (see `docs/design-decisions.md`, Decision 15), so this reflects which class is compiled in rather than a separate selectable setting.
+- `ai.model` - `Settings.gemini_model` (`GEMINI_MODEL`), the same value `POST /patients/{patient_id}/analyses` uses for real AI calls. Reporting it here requires no Gemini API key and makes no request to Gemini - unlike using AI features themselves, which fail with a `503` and a different message when the key is missing (see that endpoint above).
+- `timestamp` - UTC, formatted like `2026-08-04T02:15:30Z`.
 
 ---
 
@@ -106,7 +200,7 @@ Request body
 }
 ```
 
-`name` is optional. `username` is required (Issue #191) — every account created from this point forward has one; see `docs/data-model.md`'s `User` entity for why the underlying column is nullable despite that.
+`name` is optional. `username` is required - every account created from this point forward has one; see `docs/data-model.md`'s `User` entity for why the underlying column is nullable despite that.
 
 Validation rules
 
@@ -114,7 +208,7 @@ Validation rules
 - `password` must be at least 8 characters long.
 - `email` must not already belong to a registered user.
 - `username` must be 3–30 characters long, containing only letters, numbers, underscores, and periods (`a-z`, `A-Z`, `0-9`, `_`, `.`).
-- `username` must not already belong to a registered user — checked **case-insensitively**: `jdoe` and `JDoe` are treated as the same username for this check, even though the value is stored and returned exactly as submitted.
+- `username` must not already belong to a registered user - checked **case-insensitively**: `jdoe` and `JDoe` are treated as the same username for this check, even though the value is stored and returned exactly as submitted.
 
 Success response
 
@@ -134,8 +228,8 @@ The stored password hash is never included in the response.
 
 Possible error responses
 
-- `409 Conflict` — the email is already registered (`"A user with this email is already registered"`), or the username is already taken, case-insensitively (`"This username is already taken"`).
-- `422 Unprocessable Entity` — invalid email format, password shorter than 8 characters, `username` missing or failing its format rules above, or another required field missing.
+- `409 Conflict` - the email is already registered (`"A user with this email is already registered"`), or the username is already taken, case-insensitively (`"This username is already taken"`).
+- `422 Unprocessable Entity` - invalid email format, password shorter than 8 characters, `username` missing or failing its format rules above, or another required field missing.
 
 ---
 
@@ -180,8 +274,8 @@ The decoded token payload contains:
 
 Possible error responses
 
-- `401 Unauthorized` — the email is not registered, or the password is incorrect. The same error message is returned in both cases so that the response does not reveal whether an email is registered.
-- `422 Unprocessable Entity` — missing or malformed request body.
+- `401 Unauthorized` - the email is not registered, or the password is incorrect. The same error message is returned in both cases so that the response does not reveal whether an email is registered.
+- `422 Unprocessable Entity` - missing or malformed request body.
 
 ---
 
@@ -209,13 +303,13 @@ Success response
 }
 ```
 
-`username` is `null` for any account created before Issue #191 that hasn't set one since — see `docs/data-model.md`.
+`username` is `null` for any account that predates usernames and hasn't set one since - see `docs/data-model.md`.
 
 401 responses
 
-- Missing `Authorization` header — `{"detail": "Not authenticated"}`
-- Invalid, malformed, or expired token — `{"detail": "Could not validate credentials"}`
-- Token is well-formed and correctly signed but references a user id that no longer exists — `{"detail": "Could not validate credentials"}`
+- Missing `Authorization` header - `{"detail": "Not authenticated"}`
+- Invalid, malformed, or expired token - `{"detail": "Could not validate credentials"}`
+- Token is well-formed and correctly signed but references a user id that no longer exists - `{"detail": "Could not validate credentials"}`
 
 ---
 
@@ -223,7 +317,7 @@ Success response
 
 Purpose
 
-Partially updates the authenticated user's own profile. Only the fields included in the request body are changed; this is a profile-editing endpoint, not a credential change — there is no way to change a password here, and authentication always continues to use email/password (Issue #191), regardless of whether a username is set.
+Partially updates the authenticated user's own profile. Only the fields included in the request body are changed; this is a profile-editing endpoint, not a credential change - there is no way to change a password here, and authentication always continues to use email/password regardless of whether a username is set.
 
 Authentication requirements
 
@@ -245,12 +339,12 @@ Validation rules
 - `username`, if included:
   - `null` clears it (an account can always go back to having no username).
   - A non-null value must pass the same 3–30 character, `a-z`/`A-Z`/`0-9`/`_`/`.`-only rules `POST /auth/register` enforces.
-  - A non-null value must not already belong to a *different* user, checked case-insensitively — re-submitting your own current username with different casing (e.g. `jdoe` → `JDoe`) is allowed, the same way re-submitting your own current email is.
+  - A non-null value must not already belong to a *different* user, checked case-insensitively - re-submitting your own current username with different casing (e.g. `jdoe` → `JDoe`) is allowed, the same way re-submitting your own current email is.
 - Fields left out of the request body are unchanged.
 
 Success response
 
-`200 OK` — the same shape as `GET /users/me`, reflecting the update:
+`200 OK` - the same shape as `GET /users/me`, reflecting the update:
 
 ```json
 {
@@ -474,7 +568,7 @@ Possible error responses
 
 Purpose
 
-Creates a medication entry in the given patient's medication list. As of Sprint 3.5 (Issue #129), medications are owned by a `Patient`, not directly by the authenticated user - see `docs/data-model.md`.
+Creates a medication entry in the given patient's medication list. Medications are owned by a `Patient`, not directly by the authenticated user - see `docs/data-model.md`.
 
 Authorization
 
@@ -776,7 +870,7 @@ Possible error responses
 
 Purpose
 
-Creates a clinical document from pasted text, belonging to the given patient. As of Sprint 3.5 (Issue #130), clinical documents are owned by a `Patient`, not directly by the authenticated user - see `docs/data-model.md`.
+Creates a clinical document from pasted text, belonging to the given patient. Clinical documents are owned by a `Patient`, not directly by the authenticated user - see `docs/data-model.md`.
 
 Authorization
 
@@ -817,9 +911,9 @@ Success response
 }
 ```
 
-`analysis_count` (added in Issue #146) is `len(document.analyses)` - how many analyses this document has been included in via `POST /patients/{patient_id}/analyses`'s `clinical_document_ids` (a computed property on the model, not a stored column; the same pattern as `AnalysisSummaryResponse.document_count`). A brand-new document always starts at `0`.
+`analysis_count` is `len(document.analyses)` - how many analyses this document has been included in via `POST /patients/{patient_id}/analyses`'s `clinical_document_ids` (a computed property on the model, not a stored column; the same pattern as `AnalysisSummaryResponse.document_count`). A brand-new document always starts at `0`.
 
-`content_type` and `file_size_bytes` (Issue #58) are `null` for a document created this way - pasted text has no original file, so there is nothing to store in S3/local storage and nothing to report a size or content type for. See `upload-txt`/`upload-pdf`/`upload-csv` below for when they're populated, and `GET .../{document_id}/download` for retrieving the file itself. There is no `storage_key` field in this response at all - it identifies the object in whichever storage backend is configured (a local path or an S3 key), and is never exposed over the API; see `docs/architecture.md`.
+`content_type` and `file_size_bytes` are `null` for a document created this way - pasted text has no original file, so there is nothing to store in S3/local storage and nothing to report a size or content type for. See `upload-txt`/`upload-pdf`/`upload-csv` below for when they're populated, and `GET .../{document_id}/download` for retrieving the file itself. There is no `storage_key` field in this response at all - it identifies the object in whichever storage backend is configured (a local path or an S3 key), and is never exposed over the API; see `docs/architecture.md`.
 
 Possible error responses
 
@@ -833,7 +927,7 @@ Possible error responses
 
 Purpose
 
-Creates a clinical document belonging to the given patient from an uploaded `.txt` file. `document_type` and `title` are sent as form fields alongside the file. As of Issue #58, the original file itself is uploaded to the configured storage backend (local disk or S3 - see `docs/architecture.md`), in addition to the extracted text already stored in `raw_text` as before; nothing about how `raw_text` is produced or used by AI analysis changed.
+Creates a clinical document belonging to the given patient from an uploaded `.txt` file. `document_type` and `title` are sent as form fields alongside the file. The original file itself is uploaded to the configured storage backend (local disk or S3 - see `docs/architecture.md`), in addition to the extracted text stored in `raw_text`.
 
 Accepted file type
 
@@ -853,7 +947,7 @@ Possible error responses
 - `401 Unauthorized`: missing or invalid access token.
 - `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
 - `422 Unprocessable Entity`: the file is not a `.txt`/`text/plain` file, is not valid UTF-8, or decodes to empty text.
-- `503 Service Unavailable` (Issue #58): the configured storage backend could not be reached - see the `503` reference under Error Responses below. Text extraction and validation happen *before* the storage upload, so a request that fails for any of the reasons above never reaches storage at all; this can only happen once the file has already passed every other check.
+- `503 Service Unavailable`: the configured storage backend could not be reached - see the `503` reference under Error Responses below. Text extraction and validation happen *before* the storage upload, so a request that fails for any of the reasons above never reaches storage at all; this can only happen once the file has already passed every other check.
 
 ---
 
@@ -861,7 +955,7 @@ Possible error responses
 
 Purpose
 
-Creates a clinical document belonging to the given patient from an uploaded `.pdf` file, extracting its text content. As of Issue #58, the original PDF itself is also uploaded to storage - see `upload-txt` above.
+Creates a clinical document belonging to the given patient from an uploaded `.pdf` file, extracting its text content. The original PDF itself is also uploaded to storage - see `upload-txt` above.
 
 Accepted file type
 
@@ -882,7 +976,7 @@ Possible error responses
 - `401 Unauthorized`: missing or invalid access token.
 - `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
 - `422 Unprocessable Entity`: the file is not a `.pdf`/`application/pdf` file, is empty, is malformed, or has no extractable text.
-- `503 Service Unavailable` (Issue #58): the configured storage backend could not be reached - see `upload-txt` above.
+- `503 Service Unavailable`: the configured storage backend could not be reached - see `upload-txt` above.
 
 ---
 
@@ -890,7 +984,7 @@ Possible error responses
 
 Purpose
 
-Creates a clinical document belonging to the given patient from an uploaded `.csv` file (Issue #164). The CSV's raw text is stored and treated exactly like an uploaded `.txt` file - it becomes ordinary evidence for AI extraction and medication reconciliation. This endpoint never parses the CSV into rows and never creates or modifies `Medication` records; that is a distinct feature (`POST /patients/{patient_id}/medications/import`, see above), unrelated to this one beyond both accepting a `.csv` file. As of Issue #58, the original CSV itself is also uploaded to storage - see `upload-txt` above.
+Creates a clinical document belonging to the given patient from an uploaded `.csv` file. The CSV's raw text is stored and treated exactly like an uploaded `.txt` file - it becomes ordinary evidence for AI extraction and medication reconciliation. This endpoint never parses the CSV into rows and never creates or modifies `Medication` records; that is a distinct feature (`POST /patients/{patient_id}/medications/import`, see above), unrelated to this one beyond both accepting a `.csv` file. The original CSV itself is also uploaded to storage - see `upload-txt` above.
 
 Accepted file type
 
@@ -911,7 +1005,7 @@ Possible error responses
 - `401 Unauthorized`: missing or invalid access token.
 - `404 Not Found`: `patient_id` does not exist or does not belong to the current user.
 - `422 Unprocessable Entity`: the file is not a `.csv`/`text/csv` file, is not valid UTF-8, or decodes to empty text.
-- `503 Service Unavailable` (Issue #58): the configured storage backend could not be reached - see `upload-txt` above.
+- `503 Service Unavailable`: the configured storage backend could not be reached - see `upload-txt` above.
 
 ---
 
@@ -964,7 +1058,7 @@ Returned if `patient_id` does not exist or does not belong to the current user, 
 
 Purpose
 
-Streams the original uploaded file belonging to the given patient's document (Issue #58) - the raw bytes that were uploaded via `upload-txt`/`upload-pdf`/`upload-csv`, not the extracted `raw_text`. The response body passes through this server; it is never a redirect to a bucket URL, and the client never learns anything about where or how the file is actually stored.
+Streams the original uploaded file belonging to the given patient's document - the raw bytes that were uploaded via `upload-txt`/`upload-pdf`/`upload-csv`, not the extracted `raw_text`. The response body passes through this server; it is never a redirect to a bucket URL, and the client never learns anything about where or how the file is actually stored.
 
 Response headers
 
@@ -978,7 +1072,7 @@ Success response
 Possible error responses
 
 - `401 Unauthorized`: missing or invalid access token.
-- `404 Not Found`: `patient_id` does not exist or does not belong to the current user; `document_id` does not exist or belongs to a different patient (same `"Clinical document not found"` detail as `GET .../{document_id}`); **or** the document exists but has no stored file to download (`{"detail": "This document has no stored file to download"}`) - true for every document created via `POST /patients/{patient_id}/clinical-documents` (pasted text, no file was ever uploaded) and for any document uploaded before Issue #58 existed.
+- `404 Not Found`: `patient_id` does not exist or does not belong to the current user; `document_id` does not exist or belongs to a different patient (same `"Clinical document not found"` detail as `GET .../{document_id}`); **or** the document exists but has no stored file to download (`{"detail": "This document has no stored file to download"}`) - true for every document created via `POST /patients/{patient_id}/clinical-documents` (pasted text, no file was ever uploaded) and for any document that predates file storage.
 - `503 Service Unavailable`: the configured storage backend could not be reached.
 
 ---
@@ -987,7 +1081,7 @@ Possible error responses
 
 Purpose
 
-Deletes a clinical document belonging to the given patient. This is a real, permanent delete. As of Issue #58, if the document had a stored file, that object is also deleted from storage - the database record is removed first, and storage deletion is treated as best-effort afterward: if it fails, the request still succeeds (the document is genuinely gone from the API's point of view), and the failure is only logged server-side, never surfaced to the caller. See `docs/architecture.md` for the reasoning.
+Deletes a clinical document belonging to the given patient. This is a real, permanent delete. If the document had a stored file, that object is also deleted from storage - the database record is removed first, and storage deletion is treated as best-effort afterward: if it fails, the request still succeeds (the document is genuinely gone from the API's point of view), and the failure is only logged server-side, never surfaced to the caller. See `docs/architecture.md` for the reasoning.
 
 Success response
 
@@ -1004,9 +1098,9 @@ Possible error responses
 
 Purpose
 
-Summarizes one or more of the given patient's clinical documents using the configured AI provider, and persists the result as a completed Analysis. As of Sprint 3.5 (Issue #130), analyses are owned by a `Patient`, not directly by the authenticated user - see `docs/data-model.md`. See `docs/ai.md` for the provider architecture.
+Summarizes one or more of the given patient's clinical documents using the configured AI provider, and persists the result as a completed Analysis. Analyses are owned by a `Patient`, not directly by the authenticated user - see `docs/data-model.md`. See `docs/ai.md` for the provider architecture.
 
-`clinical_document_ids` may reference documents just uploaded in the same session or documents already on the patient's record from an earlier visit - this endpoint has never distinguished the two; it only ever validates ownership (see Authorization below), never how or when a document was created. Issue #145 added a frontend flow (`SelectDocumentsPage`) that reuses this same endpoint to create an analysis purely from previously uploaded documents, with no backend change required. See `docs/frontend.md`.
+`clinical_document_ids` may reference documents just uploaded in the same session or documents already on the patient's record from an earlier visit - this endpoint has never distinguished the two; it only ever validates ownership (see Authorization below), never how or when a document was created. The frontend's `CreateAnalysisPage` reuses this same endpoint to create an analysis purely from previously uploaded documents, with no backend change required. See `docs/frontend.md`.
 
 Authorization
 
@@ -1050,7 +1144,7 @@ Success response
 
 `medications`, `possible_inconsistencies`, and `summary` are the provider's response, parsed as JSON and validated against a Pydantic schema. `analysis_id` identifies the Analysis this request created, whose fields, medication mentions, and inconsistencies are persisted before the response is returned. See `docs/ai.md` for the full response schema.
 
-As of Issue #148, medication reconciliation now runs automatically as part of this same request: each medication the AI extracted is persisted as supporting evidence and compared against the patient's medication list using the same deterministic reconciliation engine `docs/architecture.md`'s Reconciliation Engine section describes, producing real `MedicationDiscrepancy` rows rather than the empty findings this endpoint always returned before. This response body is unchanged by that - reconciliation results are not summarized here, only in the persisted Analysis, retrievable via `GET /patients/{patient_id}/analyses/{analysis_id}` below. See `docs/architecture.md`'s "Analysis Creation Pipeline" for the full sequence.
+Medication reconciliation runs automatically as part of this same request: each medication the AI extracted is persisted as supporting evidence and compared against the patient's medication list using the same deterministic reconciliation engine `docs/architecture.md`'s Reconciliation Engine section describes, producing real `MedicationDiscrepancy` rows. Reconciliation results are not summarized in this response body, only in the persisted Analysis, retrievable via `GET /patients/{patient_id}/analyses/{analysis_id}` below. See `docs/architecture.md`'s "Analysis Creation Pipeline" for the full sequence.
 
 If a requested document does not exist or does not belong to this patient, no Analysis is created at all. If the AI provider, persistence, or reconciliation fails after the Analysis is created, it is marked `failed` with a sanitized error message rather than left in an incomplete state, and no discrepancies from that attempt are left partially persisted. See Error Responses below.
 
@@ -1190,9 +1284,9 @@ Success response
 
 `medication_mentions`, `possible_inconsistencies`, and `medication_discrepancies` are always returned, sorted by ascending `id`, even for analyses that have none (an empty list) or that failed before persisting any results (all three lists empty, `summary`, `provider`, and `model_name` are `null`).
 
-`document_count` (added in Issue #47) is `len(analysis.clinical_documents)` - how many clinical documents this analysis covers (a computed property on the model, not a stored column, the same pattern as `ClinicalDocument.analysis_count`; also present on `AnalysisSummaryResponse` below). The Analysis Results page's AI Summary metadata shows it alongside `provider`/`model_name`/`completed_at` without a second request.
+`document_count` is `len(analysis.clinical_documents)` - how many clinical documents this analysis covers (a computed property on the model, not a stored column, the same pattern as `ClinicalDocument.analysis_count`; also present on `AnalysisSummaryResponse` below). The Analysis Results page's AI Summary metadata shows it alongside `provider`/`model_name`/`completed_at` without a second request.
 
-`medication_discrepancies` (added in Issue #148) are the deterministic reconciliation engine's findings - see `docs/architecture.md`'s Reconciliation Engine and Analysis Creation Pipeline sections for how they are produced during `POST /patients/{patient_id}/analyses`. `medication_mention_id`/`medication_id` are the raw foreign keys; as of Issue #46, each discrepancy also nests the evidence those ids point to, so the Analysis Results page can render supporting evidence without a second request:
+`medication_discrepancies` are the deterministic reconciliation engine's findings - see `docs/architecture.md`'s Reconciliation Engine and Analysis Creation Pipeline sections for how they are produced during `POST /patients/{patient_id}/analyses`. `medication_mention_id`/`medication_id` are the raw foreign keys; each discrepancy also nests the evidence those ids point to, so the Analysis Results page can render supporting evidence without a second request:
 
 - `medication_mention`, present when `medication_mention_id` is set: the `MedicationMention` extracted as supporting evidence, including `context_text` (the relevant text snippet, when the AI provided one) and a nested `clinical_document` - a minimal citation (`id`, `title`, `document_type`) of the source document, deliberately not the full document (no `raw_text`), since a citation has no need for it.
 - `medication`, present when `medication_id` is set instead: the patient's own `Medication` row (the full existing `MedicationResponse` shape), for findings like `unsupported_medication_list_entry` where the evidence is "this is on the list but was never mentioned," not an extracted mention.
@@ -1315,7 +1409,7 @@ Success response
 }
 ```
 
-`resolution_status` becomes `"resolved"` for `add_medication`/`update_medication`, or `"dismissed"` for `dismiss` - the same `ResolutionStatus` enum `docs/data-model.md` already documents, reused unchanged rather than introducing a parallel status. `resolution_action`, `resolved_at`, `resolution_note`, and `resolved_by` are the audit trail added by this endpoint; all four are `null`/absent until a discrepancy is resolved, and none of the fields the original reconciliation run computed (`title`, `ai_explanation`, `expected_value`, `observed_value`, ...) are ever changed by resolving - the finding itself remains a permanent, unaltered record. `resolved_by.username` (Issue #191) is `null` for a resolver whose account predates usernames and hasn't set one since - the frontend falls back to `name`, then `email`, when it is.
+`resolution_status` becomes `"resolved"` for `add_medication`/`update_medication`, or `"dismissed"` for `dismiss` - the same `ResolutionStatus` enum `docs/data-model.md` already documents, reused unchanged rather than introducing a parallel status. `resolution_action`, `resolved_at`, `resolution_note`, and `resolved_by` are the audit trail added by this endpoint; all four are `null`/absent until a discrepancy is resolved, and none of the fields the original reconciliation run computed (`title`, `ai_explanation`, `expected_value`, `observed_value`, ...) are ever changed by resolving - the finding itself remains a permanent, unaltered record. `resolved_by.username` is `null` for a resolver whose account predates usernames and hasn't set one since - the frontend falls back to `name`, then `email`, when it is.
 
 Possible error responses
 
@@ -1345,7 +1439,7 @@ Possible error responses
 
 Purpose
 
-Issue #157: the Dashboard's Recent Analyses feed. Unlike every other analyses endpoint, this one is **not** nested under `/patients/{patient_id}` - it spans every patient the current user owns, since the Dashboard is a cross-patient entry point, not a single patient's own page. Read-only.
+The Dashboard's Recent Analyses feed. Unlike every other analyses endpoint, this one is **not** nested under `/patients/{patient_id}` - it spans every patient the current user owns, since the Dashboard is a cross-patient entry point, not a single patient's own page. Read-only.
 
 Query parameters
 
@@ -1393,11 +1487,74 @@ Possible error responses
 
 ---
 
+## File Uploads
+
+Clinical documents can enter the system three ways: pasted text (JSON), or an uploaded file (`multipart/form-data`). Every route below is fully documented under its own entry above; this section is a consolidated summary of the pattern they share.
+
+### Pasted text
+
+`POST /patients/{patient_id}/clinical-documents` takes an ordinary JSON body (`document_type`, `title`, `raw_text`) - there is no file involved. The resulting document has `file_name`, `content_type`, and `file_size_bytes` all `null`, and `file_type` set to `"manual_entry"`. It has nothing to download: `GET .../{document_id}/download` 404s for it.
+
+### File upload
+
+| Endpoint | Accepted file | Stored `file_type` | Stored `content_type` |
+|---|---|---|---|
+| `POST /patients/{patient_id}/clinical-documents/upload-txt` | `.txt` extension or `text/plain` | `"txt"` | `"text/plain"` |
+| `POST /patients/{patient_id}/clinical-documents/upload-pdf` | `.pdf` extension or `application/pdf` | `"pdf"` | `"application/pdf"` |
+| `POST /patients/{patient_id}/clinical-documents/upload-csv` | `.csv` extension or `text/csv` | `"csv"` | `"text/csv"` |
+
+All three are `multipart/form-data` requests with the same three parts:
+
+```http
+POST /patients/1/clinical-documents/upload-txt HTTP/1.1
+Content-Type: multipart/form-data; boundary=...
+
+--...
+Content-Disposition: form-data; name="document_type"
+
+visit_note
+--...
+Content-Disposition: form-data; name="title"
+
+Initial Visit
+--...
+Content-Disposition: form-data; name="file"; filename="visit-note.txt"
+Content-Type: text/plain
+
+Patient presents with hypertension.
+--...--
+```
+
+`document_type` and `title` are plain form fields (not part of the file), both required and non-empty. Extension and content type are checked independently - either one matching is enough, so a file with a generic `application/octet-stream` content type but a correct extension is still accepted, and vice versa. Text is extracted server-side (a plain UTF-8 decode for `.txt`/`.csv`, `pypdf` for `.pdf`) into the same `raw_text` field a pasted-text document has, so AI analysis (`POST /patients/{patient_id}/analyses`) treats every document identically regardless of how it was created.
+
+**Both** the extracted text and the original file bytes are kept: `raw_text` is stored in Postgres exactly as with pasted text, and the original file is separately uploaded to the configured storage backend (`STORAGE_BACKEND=local` or `s3` - see `docs/deployment.md`) under a generated key never exposed over the API. `content_type` and `file_size_bytes` on the response reflect that stored file.
+
+### Downloading the original file
+
+`GET /patients/{patient_id}/clinical-documents/{document_id}/download` streams the original uploaded file's bytes back through this server - never a redirect to a bucket URL, and the response never reveals a storage path or key. Response headers:
+
+- `Content-Type`: the document's stored `content_type`.
+- `Content-Disposition`: `attachment; filename="<original file name>"`.
+
+A pasted-text document, or any document with no stored file, 404s here (`"This document has no stored file to download"`) rather than returning an empty body.
+
+### Two different `.csv` endpoints
+
+`POST /patients/{patient_id}/medications/import` and `POST /patients/{patient_id}/clinical-documents/upload-csv` both accept a `.csv` file but do unrelated things - the former parses it into structured `Medication` rows, the latter stores its raw text as ordinary clinical-document evidence. See each endpoint's own entry above, and the Notes section below, for the full distinction.
+
+---
+
 ## Error Responses
 
 ### 400 Bad Request
 
-Reserved for malformed requests. No endpoint currently returns this status directly — request body validation failures surface as `422` instead (see below).
+Returned only by `POST /patients/{patient_id}/analyses/{analysis_id}/discrepancies/{discrepancy_id}/resolve`, when the requested `action` doesn't make sense for that discrepancy's `discrepancy_type` or current medication linkage (see that endpoint's table above) - a request that is well-formed JSON and passes schema validation, but is semantically invalid given the resource's current state. No other endpoint returns this status; request *body* validation failures (missing/malformed fields) surface as `422` instead (see below).
+
+```json
+{
+  "detail": "add_medication is only valid for a medication missing from the list"
+}
+```
 
 ### 401 Unauthorized
 
@@ -1473,7 +1630,7 @@ Returned by `POST /patients/{patient_id}/analyses` when the configured AI provid
 }
 ```
 
-Also returned (Issue #58) by `POST /patients/{patient_id}/clinical-documents/upload-txt`/`upload-pdf`/`upload-csv` and `GET .../{document_id}/download` when the configured storage backend (local disk or S3) cannot be reached:
+Also returned by `POST /patients/{patient_id}/clinical-documents/upload-txt`/`upload-pdf`/`upload-csv` and `GET .../{document_id}/download` when the configured storage backend (local disk or S3) cannot be reached:
 
 ```json
 {
@@ -1483,12 +1640,39 @@ Also returned (Issue #58) by `POST /patients/{patient_id}/clinical-documents/upl
 
 ---
 
+## API Conventions
+
+**Pagination.** Only `GET /patients/{patient_id}/analyses` and `GET /analyses/recent` paginate, and only in the limited sense of a `limit` query parameter (integer, default `10`, minimum `1`, maximum `50`) - there is no `offset`, page number, or cursor, and no way to fetch anything past the most recent `limit` results. Every other list endpoint (`GET /patients`, `GET /patients/{patient_id}/medications`, `GET /patients/{patient_id}/clinical-documents`) returns the full, unpaginated list.
+
+**Timestamps.** Every `created_at`/`updated_at`/`started_at`/`completed_at`/`resolved_at` field is UTC, serialized by Pydantic from a `datetime` column (e.g. `"2026-07-12T19:59:14.696845Z"`). The one exception is `GET /health`'s `timestamp`, a plain pre-formatted string (`"2026-08-04T02:15:30Z"`, no microseconds) rather than a serialized `datetime` field - see that endpoint's field notes above for why. `updated_at` is `null` until a resource is actually updated for the first time; creation alone never sets it.
+
+**IDs.** Every resource is identified by an integer primary key, assigned by the database on creation - never a UUID or client-supplied id. Ownership is enforced by scoping every query to the authenticated user (directly, e.g. `Patient.user_id`, or transitively through `patient_id`, e.g. medications/clinical documents/analyses) - an id that exists but belongs to someone else is indistinguishable from one that doesn't exist at all: both 404, never `403 Forbidden` (see 404 Not Found above).
+
+**Nullable fields.** A field that is optional at creation (e.g. `Patient.external_mrn`, `Medication.notes`) is `null`, never omitted, in every response - the response schemas list every field explicitly rather than using `exclude_unset`/`exclude_none` (the one exception is `GET /health`, which does use `exclude_none` - see that endpoint). On `PATCH` endpoints, a field left out of the *request* body is left unchanged, which is a different thing from explicitly setting it to `null`; where a field can be intentionally cleared this way (e.g. `username` on `PATCH /users/me`), that's called out in the endpoint's own validation rules.
+
+**Enum values.** Every enum (see Schemas above) is a plain lowercase, `snake_case` string over the wire - `"pending"`, `"dose_conflict"`, `"add_medication"`, and so on - never an integer code.
+
+**Consistent response patterns.** `POST` that creates a resource returns `201` with the created resource; `PATCH` returns `200` with the updated resource; `DELETE` returns `204` with no body. A partial update (`PATCH`) never requires resending fields the caller isn't changing. A handful of request schemas (`UserUpdate`, `DiscrepancyResolutionIn`) reject unrecognized fields outright (`extra="forbid"`, surfacing as `422`) rather than silently ignoring them; most others (e.g. `PatientUpdate`) simply ignore an unrecognized field. Soft-delete exists only for `Patient` (`DELETE /patients/{patient_id}` sets `status: "archived"`, does not remove the row); every other `DELETE` endpoint is a real, permanent delete.
+
+---
+
+## OpenAPI / Interactive Docs
+
+This document is written and maintained by hand, alongside the code - it is not generated. FastAPI separately generates a full OpenAPI 3 schema directly from the route decorators, Pydantic models, and type hints in `app/`, always exactly in sync with the running code:
+
+- `GET /docs` - interactive Swagger UI. Every endpoint below can be tried directly from the browser, including sending a Bearer token via the "Authorize" button.
+- `GET /openapi.json` - the raw OpenAPI schema, useful for generating a typed client or importing into a tool like Postman/Insomnia.
+
+Where this document explains *why* something works the way it does (a workflow, a validation rule's reasoning, which endpoints share a schema), the OpenAPI schema is the authoritative source for the exact shape of a request or response - field types, which fields are required, and full enum definitions. If the two ever disagree, the running code (and therefore `/openapi.json`) is correct and this document is stale.
+
+---
+
 ## Notes
 
-This API currently supports authentication, application infrastructure, patient management, and patient-scoped clinical document management, medication list management, and AI-generated document summaries persisted as analyses, including listing, retrieval, and deletion of a patient's own analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/patients`, `/patients/{patient_id}/medications`, `/patients/{patient_id}/clinical-documents`, `/patients/{patient_id}/analyses`). Medication, ClinicalDocument, and Analysis are owned solely through `Patient` - `patient_id` is their only ownership column (Sprint 3.5, Issue #133 removed the transitional `user_id` these three tables carried during the migration; see `docs/data-model.md`), and the earlier flat `/medications`, `/clinical-documents`, `/ai/summarize`, and `/ai/analyses` routes no longer exist. `User` is used only for authentication and for owning `Patient` directly. Medication reconciliation runs automatically as part of `POST /patients/{patient_id}/analyses` (Issue #148) and its findings are exposed via `medication_discrepancies` on `GET /patients/{patient_id}/analyses/{analysis_id}`; a provider resolves or dismisses each finding via `POST .../discrepancies/{discrepancy_id}/resolve`, which is also the only endpoint that lets resolving a discrepancy create or update a `Medication` row on the provider's behalf.
+This API currently supports authentication, application infrastructure, patient management, and patient-scoped clinical document management, medication list management, and AI-generated document summaries persisted as analyses, including listing, retrieval, and deletion of a patient's own analyses (`/`, `/health`, `/auth/register`, `/auth/login`, `/users/me`, `/patients`, `/patients/{patient_id}/medications`, `/patients/{patient_id}/clinical-documents`, `/patients/{patient_id}/analyses`). Medication, ClinicalDocument, and Analysis are owned solely through `Patient` - `patient_id` is their only ownership column (see `docs/data-model.md` for the migration history), and there is no flat `/medications`, `/clinical-documents`, `/ai/summarize`, or `/ai/analyses` route. `User` is used only for authentication and for owning `Patient` directly. Medication reconciliation runs automatically as part of `POST /patients/{patient_id}/analyses` and its findings are exposed via `medication_discrepancies` on `GET /patients/{patient_id}/analyses/{analysis_id}`; a provider resolves or dismisses each finding via `POST .../discrepancies/{discrepancy_id}/resolve`, which is also the only endpoint that lets resolving a discrepancy create or update a `Medication` row on the provider's behalf.
 
-Issue #157 added the first exception to "every analysis is reached through its patient": `GET /analyses/recent`, a cross-patient feed for the Dashboard's Recent Analyses section, scoped to the current user (via the same `get_current_user` dependency every other endpoint uses) rather than nested under a single `patient_id`.
+`GET /analyses/recent` is the one exception to "every analysis is reached through its patient": a cross-patient feed for the Dashboard's Recent Analyses section, scoped to the current user (via the same `get_current_user` dependency every other endpoint uses) rather than nested under a single `patient_id`.
 
-Two unrelated endpoints both accept a `.csv` file, and are easy to confuse: `POST /patients/{patient_id}/medications/import` (Sprint 3.5) parses the CSV into rows and directly creates `Medication` records, while `POST /patients/{patient_id}/clinical-documents/upload-csv` (Issue #164) stores the CSV's raw text as an ordinary clinical document - evidence for AI extraction and reconciliation, never imported into the patient's medication list. Uploading the same CSV to both is a legitimate, deliberate action (e.g. importing a medication list *and* including it as analysis evidence), not a bug; the two pipelines never call into each other.
+Two unrelated endpoints both accept a `.csv` file, and are easy to confuse: `POST /patients/{patient_id}/medications/import` parses the CSV into rows and directly creates `Medication` records, while `POST /patients/{patient_id}/clinical-documents/upload-csv` stores the CSV's raw text as an ordinary clinical document - evidence for AI extraction and reconciliation, never imported into the patient's medication list. Uploading the same CSV to both is a legitimate, deliberate action (e.g. importing a medication list *and* including it as analysis evidence), not a bug; the two pipelines never call into each other.
 
-**File storage (Issue #58).** Uploading a document via `upload-txt`/`upload-pdf`/`upload-csv` now persists the *original file* (not just its extracted text) to a configured storage backend - local disk by default, or S3, selected by the `STORAGE_BACKEND` environment variable (see `docs/deployment.md`). `GET .../{document_id}/download` streams it back; the response never redirects to a bucket URL, and no endpoint anywhere ever returns an S3 URL or object key. A document created via the plain `POST /patients/{patient_id}/clinical-documents` (pasted text) has no file at all and 404s from the download endpoint. AI analysis is entirely unaffected - it has always read `raw_text` from Postgres and continues to; it never touches the storage backend, whether a document has a stored file or not.
+**File storage.** Uploading a document via `upload-txt`/`upload-pdf`/`upload-csv` persists the *original file* (not just its extracted text) to a configured storage backend - local disk by default, or S3, selected by the `STORAGE_BACKEND` environment variable (see `docs/deployment.md`). `GET .../{document_id}/download` streams it back; the response never redirects to a bucket URL, and no endpoint anywhere ever returns an S3 URL or object key. A document created via the plain `POST /patients/{patient_id}/clinical-documents` (pasted text) has no file at all and 404s from the download endpoint. AI analysis is entirely unaffected - it has always read `raw_text` from Postgres and continues to; it never touches the storage backend, whether a document has a stored file or not.

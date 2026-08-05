@@ -1,7 +1,12 @@
+import logging
+import time
+
 import boto3
 from botocore.exceptions import ClientError
 
 from app.storage.base import ObjectNotFoundError, StorageError, StorageService, StoredObject
+
+logger = logging.getLogger(__name__)
 
 
 class S3StorageService(StorageService):
@@ -36,6 +41,7 @@ class S3StorageService(StorageService):
         self._client = boto3.client("s3", **client_kwargs)
 
     def upload(self, key: str, content: bytes, content_type: str) -> None:
+        started_at = time.monotonic()
         try:
             self._client.put_object(
                 Bucket=self._bucket_name,
@@ -51,7 +57,33 @@ class S3StorageService(StorageService):
                 ACL="private",
             )
         except ClientError as error:
+            # key and the botocore error code only - never content (never
+            # passed to this method's own caller either) and never
+            # credentials, which botocore signs into a request header, not
+            # anything this exception carries (see the class docstring).
+            # Not logged at all for a plain "object not found" (see
+            # download/delete below) - that's an expected, already-handled
+            # condition, not an operational failure worth a log line.
+            logger.warning(
+                "S3 upload failed",
+                extra={
+                    "event": "s3_upload_failed",
+                    "storage_key": key,
+                    "error_type": _error_code(error),
+                    "duration_ms": round((time.monotonic() - started_at) * 1000, 1),
+                },
+            )
             raise StorageError(f"Failed to upload object to S3: {key}") from error
+
+        logger.info(
+            "S3 upload completed",
+            extra={
+                "event": "storage_upload_completed",
+                "storage_backend": "s3",
+                "storage_key": key,
+                "duration_ms": round((time.monotonic() - started_at) * 1000, 1),
+            },
+        )
 
     def download(self, key: str) -> StoredObject:
         try:
@@ -60,11 +92,27 @@ class S3StorageService(StorageService):
             if _is_not_found(error):
                 raise ObjectNotFoundError(f"No S3 object at key: {key}") from error
 
+            logger.warning(
+                "S3 download failed",
+                extra={
+                    "event": "s3_download_failed",
+                    "storage_key": key,
+                    "error_type": _error_code(error),
+                },
+            )
             raise StorageError(f"Failed to download object from S3: {key}") from error
 
         try:
             content = response["Body"].read()
         except Exception as error:
+            logger.warning(
+                "S3 download failed",
+                extra={
+                    "event": "s3_download_failed",
+                    "storage_key": key,
+                    "error_type": type(error).__name__,
+                },
+            )
             raise StorageError(f"Failed to read S3 object body: {key}") from error
 
         content_type = response.get("ContentType") or "application/octet-stream"
@@ -84,11 +132,27 @@ class S3StorageService(StorageService):
             if _is_not_found(error):
                 raise ObjectNotFoundError(f"No S3 object at key: {key}") from error
 
+            logger.warning(
+                "S3 delete failed",
+                extra={
+                    "event": "s3_delete_failed",
+                    "storage_key": key,
+                    "error_type": _error_code(error),
+                },
+            )
             raise StorageError(f"Failed to check for S3 object before delete: {key}") from error
 
         try:
             self._client.delete_object(Bucket=self._bucket_name, Key=key)
         except ClientError as error:
+            logger.warning(
+                "S3 delete failed",
+                extra={
+                    "event": "s3_delete_failed",
+                    "storage_key": key,
+                    "error_type": _error_code(error),
+                },
+            )
             raise StorageError(f"Failed to delete object from S3: {key}") from error
 
 
@@ -96,3 +160,7 @@ def _is_not_found(error: ClientError) -> bool:
     code = error.response.get("Error", {}).get("Code", "")
 
     return code in ("404", "NoSuchKey", "NotFound")
+
+
+def _error_code(error: ClientError) -> str:
+    return error.response.get("Error", {}).get("Code") or type(error).__name__

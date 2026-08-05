@@ -3,7 +3,17 @@ services:
     build:
       context: ../backend
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      # 127.0.0.1, not a bare port publish (Issue #190): the browser now
+      # only ever reaches this service through the frontend container's
+      # nginx reverse proxy (frontend/nginx.conf), which reaches it over
+      # the Docker network by service name, not through this published
+      # port at all - published ports are only ever a host-to-container
+      # path, never used for container-to-container traffic. This exists
+      # purely so a developer on the host itself can still reach the API
+      # directly (curl, Postman, `npm run dev`'s Vite dev server - see
+      # docs/deployment.md), the same reasoning already applied to
+      # postgres below.
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     environment:
       # POSTGRES_PASSWORD is shared with the postgres service below - both
       # read the same variable so they can never drift out of sync.
@@ -25,12 +35,20 @@ services:
       # any image - just a container restart.
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       # development (the default) auto-allows any localhost/127.0.0.1
-      # origin for CORS in addition to CORS_ALLOWED_ORIGINS (see
-      # app/main.py) - correct for local Docker use, but a real deployment
-      # must set this to "production" and set CORS_ALLOWED_ORIGINS
-      # explicitly, or the deployed frontend's origin will be rejected.
+      # origin for CORS (see app/main.py's configure_cors) - relevant only
+      # to `npm run dev`'s Vite dev server, which talks to this container
+      # directly and cross-origin (see docs/deployment.md). Every request
+      # that goes through the frontend container's nginx reverse proxy
+      # (Issue #190) is same-origin and never triggers CORS at all, in
+      # either environment, so there is no production equivalent of this
+      # setting to configure - see docs/design-decisions.md, Decision 24.
       APP_ENV: ${APP_ENV:-development}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      # Issue #61: reported as-is by GET /health - purely informational,
+      # never used to gate any behavior.
+      APP_VERSION: ${APP_VERSION:-1.0.0}
+      # Issue #59: root logger level - see docs/deployment.md's "Structured
+      # Application Logging" section.
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # Issue #58: defaults to local-filesystem storage (inside this
       # container - lost on every recreate, see infra/.env.example), zero
       # extra configuration needed. Settings' own startup validation
@@ -74,29 +92,87 @@ services:
       context: ../frontend
       args:
         # Baked into the built JS bundle at image build time (see
-        # frontend/Dockerfile) - the browser, not this container, is what
-        # actually calls the backend, so this must be a real, publicly
-        # reachable URL for a deployment (e.g. http://<ec2-public-ip>:8000),
-        # not backend's in-network service name. Rebuild the image (`docker
+        # frontend/Dockerfile) - a relative path (Issue #190), not an
+        # absolute URL, since the browser now reaches the backend through
+        # this same nginx container's own reverse proxy
+        # (frontend/nginx.conf) rather than a separate host/port. This is
+        # also why this same default now works unmodified for both local
+        # Docker Compose use and a real deployment - unlike before, the
+        # frontend image no longer needs to know the deployment's public
+        # hostname at build time at all. Rebuild the image (`docker
         # compose build frontend`) after changing this - restarting the
         # container alone has no effect, since it's already baked in.
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+        # Issue #189: which certificate path nginx.conf is built to
+        # expect (/etc/letsencrypt/live/$DOMAIN/... - certbot's own fixed
+        # convention) - must match whatever domain the `certbot` service
+        # below actually issues a certificate for, or nginx will look in
+        # the wrong place inside the shared certbot_certs volume. Rebuild
+        # (`docker compose build frontend`), not just restart, after
+        # changing this - same reasoning as VITE_API_BASE_URL above.
+        DOMAIN: ${DOMAIN:-medlenshealth.com}
     ports:
-      - "${FRONTEND_PORT:-8080}:80"
+      - "${FRONTEND_PORT:-80}:80"
+      # Issue #189: HTTPS - the port 80 server block (frontend/nginx.conf)
+      # only redirects here and serves the ACME challenge now; everything
+      # else (the SPA, /api/*) is served over this port.
+      - "${FRONTEND_HTTPS_PORT:-443}:443"
+    volumes:
+      # Issue #189: certbot_certs is NOT read-only from this side, despite
+      # certbot (below) being the one that writes the *real* certificate -
+      # ensure-dummy-cert.sh (frontend/Dockerfile) also needs to write the
+      # placeholder certificate here whenever a real one doesn't exist yet
+      # (every local `docker compose up`, and a brand new production
+      # instance before certbot's first run). Both are named volumes, not
+      # bind mounts, so this works identically in local development and
+      # production with no path to configure per environment.
+      - certbot_certs:/etc/nginx/ssl
+      # This one genuinely is read-only from here - nginx only ever reads
+      # ACME challenge files certbot wrote, never creates them itself.
+      - certbot_www:/var/www/certbot:ro
     restart: unless-stopped
     healthcheck:
+      # https://127.0.0.1/, not http (Issue #189) - port 80 now only
+      # redirects, so a plain HTTP check would still pass (a redirect
+      # response is itself a sign of life), but checking 443 directly
+      # verifies the thing users and /api/ traffic actually go through.
+      # --no-check-certificate: this check only cares whether nginx is
+      # responding, not whether the certificate is one a browser would
+      # trust - in local development (and briefly, on a brand new
+      # production instance before certbot's first run) it's the
+      # self-signed placeholder ensure-dummy-cert.sh generates, which is
+      # never going to validate against a real CA and isn't supposed to.
       # 127.0.0.1, not localhost: this image's nginx only listens on
-      # IPv4 (0.0.0.0:80), but the container's /etc/hosts resolves
-      # "localhost" to ::1 (IPv6) first, which wget then tries first and
-      # gets connection-refused on - a real failure caught during
+      # IPv4, but the container's /etc/hosts resolves "localhost" to ::1
+      # (IPv6) first, which wget then tries first and gets
+      # connection-refused on - a real failure caught during
       # verification, not a hypothetical.
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--no-check-certificate",
+          "--spider",
+          "https://127.0.0.1/",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
-    depends_on:
-      - backend
+    # Still no depends_on: backend, even though this container's nginx now
+    # reverse-proxies to it (Issue #190; see frontend/nginx.conf) - unlike
+    # Issue #183's original reasoning (no reverse proxy existed yet, so
+    # there was no dependency at all), nginx's use of Docker's DNS
+    # resolver with a dynamic upstream means it starts successfully even
+    # if `backend` doesn't exist yet, and self-heals /api/ once it does -
+    # a static `proxy_pass http://backend:8000` would instead fail to
+    # start entirely without this container waiting on backend first. See
+    # frontend/nginx.conf's own comments and docs/design-decisions.md,
+    # Decision 24, for the full reasoning. Waiting here anyway would
+    # needlessly delay this container's own (independent) readiness for
+    # serving the SPA - see Issue #183 for why that specifically matters.
 
   postgres:
     image: postgres:16
@@ -105,9 +181,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medlens_password}
       POSTGRES_DB: medlens_db
     ports:
-      # Bound to localhost only, unlike backend/frontend above - the
-      # database has no reason to be reachable from outside the host at
-      # all (nothing outside this compose file ever needs to reach it
+      # Bound to localhost only, like backend above and unlike frontend -
+      # the database has no reason to be reachable from outside the host
+      # at all (nothing outside this compose file ever needs to reach it
       # directly), so it stays unreachable even if a security group is
       # ever misconfigured to allow it. Still reachable from the host
       # itself (e.g. `psql -h localhost`, or an SSH tunnel from a laptop)
@@ -121,6 +197,41 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      # On a fresh volume, postgres's own entrypoint runs initdb, then
+      # briefly starts and stops the server once as part of that process
+      # before starting it for real (standard postgres:16 image behavior)
+      # - pg_isready fails (connection refused) during that window, which
+      # is expected, not a real problem. Without start_period those
+      # expected early failures count toward retries above like any other
+      # failure; matches backend's/frontend's own start_period above.
+      start_period: 10s
+
+  # Issue #189: `profiles` (not started by a plain `docker compose up` or
+  # `up -d --build`, including this issue's own validation run of those
+  # exact commands - `docker compose run` still works regardless of
+  # profiles, since it names this service explicitly) - this container
+  # isn't meant to run continuously, only on demand, e.g.
+  # `docker compose run --rm certbot certonly --webroot -w
+  # /var/www/certbot -d medlenshealth.com ...` for initial issuance, or
+  # `docker compose run --rm certbot renew` for renewal - see
+  # docs/deployment.md's HTTPS section for the full commands and the cron
+  # entry that runs the second one automatically. Sharing the same two
+  # named volumes `frontend` mounts (above) is the entire integration
+  # between the two containers: certbot writes a certificate, `frontend`'s
+  # nginx reads it from the same place, and nginx's own ACME-challenge
+  # location block (frontend/nginx.conf) serves whatever certbot writes to
+  # the webroot volume so Let's Encrypt's HTTP-01 validation can reach it.
+  certbot:
+    image: certbot/certbot
+    profiles: ["certbot"]
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
 
 volumes:
   medlens_postgres_data:
+  # Issue #189: never a bind mount to a path in this repository - a real
+  # certificate (and its private key) only ever lives in Docker's own
+  # volume storage, never in a git-tracked directory. See docs/deployment.md.
+  certbot_certs:
+  certbot_www:

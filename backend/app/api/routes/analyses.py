@@ -1,3 +1,6 @@
+import logging
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -38,6 +41,8 @@ from app.services.medication_discrepancy_service import (
     get_discrepancy_for_analysis,
     resolve_discrepancy,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/patients/{patient_id}/analyses", tags=["analyses"])
 
@@ -89,6 +94,17 @@ def summarize_clinical_documents(
             detail=NOT_FOUND_DETAIL,
         ) from None
 
+    logger.info(
+        "Analysis started",
+        extra={
+            "event": "analysis_started",
+            "patient_id": patient.id,
+            "analysis_id": analysis.id,
+        },
+    )
+
+    started_at = time.monotonic()
+
     try:
         mark_analysis_processing(db, analysis)
 
@@ -111,11 +127,51 @@ def summarize_clinical_documents(
         db.rollback()
         message = _safe_error_message(error)
         mark_analysis_failed(db, analysis, message)
+        duration_ms = (time.monotonic() - started_at) * 1000
+
+        # message is already sanitized by _safe_error_message - the same
+        # text returned to the client in the 503 below, never a raw
+        # exception message or traceback (that's logger.exception's job,
+        # already covered by GeminiProvider._log_failure for the AI-provider
+        # case, or by the global exception handler for anything else - see
+        # app/core/logging_config.py). This log's job is only to record
+        # *that*, and *which*, analysis failed and why in the sanitized,
+        # already-safe terms a client would also see.
+        logger.warning(
+            "Analysis failed: %s",
+            message,
+            extra={
+                "event": "analysis_failed",
+                "patient_id": patient.id,
+                "analysis_id": analysis.id,
+                "duration_ms": round(duration_ms, 1),
+            },
+        )
 
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=message,
         ) from error
+
+    duration_ms = (time.monotonic() - started_at) * 1000
+
+    # duration_ms here is the whole pipeline this route runs after marking
+    # the analysis processing - AI request (already timed on its own by
+    # GeminiProvider, app/ai/providers/gemini_provider.py) plus response
+    # validation and reconciliation (persist_analysis_result, above) - not
+    # a duplicate of the AI provider's own timing, a broader span that
+    # includes it.
+    logger.info(
+        "Analysis completed",
+        extra={
+            "event": "analysis_completed",
+            "patient_id": patient.id,
+            "analysis_id": analysis.id,
+            "provider": result.provider,
+            "model": result.model,
+            "duration_ms": round(duration_ms, 1),
+        },
+    )
 
     return ClinicalNoteSummaryResponse(
         analysis_id=analysis.id,
@@ -217,6 +273,7 @@ def delete_analysis_detail(
 @router.post(
     "/{analysis_id}/discrepancies/{discrepancy_id}/resolve",
     response_model=MedicationDiscrepancyDetailResponse,
+    summary="Resolve discrepancy",
 )
 def resolve_discrepancy_route(
     analysis_id: int,

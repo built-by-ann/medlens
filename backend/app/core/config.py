@@ -5,6 +5,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "MedLens API"
     app_env: str = "development"
+    # Issue #61: surfaced by GET /health so a deployed instance's version
+    # is checkable without SSHing in to inspect the running image - a
+    # plain string, not derived from git or the Docker image tag, since
+    # neither is available to the running process today.
+    app_version: str = "1.0.0"
+    # Issue #59: passed to configure_logging() (app/core/logging_config.py)
+    # as the root logger's level. "INFO" surfaces the per-request summary
+    # line and every application lifecycle event this issue adds; "DEBUG"
+    # would additionally surface third-party libraries' own debug output
+    # (SQLAlchemy query logs, etc.), which is why it isn't the default.
+    log_level: str = "INFO"
     database_url: str
 
     jwt_secret_key: str
@@ -13,12 +24,6 @@ class Settings(BaseSettings):
 
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"
-
-    # Comma-separated list of explicitly allowed frontend origins (e.g. a
-    # deployed frontend's URL). Local Vite dev servers do not need to be
-    # listed here; app.main allows any localhost/127.0.0.1 origin
-    # separately, but only outside production.
-    cors_allowed_origins: str = ""
 
     # Issue #58: which StorageService implementation
     # app/storage/service.py builds - "local" (the default, zero-config)
@@ -82,10 +87,6 @@ class Settings(BaseSettings):
                 )
 
         return self
-
-    @property
-    def cors_allowed_origins_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
 
 settings = Settings()

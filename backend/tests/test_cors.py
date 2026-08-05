@@ -13,7 +13,7 @@ ALLOWED_LOCALHOST_ORIGINS = [
 UNTRUSTED_ORIGIN = "http://evil.example.com"
 
 
-def _build_settings(monkeypatch, app_env: str, cors_allowed_origins: str = "") -> Settings:
+def _build_settings(monkeypatch, app_env: str) -> Settings:
     # Mirrors test_config.py's pattern: a fresh Settings instance from
     # explicit env vars, never the shared app-wide settings singleton, so
     # these tests can exercise multiple environments deterministically and
@@ -21,16 +21,15 @@ def _build_settings(monkeypatch, app_env: str, cors_allowed_origins: str = "") -
     monkeypatch.setenv("APP_ENV", app_env)
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@localhost:5432/db")
     monkeypatch.setenv("JWT_SECRET_KEY", "unit-test-secret")
-    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", cors_allowed_origins)
 
     return Settings(_env_file=None)
 
 
-def _build_client(monkeypatch, app_env: str, cors_allowed_origins: str = "") -> TestClient:
-    settings = _build_settings(monkeypatch, app_env, cors_allowed_origins)
+def _build_client(monkeypatch, app_env: str) -> TestClient:
+    settings = _build_settings(monkeypatch, app_env)
 
     app = FastAPI()
-    configure_cors(app, settings.app_env, settings.cors_allowed_origins_list)
+    configure_cors(app, settings.app_env)
 
     @app.get("/ping")
     def ping():
@@ -114,21 +113,17 @@ def test_production_disables_localhost_wildcard(monkeypatch):
         assert "access-control-allow-origin" not in response.headers
 
 
-def test_production_still_allows_explicitly_configured_origins(monkeypatch):
-    # Confirms production isn't "nothing works", only that the localhost
-    # convenience rule is gone; an explicitly configured deployed frontend
-    # origin must still be allowed.
-    client = _build_client(
-        monkeypatch,
-        app_env="production",
-        cors_allowed_origins="https://app.medlens.example.com",
-    )
+def test_production_allows_no_origin_at_all(monkeypatch):
+    # Issue #190: production has no cross-origin allowlist to configure
+    # anymore - the deployed frontend reaches the backend exclusively
+    # through nginx's same-origin reverse proxy (frontend/nginx.conf),
+    # never as a real cross-origin browser request, so there is no
+    # legitimate origin production should ever need to allow. A request
+    # claiming to be from what used to be a plausible deployed frontend
+    # origin must still be rejected, the same as any other origin.
+    client = _build_client(monkeypatch, app_env="production")
 
     response = _preflight(client, "https://app.medlens.example.com")
 
-    assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "https://app.medlens.example.com"
-
-    # And localhost is still rejected even with an explicit origin configured.
-    localhost_response = _preflight(client, "http://localhost:5173")
-    assert localhost_response.status_code == 400
+    assert response.status_code == 400
+    assert "access-control-allow-origin" not in response.headers

@@ -2,121 +2,228 @@
 
 ## Overview
 
-MedLens backend tests are written with `pytest` and exercise the API the same way a real client would, using FastAPI's `TestClient`. Rather than mocking the database, tests run against a real, isolated PostgreSQL database so that ORM behavior, password hashing, and JWT creation and verification are all exercised as they would be in production.
+MedLens has two independent test suites, one per half of the application: a `pytest` suite for the FastAPI backend (537 tests across 24 files) and a Vitest suite for the React frontend (around 600 tests across 64 files). Both run against the real behavior of the code they're testing rather than a simplified stand-in of it wherever practical - the backend suite exercises a real, isolated PostgreSQL database through FastAPI's own `TestClient`, and the frontend suite renders real components through React Testing Library rather than asserting against a shallow render tree.
 
-Tests are part of the definition of done for backend features.
+Tests are part of the definition of done for a feature in this project, not a separate pass added afterward. Every issue implemented in this codebase's history has included the tests for what it added, in the same change.
+
+This document describes what actually exists today. Where a testing capability doesn't exist yet - and a few genuinely don't, listed plainly in Coverage below - this document says so rather than describing it as if it were already there.
+
+---
+
+## Testing Philosophy
+
+### Why this project emphasizes testing
+
+MedLens is a portfolio project, but it's built to the standard of production software, not a demo that only has to work once for a screen recording. A synthetic-data clinical reconciliation tool has a specific reason to take correctness seriously even though no real patient data is ever at stake (Decision 8, `docs/design-decisions.md`): the whole point of the application is producing a trustworthy answer to "does this patient's medication list match what their clinical notes actually say" - a wrong answer here is the kind of bug that matters in the domain being simulated, even in a synthetic form. Tests are also this project's primary evidence that a change didn't silently break something else; with no dedicated QA and no manual regression pass before every deploy, the test suite is what actually stands in for both.
+
+### The testing pyramid, as actually reflected here
+
+The backend suite is weighted toward the middle of the pyramid rather than a strict "mostly unit tests" shape. Most backend test files exercise a real Postgres database directly - either through a full HTTP request via `TestClient` (route-level tests) or by calling a service/model function directly against the same real database (service- and model-level tests) - because the ORM behavior, constraints, and cascade rules those layers depend on are exactly the kind of thing a mocked database would let pass incorrectly. True unit tests (no database, no HTTP) exist too, for logic that's genuinely pure - medication name normalization, AI prompt construction, JWT/CORS/logging-formatter behavior - and are used specifically where the thing under test doesn't touch the database or the network at all. One deliberate end-to-end integration test (`test_analysis_workflow_integration.py`) chains registration through analysis creation through analysis retrieval in a single test, specifically to catch a failure mode none of the narrower tests around it can: two components that are each correct in isolation but disagree about the contract between them.
+
+The frontend suite is the more conventional shape: predominantly small, isolated unit/component tests (a hook tested with `renderHook`, a component tested with `render`, a pure validation function tested directly), each with the layer below it mocked (a hook test mocks the `@/api/*` module it calls; a page test mocks the hooks it calls), plus a smaller number of page- and route-level tests that render a fuller tree (a whole page, or the app's route table) to catch wiring mistakes between components that unit tests can't see. There is no end-to-end browser suite (no Playwright/Cypress) on either side - see "What is not tested" below.
+
+### What is tested
+
+- Every backend API route: success paths, validation failures, authentication/authorization enforcement, and ownership isolation (one user's data is never visible to another).
+- Backend business logic in isolation from HTTP: medication normalization, medication reconciliation, AI response validation, analysis persistence.
+- Database-level behavior that only a real database can prove: foreign key constraints, `ON DELETE` cascade/set-null behavior (Decision 10, Decision 11), uniqueness constraints.
+- Integration points with external services, via a deliberate mock at the SDK boundary: the Gemini SDK client, S3 (via `moto`), never a live network call in the test suite.
+- Structured logging: that specific fields appear on specific log events, and - just as important - that sensitive fields (passwords, tokens, prompts, document content) never do.
+- Frontend hooks, components, pages, and the route table, each rendered for real and asserted against with React Testing Library's user-facing queries (`getByRole`, `getByLabelText`) rather than implementation details.
+- Frontend form validation logic, in isolation from any component that uses it.
+
+### What is not tested (and why)
+
+- **No end-to-end browser tests** (Playwright, Cypress, Selenium). Every user-facing flow that would require one is instead covered by a combination of backend route tests (proving the API contract) and frontend page/hook tests with the API mocked (proving the UI calls it correctly and renders the result) - a real gap in true end-to-end confidence, accepted as a scope decision for a single-developer project rather than a discovered oversight.
+- **No automated migration tests.** See "Migration testing" under Backend Testing below for what does and doesn't verify a migration.
+- **No dedicated accessibility audit tool** (no `jest-axe`/`@axe-core`). See "Accessibility in tests" under Frontend Testing below for what does provide partial coverage here.
+- **No load or performance testing.** Timing metrics (`duration_ms` on structured log events) give visibility into how long things take in a real deployment, but nothing in the test suite asserts a performance budget or simulates concurrent load.
+- **No automated Docker Compose / deployment verification.** `docker build` for both images is validated in CI (see Continuous Integration below), but a full `docker compose up` - "do all three containers actually reach `healthy` and serve real traffic together" - is verified by hand during infrastructure-related issues (documented in each such issue's final report and, cumulatively, in `docs/deployment.md`), not by an automated recurring check.
 
 ---
 
 ## Test Stack
 
-- pytest
-- FastAPI TestClient
-- PostgreSQL
+**Backend**: `pytest`, FastAPI's `TestClient` (route-level tests), a real PostgreSQL database, `moto` (mocked AWS S3), Ruff (lint + format, not a test tool but part of the same quality gate). Installed via `backend/requirements-dev.txt`: `pytest`, `httpx` (`TestClient`'s transitive dependency), `reportlab` (generates real PDF bytes for PDF-upload tests), `ruff`, `moto[s3]`.
+
+**Frontend**: Vitest, jsdom (the DOM environment Vitest runs component tests in), React Testing Library, `@testing-library/user-event`, `@testing-library/jest-dom` (the `toBeInTheDocument()`-style matchers). Configured directly in `frontend/vite.config.ts`'s `test` block rather than a separate Vitest config file - see `docs/frontend.md`'s "Quality pipeline" section for the full tool configuration (ESLint, TypeScript, Prettier alongside it) and `src/test/setup.ts`'s own comments for the two jsdom polyfills it installs (`HTMLDialogElement`, `window.matchMedia`).
+
+---
+
+## Backend Testing
+
+### Organization and naming conventions
+
+Every backend test file lives directly under `backend/tests/`, one file per resource or concept, named `test_<thing>.py`. There is no subdirectory structure - flat, and small enough (24 files) that one doesn't help yet.
+
+The naming convention distinguishes *what layer* a file tests, not just *what resource*:
+
+- **Singular resource name = model/database-layer tests.** `test_analysis.py` and `test_medication_discrepancies.py` (an exception to the pattern in name only, still model-layer) construct SQLAlchemy model instances directly against the real test database and assert on constraints, defaults, relationships, and cascade behavior - no HTTP, no `TestClient`.
+- **Plural resource name = route/API-layer tests.** `test_analyses.py`, `test_patients.py`, `test_medications.py`, `test_clinical_documents.py` drive the same resource through real HTTP requests via the `client` fixture, asserting on status codes and response bodies the way an actual API consumer would.
+- **`test_<domain>_service.py` = service-layer tests.** `test_medication_reconciliation_service.py`, `test_analysis_result_service.py`, `test_clinical_document_service.py` call a service module's functions directly against the real test database, below the HTTP layer but above the raw model layer - the place business logic (not just persistence, not just routing) actually lives.
+- **A few files test one specific cross-cutting concern directly**, independent of any one resource: `test_auth_login.py`/`test_auth_register.py` (the two auth endpoints), `test_users_me.py` (the authenticated-profile endpoint), `test_cors.py` (CORS middleware, built against its own throwaway FastAPI app rather than the real one - see `configure_cors`'s own docstring in `app/main.py`), `test_config.py` (`Settings` loading and defaults), `test_logging_config.py` (log formatters, the request-context filter, and the allowlist), `test_request_logging_middleware.py` (the request-logging middleware, via the real `client` fixture), `test_gemini_provider.py` and `test_ai_service.py` (the two layers of the AI integration - see "AI provider testing" below), `test_storage_service.py` (both storage backends - see "Storage testing" below), and `test_ai_prompts.py`/`test_medication_normalization.py` (pure functions, no database at all).
+- **`test_analysis_workflow_integration.py`** is the one deliberate exception to "one file per resource or layer" - a single end-to-end test spanning registration through analysis retrieval, kept in its own file specifically because it's a different *kind* of test (see "The testing pyramid" above), not a route test for a resource called "workflow."
+
+### Fixtures and test database isolation
+
+`tests/conftest.py` is the entire fixture setup - there's no factory library (no `factory_boy`, no `Faker`) and no separate fixtures directory; test data is built with plain Python literals or small per-file helper functions (see "Adding Tests" below).
+
+Before `app` is ever imported, `conftest.py` rewrites the `DATABASE_URL` environment variable to point at a dedicated database, `medlens_test_db`, on the same local Postgres server the development database (`medlens_db`) lives on - and asserts that rewrite actually took effect (`assert _test_db_name in _test_database_url`) rather than trusting it silently. Because `Settings` and the SQLAlchemy engine are both constructed from environment variables at import time, this makes the *entire* application - including code paths that touch the database directly, not just ones reachable through a fixture - use the isolated test database automatically, with no dependency overrides needed to redirect it. `STORAGE_BACKEND` is forced to `local` and pointed at a fresh temp directory the same way, for the identical reason: a test run must never depend on, or write into, whatever a developer's own `backend/.env` happens to be configured for.
+
+Three fixtures do the rest:
+
+- **`_test_database`** (session-scoped, autouse) - creates `medlens_test_db` if it doesn't already exist, then builds its schema from the SQLAlchemy models (`Base.metadata.create_all`). Runs once per test session.
+- **`_clean_tables`** (function-scoped, autouse) - deletes every row from every table, in reverse dependency order, after each test. This is what gives each test a clean slate without paying the cost of rebuilding the schema between every one of the 537 tests; nothing needs to opt into it.
+- **`client`** - a plain `TestClient(app)`, freshly constructed per test.
+- **`db`** - a plain `SessionLocal()`, for tests that touch the database directly (model- and service-layer tests) rather than through the API.
+
+### Authentication testing
+
+There's no shortcut for "log this test in as a user" - every test that needs an authenticated user registers and logs in through the real `/auth/register` and `/auth/login` endpoints, the same as a real client would, via a small `_register_and_login(client, email, ...)` helper repeated (not shared/imported) across the test files that need it. This means JWT creation, password hashing, and the login endpoint's own correctness are exercised as a side effect of every other test that needs a token, not just by `test_auth_login.py`/`test_auth_register.py` directly. `test_users_me.py` and the `get_current_user` dependency it exercises additionally cover the negative space directly: missing, malformed, and expired tokens, and a validly-signed token referencing a user that no longer exists.
+
+### API / route testing
+
+Route-level tests use the `client` fixture end to end - a real HTTP request through `TestClient`, a real response, asserted on status code and JSON body. Current route prefixes (all nested under a patient where the resource belongs to one): `/auth/*`, `/users/me`, `/patients`, `/patients/{patient_id}/medications`, `/patients/{patient_id}/clinical-documents`, `/patients/{patient_id}/analyses`, `/analyses/recent`, `/health`. Every route test file covers, at minimum, the success path, validation failures (422s), authentication being required (401), and ownership isolation (a second registered user can never see or modify the first user's data - checked explicitly, not assumed).
+
+### AI provider testing
+
+Two distinct layers are tested separately, matching the actual code structure (`AIProvider` interface, `docs/design-decisions.md` Decision 15):
+
+- **`test_gemini_provider.py`** tests `GeminiProvider` itself, with the underlying `google.genai.Client` mocked via `monkeypatch` (a `FakeClient`/`FakeModels` pair standing in for the real SDK) - covering a missing API key failing before any client is constructed, a successful call, the JSON response-mime-type being requested, translation of both an SDK error and an unexpected exception into `AIProviderError`, rejection of an empty response, client reuse across calls, and - directly relevant to this project's logging work - that `duration_ms` and the failure `detail` field are logged on both the success and failure paths, and that the failure detail never leaks into the exception message returned to a caller.
+- **`test_ai_service.py`** tests `AISummaryService` against a fake, in-memory `AIProvider` (never the real Gemini client at all, one layer further removed) - covering prompt construction reaching the provider, response parsing into a validated `ClinicalSummary`, and every response-validation failure mode (malformed JSON, missing/incorrectly-typed fields, unexpected extra fields, an unexpected top-level structure) being rejected as `AIProviderError`.
+- **One test, `test_summarize_uses_real_gemini_provider_by_default_when_key_missing`** (`test_analyses.py`), deliberately uses the *real*, non-mocked provider wiring - it exists specifically to prove the real dependency-injection path (not just the fake used everywhere else) fails gracefully (a `503`, not a crash) when no `GEMINI_API_KEY` is configured, which is also why CI never sets that secret (see Continuous Integration below).
+
+### Storage testing
+
+`test_storage_service.py` tests both `StorageService` implementations (Decision 21) with the same assertions run against each, so behavioral parity between them is checked directly rather than assumed: `LocalStorageService` against a real `tmp_path` (pytest's own temp-directory fixture), `S3StorageService` against `moto`'s `mock_aws()` - a real `boto3` client talking to a fully in-process fake AWS, never a real network call or real AWS account. Covers upload/download/delete round-tripping, `ObjectNotFoundError` for a missing key on both backends, that an uploaded S3 object is never made public (asserted against the actual ACL grants a mocked `get_object_acl` call returns, not just that `upload()` didn't raise), that a genuine S3-side failure raises `StorageError` and not `ObjectNotFoundError`, that AWS credentials never appear in a raised error message, and that storage failures and successful-upload timing are both logged with the right fields and never with file content.
+
+### Migration testing
+
+**No automated migration tests exist.** The test database's schema is built directly from the SQLAlchemy models (`Base.metadata.create_all(bind=engine)` in `conftest.py`), not by running Alembic migrations - so the test suite never actually executes a migration file, and a migration that's individually broken (doesn't match its own model change, doesn't apply cleanly to an existing database) would not be caught by `pytest -v`. What *does* verify a migration: `backend/Dockerfile`'s container startup runs `alembic upgrade head` before starting the server on every container start (Decision 19), so a broken migration fails a `docker compose up`/deployment immediately and visibly, and in practice every migration in this project has additionally been run by hand against a real development database while it was being written. This is a real, honestly-scoped gap, not an oversight this document is glossing over.
+
+### Logging and timing metrics tests
+
+`test_logging_config.py` tests the structured-logging machinery directly: `JSONFormatter`/`ConsoleFormatter` output shape, that a field not in the `ALLOWED_FIELDS` allowlist is silently dropped even if passed via `extra=` (the core security property the logging design rests on), and the request-context `ContextVar`/filter behavior. `test_request_logging_middleware.py` tests the middleware end to end through the real `client` fixture and pytest's `caplog` fixture - exactly one summary line per completed request, the right fields on it, `X-Request-ID` header behavior, and (via `caplog`, asserting on `record.<field>` attributes directly rather than parsing formatted text) that a realistic session - registering with a real password, uploading a real clinical document with realistic clinical text - never leaks any of it into a log line anywhere in the whole test run. Timing (`duration_ms`) is asserted the same way, spread across the files for whatever it's attached to: request timing in `test_request_logging_middleware.py`, AI provider timing in `test_gemini_provider.py`, storage timing in `test_storage_service.py`, analysis-duration and document-upload/extraction timing in `test_analyses.py`/`test_clinical_documents.py`.
+
+### Middleware and CORS testing
+
+`test_cors.py` is a deliberate exception to "test through the real `client` fixture" - it builds its own minimal, throwaway `FastAPI()` app and calls `configure_cors` on it directly, so it can exercise multiple `app_env`/origin combinations in isolation without depending on (or accidentally being affected by) the rest of the real application's configuration. Covers the development-only localhost-regex allowance, that an untrusted origin's preflight is rejected with no CORS headers at all, and that production allows no origin (there is no cross-origin production request left to allow now that the frontend reaches the backend through nginx's own reverse proxy same-origin - Decision 24).
+
+---
+
+## Frontend Testing
+
+See `docs/frontend.md`'s "Quality pipeline" section for the full tool configuration this section doesn't repeat (ESLint/TypeScript/Prettier setup, the jsdom polyfills in `src/test/setup.ts`, and why `test.globals` is deliberately off).
+
+### Organization
+
+Every frontend test file is co-located directly next to the source file it tests, named `<Thing>.test.tsx`/`<thing>.test.ts` - not a parallel `tests/` or `__tests__/` directory. A component's test lives beside the component; a hook's test lives beside the hook. This means the test suite's own directory shape mirrors `src/`'s: `api/`, `components/` (further split by feature area - `analyses/`, `common/`, `dashboard/`, `documents/`, `layout/`, `medications/`, `patients/`, `settings/`, `upload/`), `contexts/`, `hooks/`, `lib/`, `pages/`, `routes/`, `styles/`, `utils/`.
+
+### Component testing
+
+A component test renders the real component with React Testing Library's `render()` and asserts against what a user would actually see and do - `getByRole`, `getByLabelText`, `userEvent` clicks/typing - not against internal state or a shallow render tree. Where a component depends on a hook or the API layer, that dependency is mocked one layer below the component under test (see "API mocking" below), so a component test proves the component's own rendering and interaction logic, not the correctness of everything it happens to call.
+
+### Page and route testing
+
+Page tests (`src/pages/*.test.tsx`) render a page inside a `MemoryRouter` (React Router's in-memory router, for a test environment with no real browser URL) with whatever hooks it depends on mocked via `vi.mock()` - `useAuth`, `usePatients`, and similar - so a page test can drive every state a page can be in (loading, error, populated, empty) without a real backend anywhere in the loop. `src/routes/AppRoutes.test.tsx` is the one file that renders the *whole* route table at once, navigating between paths and asserting the right page/redirect happens - the wiring between routes, not any single page's own content, which the page tests already cover individually. `ProtectedRoute.test.tsx`/`PublicOnlyRoute.test.tsx` test the two route-guard components directly, in isolation from any specific page.
+
+### Validation testing
+
+Form validation logic is written as plain, exported functions (`medicationFormValidation.ts`, `patientFormValidation.ts`, `profileFormValidation.ts`, and the general-purpose helpers in `utils/validation.ts`), each tested directly by calling the function with representative inputs and asserting on its return value - no component, no rendering, no DOM at all. This is deliberate: validation rules are pure logic, and testing them as pure functions is both faster and a more direct test of the actual rule than driving them indirectly through a rendered form.
+
+### API mocking
+
+There is no network-level mocking (no MSW, no `nock`) anywhere in the frontend suite. Instead, `vi.mock('@/api/<module>', ...)` replaces the specific exported functions a hook or page actually calls with `vi.fn()` mocks, at the module boundary - `usePatients.test.ts` mocks `listPatients`/`archivePatient` from `@/api/patients`, for example, not any HTTP call underneath them. This mirrors the same layered-mocking principle used throughout the backend suite (mock at the boundary of the thing under test, not several layers below it): a hook test doesn't need to know or care that `listPatients` happens to be implemented with axios, only that it's an async function returning patients or rejecting with an `ApiError`. `src/api/client.test.ts` is the one file that tests the API layer itself - specifically `toApiError`, the function that normalizes an Axios error into this app's own `ApiError` shape - constructing fake `AxiosError` objects directly rather than making any real or mocked HTTP call.
+
+### Provider testing
+
+`AuthProvider.test.tsx` and `ThemeProvider.test.tsx` test the two React context providers directly - session/token persistence and restoration, the unauthorized-request handler wiring for `AuthProvider`; system-preference detection, persistence, and the token-application side effect for `ThemeProvider` - each with a small test component or `renderHook` consuming the context, rather than testing them only incidentally through whatever happens to consume them elsewhere.
+
+### Accessibility in tests
+
+There is no dedicated accessibility audit tool (`jest-axe`, `@axe-core/react`) in this project. What does exist: the majority of frontend test files (35 of the test files that touch rendered output) query rendered output through React Testing Library's semantic, role-based queries (`getByRole`, `findByRole`) rather than test IDs or CSS selectors - a query that can only succeed if the underlying markup already exposes the right accessible role and name, so these tests fail if a component's accessibility is regressed even though that was never their stated purpose. This is real, if partial and incidental, coverage - not a substitute for an automated audit, but not nothing either. See `docs/frontend.md`'s own "Accessibility" section for the accessibility *practices* this project follows in application code, separate from what's covered by tests specifically.
 
 ---
 
 ## Running Tests
 
+### Backend
+
 ```bash
 cd backend
 source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -v
+
+ruff format --check .   # formatting - CI uses this exact form
+ruff check .            # lint
+pytest -v               # the test suite
 ```
 
-The local PostgreSQL container must be running (`docker compose up --build` from `infra/`), since tests connect to it over `localhost:5432`.
+The local PostgreSQL container must be running (`docker compose up --build` from `infra/`) - tests connect to it at `localhost:5432`. `pytest.ini`'s `pythonpath = .` is what makes `from app... import ...` resolvable inside `tests/conftest.py` when pytest is invoked as the plain `pytest` command above, rather than `python -m pytest` (the two resolve `sys.path` differently - see the comment above `pythonpath = .` in `pytest.ini` for the full explanation).
 
-`pytest.ini`'s `pythonpath = .` (Issue #54) is what makes `from app... import ...` resolvable inside `tests/conftest.py` for the plain `pytest` command above. Without it, `app` is only importable when pytest happens to be invoked as `python -m pytest` instead - `python -m` prepends the current directory to `sys.path` as a side effect of `-m` itself, which masks the gap during local ad hoc use but doesn't help GitHub Actions or any other caller of the plain `pytest` command this file documents. Discovered when `.github/workflows/backend.yml` ran `pytest -v` for the first time and failed with `ModuleNotFoundError: No module named 'app'` before this line existed.
-
----
-
-## Linting and Formatting (Issue #52)
-
-The backend has no `Makefile`/`uv`/`poetry` task runner - just `pip` and `requirements*.txt` - so the commands below are the recommended way to run the quality pipeline directly, the same way `pytest -v` already is above.
+Auto-fixable variants, for local iteration (not what CI runs):
 
 ```bash
-cd backend
-source .venv/bin/activate
-pip install -r requirements-dev.txt   # installs ruff alongside pytest/httpx/reportlab
-
-ruff check .                          # lint
-ruff check . --fix                    # lint, auto-fixing what's safely fixable
-ruff format .                         # format
-ruff format --check .                 # format, but only report - CI will use this form
+ruff check . --fix      # lint, auto-fixing what's safely fixable
+ruff format .            # format in place
 ```
 
-These are the exact commands CI runs (see "Continuous Integration" below) - passing all four locally is the same bar CI holds a branch to.
+### Frontend
 
-**Tool choice**: a single tool, Ruff, covers linting, import sorting, and formatting - there was no previous Black/isort/flake8 setup to reconcile or migrate off of; this is the project's first backend lint/format configuration. Using one tool instead of three avoids the class of bugs where a formatter and a linter disagree about the "correct" style and fight each other on every commit.
+```bash
+cd frontend
+npm run lint            # ESLint
+npm run typecheck       # TypeScript, strict, no emit
+npm run format:check    # Prettier - fails if any file isn't already formatted
+npm run test            # Vitest
+npm run build           # tsc -b && vite build - the final, authoritative check
+```
 
-**Configuration** lives in `backend/pyproject.toml` (the project has no other use for that file yet - no `[build-system]`/`[project]` table, just `[tool.ruff]`). Enabled rule sets: pycodestyle (`E`/`W`), Pyflakes (`F`), isort (`I`), pyupgrade (`UP`), flake8-bugbear (`B`), flake8-comprehensions (`C4`), flake8-simplify (`SIM`), and Ruff's own additional rules (`RUF`). Line length is 100, matching the frontend's Prettier `printWidth` (`frontend/.prettierrc.json`) so both halves of the project agree on one convention.
-
-**Intentionally ignored rules** (each documented again, in more detail, directly above its entry in `pyproject.toml`):
-
-- **`E501`** (line too long) - the formatter already wraps every line of code it can; what's left is either a long string that can't be safely rewrapped without changing its meaning (the natural-language AI prompt text in `app/ai/prompts.py`) or a long URL in a comment. Ruff's own docs recommend disabling `E501` for exactly this reason when its formatter is in use.
-- **`UP042`** (`class Foo(str, Enum)` → `class Foo(StrEnum)`) - every API schema enum (`AnalysisStatus`, `DiscrepancyType`, `DiscrepancySeverity`, `ResolutionStatus`) uses the `str, Enum` mixin today. `enum.StrEnum` isn't a guaranteed drop-in replacement - it changes how members format via `str()`/f-strings, which could silently alter API response bodies or log output. Issue #52 is lint/format only ("do not change application behavior"), so this stays off; it's a candidate for its own deliberate, tested issue later, not a side effect of this one.
-
-**`B008`** (function call in default argument) is *not* ignored, but is narrowed: FastAPI's dependency injection is `Depends(...)`/`Query(...)`/`File(...)`/`Form(...)` used as a parameter default - that's the framework's documented API, not the mutable-default-argument bug `B008` exists to catch. `[tool.ruff.lint.flake8-bugbear] extend-immutable-calls` allowlists exactly those FastAPI callables, so `B008` stays active for everything else (a plain `def f(x=some_call())` elsewhere in the codebase would still be flagged).
-
-No `noqa` comments were added or needed beyond the one already in `alembic/env.py` (`import app.models  # noqa: F401`, a deliberate side-effect import that registers every model on `Base.metadata` before Alembic reads it - see the comment above it).
+`npm run lint:fix` and `npm run format` apply the auto-fixable subset of the first two, for local iteration.
 
 ---
 
-## Continuous Integration (Issue #54)
+## Continuous Integration
 
-`.github/workflows/backend.yml` runs on every push and pull request to `main` or `develop` that touches `backend/**` (or the workflow file itself) - a frontend-only or docs-only change doesn't trigger it. It's a single `ubuntu-latest` job that checks out the repo, starts a `postgres:16` service container (same image and credentials as `infra/docker-compose.yml`'s local dev Postgres, reachable at `localhost:5432` exactly like `docs/testing.md`'s "Running Tests" section already describes), sets up Python 3.12 with `actions/setup-python`'s built-in pip cache (keyed off `backend/requirements.txt` and `backend/requirements-dev.txt`), runs `pip install -r requirements-dev.txt`, and then runs `ruff format --check .`, `ruff check .`, and `pytest -v` in that order - the same commands documented above, never invoked differently. Any one of those three failing fails the whole workflow (a step failure stops the job by default - no special configuration needed for that). There's no matrix or parallel job - a single Python version and a single job is enough for an application, not a published library supporting a range of runtimes.
+Two independent GitHub Actions workflows, each triggered only by changes to its own half of the codebase (`backend/**`/`frontend/**` respectively, or the workflow file itself) - a frontend-only change never runs the backend workflow and vice versa:
 
-`DATABASE_URL` and `JWT_SECRET_KEY` are set directly in the workflow's `env:` block, since `app/core/config.py`'s `Settings()` reads them eagerly at import time and there's no `.env` file in CI (it's gitignored). Neither is a real secret in this context - the Postgres database and the whole VM are discarded when the job ends, and `JWT_SECRET_KEY` only needs to be *some* string for token signing to work inside that one run.
+- **`.github/workflows/backend.yml`** - a single `ubuntu-latest` job against a real `postgres:16` service container (same image and credentials as local dev), running `pip install -r requirements-dev.txt`, then `ruff format --check .`, `ruff check .`, `pytest -v`, in that order - the exact commands documented above, never invoked differently. `DATABASE_URL`/`JWT_SECRET_KEY` are set directly in the job's `env:` block (neither is a real secret in this throwaway context); `GEMINI_API_KEY` is deliberately never set, which is exactly the condition `test_summarize_uses_real_gemini_provider_by_default_when_key_missing` needs (see "AI provider testing" above) - GitHub Actions never injects a secret into a job unless a step explicitly references it, so simply not referencing it is sufficient, no extra handling required.
+- **`.github/workflows/frontend.yml`** - the mirror image for the frontend: `npm ci`, then `npm run lint`, `npm run typecheck`, `npm run format:check`, `npm test`, `npm run build`, in that order - the exact `package.json` scripts documented above.
 
-**`GEMINI_API_KEY` is deliberately never set.** `test_summarize_uses_real_gemini_provider_by_default_when_key_missing` (`tests/test_analyses.py`) asserts a 503 when the key is missing - the one environmental flake mentioned throughout this project's history, which only ever failed on a local machine that happened to already have a real key exported in its shell. GitHub Actions never injects a secret into a job unless a workflow step explicitly references it via `secrets.<name>`; this workflow does not reference `secrets.GEMINI_API_KEY` (or any secret) anywhere, so the variable is simply absent in the job's environment - exactly the condition the test expects - with no extra handling, workaround, or weakening of the test required. (Secrets are also never exposed to `pull_request` runs from forked repositories at all, which would be a second, independent reason this stays safe if the project ever accepted outside contributions - but the first reason alone is sufficient here.)
+Both workflows end with a Docker image build step (`docker/build-push-action`, cached via GitHub's own Actions cache - Decision 23), proving the production image for that half of the app still builds, after every other check has already passed. Neither workflow runs the built image or exercises `docker compose up` - see "What is not tested" above for why that's a manual verification step instead.
 
-A red check on a PR always reproduces locally with the exact command named in that step's log - `ruff format --check .`, `ruff check .`, or `pytest -v` - run from `backend/` with the local Postgres running (`docker compose up --build` from `infra/`, per "Running Tests" above).
-
-**`docker build` is the workflow's final step (Issue #56).** After `pytest -v` passes, the job runs `docker build -t medlens-backend:ci .` from `backend/` - proving the production image (`backend/Dockerfile`) still builds on every push and PR, not just whenever someone happens to build it by hand before a deploy. This is deliberately the last step of the *same* `quality` job, not a second job or a second workflow file - Issue #56 asked for Docker validation to extend the existing pipeline, not duplicate it. The build needs no environment variables and never runs the resulting image (`Settings()`'s required `DATABASE_URL`/`JWT_SECRET_KEY` are only read when a container actually starts, which `docker build` doesn't do) - it only proves the image is buildable, the same narrow scope the local verification in `docs/deployment.md`'s Docker Image Builds section uses. See that section for the Dockerfile itself (multi-stage, non-root, `.dockerignore`) and `docs/design-decisions.md` (Decision 18) for why.
-
----
-
-## Test Database
-
-Tests never run against `medlens_db`, the development database.
-
-Before the application is imported, the test suite rewrites the `DATABASE_URL` environment variable to point at a separate database, `medlens_test_db`, on the same local PostgreSQL server. Because the backend's settings and database engine are constructed from environment variables at import time, this makes the entire application — including code paths that talk to the database directly — use the isolated test database automatically, with no need for dependency overrides or mocks.
-
-`medlens_test_db` is created automatically on first run if it does not already exist, and its schema is created from the SQLAlchemy models.
-
-### Isolation Between Tests
-
-After each test, all rows are removed from every table so that each test starts from a clean slate without needing to recreate the schema. Tests that need a user (for example, to log in or call `/users/me`) create one through the real `/auth/register` and `/auth/login` endpoints as part of the test itself.
+**Expected workflow before opening a PR**: run the relevant commands above locally (backend commands if `backend/` changed, frontend commands if `frontend/` changed, both if both did) and confirm they all pass. A red check on a PR always reproduces locally with the exact command named in that failed step's log - there is no CI-only configuration or behavior that could pass locally and fail in CI, or vice versa, by design.
 
 ---
 
-## Current Coverage
+## Adding Tests
 
-- **Health endpoint** — `GET /health` returns a successful status with a connected database.
-- **Registration** — successful registration, rejection of duplicate emails, rejection of invalid email formats, rejection of passwords shorter than 8 characters, and correct handling of an optional name.
-- **Login** — successful login returns a bearer token whose decoded claims match the authenticated user; incorrect passwords and unknown emails are both rejected.
-- **JWT authentication** — the `get_current_user` dependency is exercised end-to-end through `/users/me`, covering missing, malformed, expired, and otherwise invalid tokens, as well as a validly signed token referencing a user that no longer exists.
-- **/users/me** — returns the authenticated user's profile and never exposes the stored password hash.
-- **Medications**: full CRUD (create, list, retrieve, partial update, delete) scoped to the authenticated user, plus CSV import covering successful multi-row imports, optional field handling, file type and encoding validation, header validation, blank row handling, whitespace trimming, per-row field validation, atomic rejection when any row is invalid, and ownership isolation.
-- **Medication reconciliation findings**: model creation, each allowed finding type, severity, and resolution status value, rejection of invalid values, nullable medication and medication mention references, relationships to Analysis, Medication, and MedicationMention, response schema serialization, a database constraint on the required analysis reference, and deletion behavior, including cascade deletion from Analysis and reference clearing when a Medication or MedicationMention is deleted.
-- **Analysis**: model creation with a default pending status, every allowed status value and rejection of an invalid one, nonnegative validation on summary counts, the user relationship, attaching multiple clinical documents to one analysis and one document to multiple analyses, the discrepancy relationship, cascade deletion of discrepancies when an analysis is deleted, association cleanup when a clinical document is deleted, response schema serialization, the processing, completed, and failed transitions, timestamp behavior across the lifecycle, error message handling, and provider and model metadata.
-- **Medication normalization**: trimming, lowercasing, and whitespace collapsing for medication names and comparable fields, the trailing period rule for names, the known route and frequency aliases, and confirmation that unrelated or partially matching names are never treated as equivalent.
-- **Medication reconciliation service**: each supported discrepancy rule in isolation, including the discontinued-status case taking precedence over the general status conflict, no finding when only one side has a comparable value (covering both the medication and the mention lacking the value), no finding for values that are equivalent after normalization including case-insensitive name matching, exact matches on every field producing no discrepancies at all, matching and mismatching status values including an unrecognized status string falling back to the general status conflict rather than the discontinued-specific one, deduplication of identical mentions into a single finding, separate findings for genuinely distinct conflicting values, multiple distinct discrepancy types coexisting correctly in a single reconciliation run, correct linkage to the originating Medication and MedicationMention, the centralized severity mapping, full orchestration through `run_medication_reconciliation` including status and timestamp progression, count totals, provider and model metadata, rejection of a nonexistent or another user's document, a selected document with no mentions completing successfully, rollback of staged discrepancies and a sanitized error message on an unexpected failure, and isolation from another user's medications.
-- **AI prompt building**: every supplied note appears in the generated prompt, notes are numbered in order, the instructions to identify medications and to avoid attempting reconciliation are present, and an empty note list is rejected.
-- **AI summary service**: `AISummaryService` is tested against a fake in-memory provider rather than a live call, covering provider and model metadata on the result, a valid response parsed into a `ClinicalSummary` with all fields populated, optional medication fields correctly defaulting to null when omitted, empty medication and inconsistency lists, the prompt reaching the provider, propagation of a provider error, and rejection of an empty note list. Response validation is covered separately: malformed JSON, a missing required field at the top level and within a medication entry, an incorrect field type at both levels, an unexpected extra field at both levels, and an unexpected top-level JSON structure (a list instead of an object) are all rejected as `AIProviderError`.
-- **Gemini provider**: the underlying `google.genai.Client` is mocked rather than called live, covering a missing API key failing before any client is constructed, a successful call returning the response text, that the request is made with Gemini's JSON response mime type set, translation of both an SDK API error and an unexpected exception into `AIProviderError`, rejection of an empty or missing response, and that the client is constructed once and reused across calls.
-- **Analysis result persistence**: `persist_analysis_result` is tested directly against the isolated test database, covering a successful result with its Analysis fields, medication mention, and inconsistency all persisted correctly, multiple medications, multiple inconsistencies, an empty medication list, an empty inconsistency list, and rollback when the underlying completion step fails, confirming no medication mention or inconsistency rows survive and the Analysis remains in its prior state.
-- **AI summarize endpoint**: authentication is required, a successful request returns `201` with the created `analysis_id` plus the parsed medications, inconsistencies, and summary for the caller's own documents using an overridden fake provider, and the corresponding Analysis, medication mention, and inconsistency rows are confirmed persisted directly against the database. Multiple documents are combined into one prompt. A nonexistent or another user's document is rejected the same way as elsewhere in the API, with no Analysis created. An empty document id list is rejected. A provider failure and a provider response that fails schema validation both surface as a `503` and leave the Analysis persisted as `failed` with the same sanitized message returned in the response. The real, non-mocked provider wiring fails gracefully with a `503` when no API key is configured in the test environment, and that failure is persisted as well.
-- **Analysis detail retrieval**: `get_analysis_for_user` is tested directly against the isolated test database, covering a caller retrieving their own analysis with its mentions and inconsistencies loaded, `None` returned for another user's analysis and for a nonexistent id. Ordering is not asserted at this layer, since sorting happens when the response is built, not in this function. The `GET /ai/analyses/{analysis_id}` endpoint is tested end to end, covering authentication being required, a persisted completed analysis returned with its mentions, inconsistencies, and a `null` `error_message`, an analysis with no medications, an analysis with no inconsistencies, deterministic ascending-id ordering of both lists, a failed analysis returning the same sanitized `error_message` persisted by `POST /ai/summarize` with empty mention and inconsistency lists, rejection of another user's analysis, and rejection of a nonexistent analysis, all with a `404` and the same message so existence is never leaked.
-- **Complete analysis workflow (integration)**: a single end-to-end test chains registration, login, clinical document creation, `POST /ai/summarize` with a mocked AI provider, and `GET /ai/analyses/{analysis_id}` together in one run, then cross-checks that both endpoints describe the same persisted analysis. Unlike the per-component tests above, this test exists to catch integration failures between components that are individually well covered but not otherwise exercised together in one continuous request flow, including ownership enforcement carried through to the end of that flow.
-- **Analysis deletion**: `delete_analysis` is tested directly against the isolated test database, covering successful deletion of an owned analysis, cascade deletion of its `AnalysisMedicationMention` and `AnalysisInconsistency` rows, `False` returned for another user's analysis and for a nonexistent id with the analysis left untouched, and clinical documents, medications, and users all remaining intact. The `DELETE /ai/analyses/{analysis_id}` endpoint is tested end to end, covering authentication being required, a successful `204` with an empty body that also removes the persisted mentions and inconsistencies and makes the analysis unretrievable through `GET /ai/analyses/{analysis_id}` afterward, the linked clinical document remaining retrievable after the analysis is deleted, and rejection of another user's analysis and of a nonexistent analysis with the same `404` used elsewhere.
-- **Analysis listing**: `list_analyses_for_user` is tested directly against the isolated test database, covering an empty list for a user with no analyses, only the caller's own analyses ever being returned, descending-id ordering (most recent first), the `limit` parameter capping the number of rows returned, and the `clinical_documents` relationship loading correctly for computing a document count. The `GET /ai/analyses` endpoint is tested end to end, covering authentication being required, an empty list for a new user, every field on a returned row including `document_count` and the absence of full mention/inconsistency detail, isolation from another user's analyses, descending-id ordering, the `limit` query parameter, and rejection of a `limit` outside the documented `1`-`50` range with a `422`.
-- **Configuration** — application settings load expected values from environment variables and fall back to documented defaults when optional values are not set.
+### Where new tests belong
+
+**Backend**: a new file in `backend/tests/`, following the existing naming convention (see "Organization and naming conventions" above) - `test_<resource>.py` for a new model (singular) or a new set of routes (plural), `test_<domain>_service.py` for new service-layer logic, or a new test function in an existing file if the new behavior belongs to a resource/concept that already has one. There is no `__init__.py`, no subdirectory structure to place a file into - `pytest.ini`'s `testpaths = tests` already finds every `test_*.py` file directly under `tests/`.
+
+**Frontend**: a `<Thing>.test.tsx`/`.test.ts` file directly beside the source file it tests - never a separate test directory. A new component gets a test beside it; a new hook gets a test beside it; new validation logic gets a test beside the function, not the component that happens to call it first.
+
+### Naming conventions
+
+Backend: `test_<what_is_being_verified>` in `snake_case`, descriptive enough to read as a sentence on its own in a test report (`test_delete_document_returns_404_for_another_users_patient`, not `test_delete_2`). Frontend: a `describe('ComponentOrHookName', ...)` block per file matching the thing under test, with `it('does something specific', ...)` descriptions in the same descriptive-sentence style.
+
+### Patterns already used throughout the repository
+
+- **Real dependencies over mocks, wherever practical** - a real Postgres database (backend), real rendered components (frontend) - reserving mocks specifically for genuine external boundaries: an SDK client (Gemini), a cloud API (S3, via `moto`), or a sibling module one layer below the thing actually under test (frontend's `vi.mock('@/api/...')`).
+- **Small, per-file helper functions instead of a shared test-utilities module** - `_register_and_login(client, email, ...)` is repeated, not imported, across every backend test file that needs an authenticated user; `renderLoginPage()`/`renderAt(path)`-style local render helpers are similarly local to the frontend test file that needs them. Deliberately not centralized - see any recent test file's own comments for the reasoning pattern this project applies broadly (a small amount of duplication that keeps each test file self-contained beats a shared utility that couples files together).
+- **Assert on structured data, not formatted text** - `caplog`-based backend tests assert on `record.<field>` attributes directly (`record.event == "login_succeeded"`), never by parsing or substring-matching a formatted log line; frontend tests assert on rendered, accessible output (`getByRole('button', { name: '...' })`), never on raw HTML strings.
+- **Cover the negative space, not just the success path** - every route test file covers authentication being required, ownership isolation between users, and the specific validation failures that endpoint can produce, alongside its success path.
+- **Verify security-relevant properties directly, not just "it didn't crash"** - e.g. the logging allowlist test asserting a disallowed field is actually absent from formatter output, not merely that formatting didn't raise; the S3 ACL test asserting the actual grants returned by a mocked `get_object_acl` call, not just that `upload()` succeeded.
 
 ---
 
-## Future Testing
+## Coverage
 
-- Frontend (Vitest and React Testing Library)
-- CI/CD (running the backend test suite automatically on pull requests via GitHub Actions)
+No coverage percentages are collected or reported anywhere in this project (no `pytest-cov`, no `nyc`/`c8`, no coverage tooling of any kind configured on either side) - the summary below is a qualitative description of the actual test files that exist, not a number.
+
+**Extensively tested**: authentication (registration, login, JWT validation, session behavior on both sides), patient/medication/clinical-document CRUD and ownership isolation, the medication reconciliation engine (normalization, every discrepancy rule, full orchestration), the analysis lifecycle (creation, persistence, retrieval, deletion, the complete integration workflow), structured logging (formatting, the field allowlist, sensitive-data omission, request tracing), and both storage backends. On the frontend: form validation logic, the hooks layer (one file per hook, covering loading/error/success/retry states), and the great majority of components and pages.
+
+**Moderately tested**: timing metrics (`duration_ms`) - covered on the specific events it's attached to, but not exhaustively cross-checked against every event that logs a duration; CORS/development-only behavior (a handful of targeted tests against an isolated app, not exercised through the full application stack); the frontend route table as a whole (one file, `AppRoutes.test.tsx`, covering the major navigation paths rather than every possible route combination).
+
+**Minimally tested or not tested at all**: database migrations (no automated tests at all - see "Migration testing" above), Docker Compose / full-stack deployment behavior (validated by hand during infrastructure issues, not by an automated recurring test), accessibility (no dedicated audit tool - partial, incidental coverage via RTL's role-based queries only), end-to-end browser flows (no Playwright/Cypress on either side), and load/performance characteristics (timing is logged, not asserted against a budget).

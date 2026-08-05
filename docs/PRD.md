@@ -4,7 +4,7 @@
 
 **Version:** 2.0
 
-**Status:** Planning
+**Status:** MVP implemented and deployed. This document records the original requirements and scope; see `README.md` for current feature status and `docs/roadmap.md` for what remains.
 
 **Author:** Ann Mathew
 
@@ -264,7 +264,7 @@ The MVP will be considered successful if a user can:
 - Docker Compose
 - GitHub Actions
 - AWS EC2
-- AWS S3 (future)
+- AWS S3 (optional file-storage backend)
 
 ---
 

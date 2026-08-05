@@ -1,3 +1,5 @@
+import logging
+
 import boto3
 import pytest
 from moto import mock_aws
@@ -157,3 +159,105 @@ def test_s3_credentials_are_never_included_in_a_raised_error_message(s3_bucket):
 
     assert "fakeSecretKeyValueThatMustNeverAppearInLogsOrErrors" not in str(exc_info.value)
     assert "AKIAFAKEEXAMPLE00000" not in str(exc_info.value)
+
+
+# --- Storage failure logging (Issue #59) ---
+
+
+def test_s3_upload_failure_is_logged_with_key_and_error_type_but_not_content(s3_bucket, caplog):
+    storage = S3StorageService(bucket_name="this-bucket-does-not-exist", region="us-east-1")
+
+    with caplog.at_level(logging.WARNING), pytest.raises(StorageError):
+        storage.upload("patients/7/notes.txt", b"sensitive clinical content", "text/plain")
+
+    (record,) = [r for r in caplog.records if r.event == "s3_upload_failed"]
+    assert record.storage_key == "patients/7/notes.txt"
+    assert record.error_type
+    assert "sensitive clinical content" not in caplog.text
+
+
+def test_s3_download_failure_is_logged_with_key_and_error_type(s3_bucket, caplog):
+    storage = S3StorageService(bucket_name="this-bucket-does-not-exist", region="us-east-1")
+
+    with caplog.at_level(logging.WARNING), pytest.raises(StorageError):
+        storage.download("patients/7/notes.txt")
+
+    (record,) = [r for r in caplog.records if r.event == "s3_download_failed"]
+    assert record.storage_key == "patients/7/notes.txt"
+    assert record.error_type
+
+
+def test_s3_download_for_a_missing_object_is_not_logged_as_a_failure(s3_bucket, caplog):
+    # ObjectNotFoundError is an expected, already-handled condition (see
+    # S3StorageService.download) - not an operational failure worth a log
+    # line, unlike a genuine S3-side error.
+    storage = _s3_storage(s3_bucket)
+
+    with caplog.at_level(logging.WARNING), pytest.raises(ObjectNotFoundError):
+        storage.download("does/not/exist.txt")
+
+    assert [r for r in caplog.records if r.event == "s3_download_failed"] == []
+
+
+def test_s3_delete_failure_is_logged_with_key_and_error_type(s3_bucket, caplog):
+    storage = S3StorageService(bucket_name="this-bucket-does-not-exist", region="us-east-1")
+
+    with caplog.at_level(logging.WARNING), pytest.raises(StorageError):
+        storage.delete("patients/7/notes.txt")
+
+    (record,) = [r for r in caplog.records if r.event == "s3_delete_failed"]
+    assert record.storage_key == "patients/7/notes.txt"
+    assert record.error_type
+
+
+def test_s3_delete_for_a_missing_object_is_not_logged_as_a_failure(s3_bucket, caplog):
+    storage = _s3_storage(s3_bucket)
+
+    with caplog.at_level(logging.WARNING), pytest.raises(ObjectNotFoundError):
+        storage.delete("does/not/exist.txt")
+
+    assert [r for r in caplog.records if r.event == "s3_delete_failed"] == []
+
+
+# --- Storage upload timing (Issue #60) ---
+
+
+def test_local_upload_logs_storage_upload_completed_duration_ms(tmp_path, caplog):
+    storage = LocalStorageService(base_dir=str(tmp_path))
+
+    with caplog.at_level(logging.INFO):
+        storage.upload("a.txt", b"content", "text/plain")
+
+    (record,) = [r for r in caplog.records if r.event == "storage_upload_completed"]
+    assert record.storage_backend == "local"
+    assert record.storage_key == "a.txt"
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+
+
+def test_s3_upload_logs_storage_upload_completed_duration_ms(s3_bucket, caplog):
+    storage = _s3_storage(s3_bucket)
+
+    with caplog.at_level(logging.INFO):
+        storage.upload("a.txt", b"content", "text/plain")
+
+    (record,) = [r for r in caplog.records if r.event == "storage_upload_completed"]
+    assert record.storage_backend == "s3"
+    assert record.storage_key == "a.txt"
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+
+
+def test_s3_upload_failure_also_includes_duration_ms(s3_bucket, caplog):
+    # The timer that produces storage_upload_completed's duration_ms above
+    # is the same one already wrapping the failure path (S3StorageService.upload) -
+    # naturally extending the existing s3_upload_failed log with the value
+    # it was already computing, not a second, duplicate timing mechanism.
+    storage = S3StorageService(bucket_name="this-bucket-does-not-exist", region="us-east-1")
+
+    with caplog.at_level(logging.WARNING), pytest.raises(StorageError):
+        storage.upload("a.txt", b"content", "text/plain")
+
+    (record,) = [r for r in caplog.records if r.event == "s3_upload_failed"]
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0

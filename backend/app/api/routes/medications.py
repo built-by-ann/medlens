@@ -33,6 +33,7 @@ NOT_FOUND_DETAIL = "Medication not found"
     "",
     response_model=MedicationResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Create medication",
 )
 def create_medication_route(
     medication_in: MedicationCreate,
@@ -121,7 +122,7 @@ def read_medication(
     return medication
 
 
-@router.patch("/{medication_id}", response_model=MedicationResponse)
+@router.patch("/{medication_id}", response_model=MedicationResponse, summary="Update medication")
 def patch_medication(
     medication_id: int,
     medication_in: MedicationUpdate,

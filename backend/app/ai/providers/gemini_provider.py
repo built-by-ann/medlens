@@ -80,10 +80,13 @@ class GeminiProvider(AIProvider):
 
         duration_ms = (time.monotonic() - started_at) * 1000
         logger.info(
-            "AI request succeeded provider=%s model=%s duration_ms=%.1f",
-            self.name,
-            self.model,
-            duration_ms,
+            "AI request succeeded",
+            extra={
+                "event": "ai_request_succeeded",
+                "provider": self.name,
+                "model": self.model,
+                "duration_ms": round(duration_ms, 1),
+            },
         )
 
         return text
@@ -95,21 +98,29 @@ class GeminiProvider(AIProvider):
         error_type = type(error).__name__ if error is not None else (reason or "unknown")
         detail = self._error_detail(error, reason)
 
-        # Server-side only - never included in the AIProviderError message
-        # raised above, which is what reaches the frontend (see
-        # _safe_error_message, app/api/routes/analyses.py). detail describes
-        # the API's own response to the request (e.g. "RESOURCE_EXHAUSTED",
-        # "models/gemini-2.0-flash is not found"), never the request itself:
-        # the Gemini SDK sends the API key as a request header, never in a
-        # URL or an exception message, and neither the prompt nor any
-        # clinical text is ever passed to this method or logged anywhere.
+        # detail is folded into the message text, not a separate structured
+        # field - the allowlist in app/core/logging_config.py is deliberately
+        # narrow, and detail is a free-form (if already-vetted-safe)
+        # description rather than a value worth filtering/aggregating on the
+        # way error_type is. Server-side only - never included in the
+        # AIProviderError message raised above, which is what reaches the
+        # frontend (see _safe_error_message, app/api/routes/analyses.py).
+        # detail describes the API's own response to the request (e.g.
+        # "RESOURCE_EXHAUSTED", "models/gemini-2.0-flash is not found"),
+        # never the request itself: the Gemini SDK sends the API key as a
+        # request header, never in a URL or an exception message, and
+        # neither the prompt nor any clinical text is ever passed to this
+        # method or logged anywhere.
         logger.warning(
-            "AI request failed provider=%s model=%s duration_ms=%.1f error_type=%s detail=%s",
-            self.name,
-            self.model,
-            duration_ms,
-            error_type,
+            "AI request failed: %s",
             detail,
+            extra={
+                "event": "ai_request_failed",
+                "provider": self.name,
+                "model": self.model,
+                "duration_ms": round(duration_ms, 1),
+                "error_type": error_type,
+            },
         )
 
     @staticmethod

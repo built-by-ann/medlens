@@ -124,7 +124,13 @@ def test_generate_summary_logs_api_error_message_server_side_only(monkeypatch, c
         provider.generate_summary("some prompt")
 
     assert "models/gemini-2.0-flash is not found" in caplog.text
-    assert "error_type=ClientError" in caplog.text
+    # error_type is a structured field (extra=), not part of the message
+    # text caplog.text renders - see app/core/logging_config.py's
+    # ALLOWED_FIELDS/JSONFormatter for why call sites pass fields this way
+    # rather than baking them into the message string.
+    (record,) = [r for r in caplog.records if r.event == "ai_request_failed"]
+    assert record.error_type == "ClientError"
+    assert record.provider == "gemini"
     # The API's failure description is server-side-log-only - it must never
     # reach the caller (see _safe_error_message, app/api/routes/analyses.py),
     # which only ever sees the generic wrapped message below.
@@ -185,6 +191,51 @@ def test_generate_summary_raises_on_none_response_text(monkeypatch):
 
     with pytest.raises(AIProviderError):
         provider.generate_summary("some prompt")
+
+
+# --- Timing (Issue #60) -------------------------------------------------
+#
+# duration_ms on ai_request_succeeded/ai_request_failed already existed
+# before this issue (added when this file's other logging assertions were
+# written, Issue #59) - these two tests are new *coverage* for that
+# already-correct behavior, not a code change, per Issue #60's own
+# "Leverage existing request timing... avoid duplicated instrumentation."
+
+
+def test_generate_summary_logs_duration_ms_on_success(monkeypatch, caplog):
+    fake_models = FakeModels(response=FakeResponse("Concise medication summary."))
+    monkeypatch.setattr(
+        "app.ai.providers.gemini_provider.genai.Client",
+        lambda **kwargs: FakeClient(fake_models),
+    )
+
+    provider = GeminiProvider(api_key="fake-key", model="gemini-test")
+
+    with caplog.at_level(logging.INFO):
+        provider.generate_summary("some prompt")
+
+    (record,) = [r for r in caplog.records if r.event == "ai_request_succeeded"]
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+    assert record.provider == "gemini"
+    assert record.model == "gemini-test"
+
+
+def test_generate_summary_logs_duration_ms_on_failure(monkeypatch, caplog):
+    fake_models = FakeModels(error=RuntimeError("connection reset"))
+    monkeypatch.setattr(
+        "app.ai.providers.gemini_provider.genai.Client",
+        lambda **kwargs: FakeClient(fake_models),
+    )
+
+    provider = GeminiProvider(api_key="fake-key")
+
+    with caplog.at_level(logging.WARNING), pytest.raises(AIProviderError):
+        provider.generate_summary("some prompt")
+
+    (record,) = [r for r in caplog.records if r.event == "ai_request_failed"]
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
 
 
 def test_generate_summary_reuses_client_across_calls(monkeypatch):

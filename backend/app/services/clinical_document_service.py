@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 
 from sqlalchemy.orm import Session, selectinload
@@ -66,6 +67,7 @@ def create_clinical_document_from_file(
     file_type: str,
     content: bytes,
     content_type: str,
+    started_at: float | None = None,
 ) -> ClinicalDocument:
     """Uploads the original file to storage, then persists the document
     with the resulting metadata. Text extraction (producing `raw_text`)
@@ -73,7 +75,17 @@ def create_clinical_document_from_file(
     before this is called - a PDF/CSV/TXT that fails extraction never
     reaches here, so this function never uploads a file for a document
     that wouldn't have been created anyway.
+
+    started_at (Issue #60): a time.monotonic() reading from the top of the
+    calling route handler, used only to compute the document_uploaded log's
+    duration_ms below - the "document upload processing" span covers the
+    whole route (validation, extraction, this function), not just the part
+    inside this function, so the timer has to start before this function is
+    even called. Optional (defaults to now, i.e. ~0ms) so this function
+    still works standalone, e.g. from a test that doesn't care about timing.
     """
+    if started_at is None:
+        started_at = time.monotonic()
     storage_key = _build_storage_key(patient.id, file_name)
     storage.upload(storage_key, content, content_type)
 
@@ -103,13 +115,24 @@ def create_clinical_document_from_file(
             storage.delete(storage_key)
         except StorageError:
             logger.warning(
-                "Failed to clean up orphaned storage object after a failed "
-                "document creation key=%s",
-                storage_key,
+                "Failed to clean up orphaned storage object after a failed document creation",
+                extra={"event": "storage_cleanup_failed"},
             )
         raise
 
     db.refresh(document)
+
+    duration_ms = (time.monotonic() - started_at) * 1000
+    logger.info(
+        "Clinical document uploaded",
+        extra={
+            "event": "document_uploaded",
+            "patient_id": patient.id,
+            "document_id": document.id,
+            "file_type": file_type,
+            "duration_ms": round(duration_ms, 1),
+        },
+    )
 
     return document
 
@@ -175,6 +198,11 @@ def delete_clinical_document(
     db.delete(document)
     db.commit()
 
+    logger.info(
+        "Clinical document deleted",
+        extra={"event": "document_deleted", "patient_id": patient_id, "document_id": document_id},
+    )
+
     # The database record - what the user actually sees as "this document
     # is gone" - is already correctly deleted at this point, regardless of
     # what happens below. Deleting the storage object second, and treating
@@ -188,8 +216,12 @@ def delete_clinical_document(
             pass
         except StorageError:
             logger.warning(
-                "Failed to delete storage object for a deleted document key=%s",
-                storage_key,
+                "Failed to delete storage object for a deleted document",
+                extra={
+                    "event": "storage_delete_failed",
+                    "patient_id": patient_id,
+                    "document_id": document_id,
+                },
             )
 
     return True
