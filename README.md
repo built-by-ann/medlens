@@ -50,10 +50,6 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 ![AI summary](docs/screenshots/analysis-ai-summary.png)
 
-**Login**
-
-<img src="docs/screenshots/login.png" width="320" alt="Login page">
-
 **Responsive mobile layout**
 
 <table>
