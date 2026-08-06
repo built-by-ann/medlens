@@ -1,0 +1,28 @@
+Primary Care Office Visit
+Patient: Margaret Chen
+Date: June 3, 2026
+Provider: Internal Medicine
+
+Reason for visit: Hypertension follow-up.
+
+History: Patient returns for blood pressure follow-up. Home readings have
+trended upward over the past two months, averaging 148/92 despite reported
+adherence to her medications. She also reports mild swelling in both lower
+legs over the past several weeks, which she attributes to her blood pressure
+medication.
+
+Exam: Blood pressure 146/90 in clinic. 1+ pitting edema bilateral lower
+extremities.
+
+Assessment: Uncontrolled hypertension. Lower extremity edema, most likely
+related to amlodipine.
+
+Plan:
+- Increase Lisinopril to 20 mg oral once daily to improve blood pressure
+  control.
+- Discontinue Amlodipine 5 mg oral once daily given the edema and the
+  expected improvement in blood pressure control from the Lisinopril
+  increase. Amlodipine discontinued as of today's visit.
+- Other medications today: Metformin 500 mg oral twice daily. Atorvastatin
+  40 mg oral nightly. Aspirin 81 mg oral once daily.
+- Recheck blood pressure at home and follow up by phone in 2 weeks.

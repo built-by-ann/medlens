@@ -1,0 +1,22 @@
+Pulmonology Consultation
+Patient: Jasmine Patel
+Date: July 20, 2026
+Provider: Pediatric Pulmonology
+
+Age: 9 years
+
+Reason for visit: Asthma follow-up after recent exacerbation.
+
+History: Referred following an urgent care visit for an asthma
+exacerbation. Mother reports Jasmine has been using her Albuterol HFA
+90 mcg rescue inhaler almost every day over the past month, roughly once
+daily, which is more frequent than the as-needed pattern documented
+previously.
+
+Assessment: Asthma, not well-controlled based on rescue inhaler frequency.
+
+Plan: Step up controller therapy. Fluticasone propionate increased from
+44 mcg to 110 mcg inhalation twice daily. Montelukast 5 mg oral once daily.
+Goal is to return to true as-needed Albuterol HFA use once controller
+therapy takes effect. Updated asthma action plan provided for home and
+school.

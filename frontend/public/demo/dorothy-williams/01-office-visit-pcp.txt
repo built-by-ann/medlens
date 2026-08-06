@@ -1,0 +1,28 @@
+Primary Care Office Visit
+Patient: Dorothy Williams
+Date: July 8, 2026
+Provider: Internal Medicine
+
+Age: 82 years
+
+History: Patient with atrial fibrillation on anticoagulation, chronic
+kidney disease stage 3, type 2 diabetes, and osteoarthritis of the knees.
+Reports stable energy and no bleeding concerns. Ongoing knee pain, using
+ibuprofen regularly with reasonable relief.
+
+Medications reviewed:
+- Warfarin 5 mg oral once daily
+- Metformin 1000 mg oral twice daily
+- Losartan 50 mg oral once daily
+- Furosemide 40 mg oral once daily
+- Calcium carbonate / Vitamin D3 600 mg / 400 IU oral twice daily
+- Ibuprofen 400 mg oral three times daily as needed, for knee pain
+
+Labs: Creatinine mildly elevated from prior, trending upward over the last
+year.
+
+Assessment: Atrial fibrillation, rate-controlled. Chronic kidney disease
+stage 3, worsening. Type 2 diabetes, stable. Osteoarthritis, symptomatic.
+
+Plan: Referring to nephrology given worsening renal function. No changes
+to current medications pending nephrology evaluation.

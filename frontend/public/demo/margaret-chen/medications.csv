@@ -1,0 +1,6 @@
+medication_name,dose,route,frequency,status,source,notes
+Lisinopril,10 mg,oral,once daily,active,patient_reported,
+Metformin,500 mg,oral,twice daily,active,patient_reported,
+Atorvastatin,40 mg,oral,nightly,active,patient_reported,
+Amlodipine,5 mg,oral,once daily,active,patient_reported,
+Aspirin,81 mg,oral,once daily,active,patient_reported,Low-dose for cardiovascular risk reduction

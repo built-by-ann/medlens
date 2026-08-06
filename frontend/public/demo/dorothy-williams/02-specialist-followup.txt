@@ -1,0 +1,24 @@
+Nephrology Consultation
+Patient: Dorothy Williams
+Date: July 29, 2026
+Provider: Nephrology
+
+Age: 82 years
+
+Reason for visit: Chronic kidney disease evaluation.
+
+History: Referred for progressive chronic kidney disease, now stage 3.
+Reviewing medications for nephrotoxic exposures. Patient reports taking
+Ibuprofen 400 mg oral three times daily as needed for knee pain, most days
+of the week.
+
+Assessment: Chronic kidney disease stage 3, progressive, likely worsened by
+chronic NSAID use.
+
+Plan: Ibuprofen 400 mg oral three times daily as needed is nephrotoxic and
+is likely contributing to her declining renal function. Instructed patient
+to discontinue ibuprofen entirely and use acetaminophen instead for pain
+control. Her other medications today: Metformin 1000 mg oral twice daily,
+acceptable at her current kidney function but to be reassessed if it
+declines further. Losartan 50 mg oral once daily, for renal protection.
+Repeat labs in 6 weeks.
