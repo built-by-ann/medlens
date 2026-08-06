@@ -35,11 +35,6 @@ export function TopNav() {
             </NavLink>
           </li>
           <li>
-            <NavLink to={ROUTES.settings} className={navLinkClassName}>
-              Settings
-            </NavLink>
-          </li>
-          <li>
             <NavLink to={ROUTES.demoGuide} className={navLinkClassName}>
               Demo Guide
             </NavLink>
@@ -47,6 +42,11 @@ export function TopNav() {
           <li>
             <NavLink to={ROUTES.about} className={navLinkClassName}>
               About
+            </NavLink>
+          </li>
+          <li>
+            <NavLink to={ROUTES.settings} className={navLinkClassName}>
+              Settings
             </NavLink>
           </li>
         </ul>
