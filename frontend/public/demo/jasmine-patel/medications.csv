@@ -1,0 +1,4 @@
+medication_name,dose,route,frequency,status,source,notes
+Albuterol HFA,90 mcg,inhalation,as needed,active,patient_reported,Rescue inhaler
+Fluticasone propionate,44 mcg,inhalation,twice daily,active,patient_reported,Controller inhaler
+Montelukast,5 mg,oral,once daily,active,patient_reported,

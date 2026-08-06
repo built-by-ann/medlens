@@ -1,0 +1,20 @@
+Endocrinology Consultation
+Patient: Margaret Chen
+Date: July 10, 2026
+Provider: Endocrinology
+
+Reason for visit: Type 2 diabetes management.
+
+History: Patient reports good glycemic control with no episodes of
+hypoglycemia. Diet and exercise reviewed and reinforced. Patient reports
+taking Aspirin 81 mg oral once daily as previously prescribed by her
+primary care provider for cardiovascular risk reduction.
+
+Medications reviewed:
+- Metformin 500 mg oral twice daily - active
+- Aspirin 81 mg oral once daily - active
+
+Assessment: Type 2 diabetes, well controlled on current regimen.
+
+Plan: Repeat A1c in 3 months. No other changes to the diabetes regimen at
+this time.

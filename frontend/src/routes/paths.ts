@@ -1,10 +1,12 @@
 export const ROUTES = {
   home: '/',
+  about: '/about',
   login: '/login',
   signup: '/signup',
   dashboard: '/dashboard',
   patients: '/patients',
   settings: '/settings',
+  demoGuide: '/demo-guide',
   newPatient: '/patients/new',
   patientDetail: '/patients/:patientId',
   patientEdit: '/patients/:patientId/edit',

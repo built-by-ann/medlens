@@ -1,0 +1,27 @@
+Emergency Department Note
+Patient: Robert Alvarez
+Date: August 1, 2026
+Provider: Emergency Medicine
+
+Chief complaint: Progressive shortness of breath and leg swelling.
+
+History of present illness: 74-year-old male presents with worsening
+dyspnea on exertion and bilateral lower extremity edema over the past week,
+now with dyspnea at rest. No chest pain. No fever.
+
+Home medications:
+- Amlodipine 10 mg oral once daily
+- Atorvastatin 20 mg oral nightly
+- Aspirin 81 mg oral once daily
+- Metoprolol tartrate 25 mg oral twice daily
+- Furosemide 20 mg oral once daily
+
+Exam: Bibasilar crackles, 2+ pitting edema to the knees, elevated jugular
+venous pressure.
+
+Labs/imaging: BNP markedly elevated. Chest X-ray shows pulmonary vascular
+congestion.
+
+Assessment: Acute decompensated heart failure.
+
+Plan: Admit to cardiology for intravenous diuresis and further management.

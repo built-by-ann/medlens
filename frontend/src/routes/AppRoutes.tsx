@@ -3,6 +3,8 @@ import { PublicLayout } from '@/layouts/PublicLayout'
 import { ProtectedLayout } from '@/layouts/ProtectedLayout'
 import { PublicOnlyRoute } from '@/components/common/PublicOnlyRoute'
 import { HomePage } from '@/pages/HomePage'
+import { AboutPage } from '@/pages/AboutPage'
+import { DemoGuidePage } from '@/pages/DemoGuidePage'
 import { LoginPage } from '@/pages/LoginPage'
 import { SignupPage } from '@/pages/SignupPage'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -48,6 +50,8 @@ export function AppRoutes() {
         <Route path={ROUTES.dashboard} element={<DashboardPage />} />
         <Route path={ROUTES.patients} element={<PatientsPage />} />
         <Route path={ROUTES.settings} element={<SettingsPage />} />
+        <Route path={ROUTES.about} element={<AboutPage />} />
+        <Route path={ROUTES.demoGuide} element={<DemoGuidePage />} />
         <Route path={ROUTES.newPatient} element={<NewPatientPage />} />
         <Route path={ROUTES.patientEdit} element={<EditPatientPage />} />
         <Route path={ROUTES.patientMedications} element={<PatientMedicationsPage />} />

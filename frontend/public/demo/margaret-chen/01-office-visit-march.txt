@@ -1,0 +1,19 @@
+Primary Care Office Visit
+Patient: Margaret Chen
+Date: March 3, 2026
+Provider: Internal Medicine
+
+Reason for visit: Routine follow-up for hypertension and type 2 diabetes.
+
+History: Patient reports feeling well. No chest pain, shortness of breath, or
+lower extremity swelling. Home blood pressure readings averaging 132/84.
+Blood glucose logs show fasting values in the 110-130 range.
+
+Current medications: Lisinopril 10 mg oral once daily, Metformin 500 mg
+oral twice daily, Atorvastatin 40 mg oral nightly, Amlodipine 5 mg oral
+once daily, Aspirin 81 mg oral once daily.
+
+Assessment: Hypertension, adequately controlled. Type 2 diabetes, stable.
+Hyperlipidemia, on statin therapy.
+
+Plan: Routine labs ordered. Return in 3 months.

@@ -1,0 +1,26 @@
+Pediatrics Well-Child Visit
+Patient: Jasmine Patel
+Date: April 6, 2026
+Provider: Pediatrics
+
+Age: 9 years
+
+Reason for visit: Annual well-child visit.
+
+History: Growth and development appropriate for age. Asthma, diagnosed at
+age 5, currently well-controlled. Mother reports the rescue inhaler is used
+only occasionally, mostly with colds or exercise.
+
+Current asthma regimen:
+- Fluticasone propionate 44 mcg inhalation twice daily
+- Albuterol HFA 90 mcg inhalation as needed
+- Montelukast 5 mg oral once daily
+
+Exam: Lungs clear to auscultation, no wheeze. Growth parameters tracking
+along prior curve.
+
+Assessment: Asthma, well-controlled. Routine health maintenance otherwise
+unremarkable.
+
+Plan: Continue current asthma regimen. Routine immunizations updated.
+Return in one year, or sooner if asthma symptoms worsen.

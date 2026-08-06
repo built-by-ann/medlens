@@ -1,0 +1,18 @@
+Cardiology Admission Note
+Patient: Dorothy Williams
+Date: September 2, 2026 (Hospital Day 1)
+Provider: Cardiology
+
+Age: 82 years
+
+Reason for admission: Atrial fibrillation with rapid ventricular response.
+
+Assessment and plan: Presented with palpitations and fatigue, found to be
+in atrial fibrillation with a rapid ventricular response. Rate control
+achieved with medication adjustment. Warfarin increased from 5 mg to
+7.5 mg oral once daily given a subtherapeutic INR on her home dose.
+Furosemide held today due to a transient episode of hypotension; will
+reassess and consider restarting at a reduced dose prior to discharge.
+Other home medications: Losartan 50 mg oral once daily. Metformin
+1000 mg oral twice daily. Patient reports she has not taken ibuprofen
+since her nephrology visit.

@@ -1,0 +1,16 @@
+Cardiology Admission Note
+Patient: Robert Alvarez
+Date: August 1, 2026 (Hospital Day 1)
+Provider: Cardiology
+
+Reason for admission: Acute decompensated heart failure.
+
+Assessment and plan: Starting intravenous diuresis. Home Furosemide
+increased from 20 mg oral once daily to 40 mg oral twice daily for more
+aggressive diuresis.
+
+Starting Lisinopril 5 mg oral once daily for afterload reduction and
+guideline-directed heart failure therapy, to be titrated as tolerated once
+diuresis is complete.
+
+Daily weights and strict input/output monitoring ordered.
