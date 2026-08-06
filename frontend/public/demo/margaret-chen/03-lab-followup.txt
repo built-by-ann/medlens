@@ -1,0 +1,22 @@
+Telephone Follow-Up Note
+Patient: Margaret Chen
+Date: June 20, 2026
+Author: RN Care Coordinator
+
+Reason for call: Review recent labs and blood pressure log after last visit.
+
+Discussion: Hemoglobin A1c 7.1%, improved from prior value of 7.6%. Lipid
+panel within goal on current statin dose. Patient confirms she stopped
+taking Amlodipine after the June 3 visit and reports the leg swelling has
+resolved. Home blood pressure log shows an average of 128/80 since starting
+Lisinopril 20 mg oral once daily.
+
+Home medications:
+- Lisinopril 20 mg oral once daily
+- Metformin 500 mg oral twice daily
+- Atorvastatin 40 mg oral nightly
+- Aspirin 81 mg oral once daily
+- Amlodipine 5 mg oral once daily: discontinued, not currently taking
+
+No new medication changes made during this call. Patient advised to keep
+her scheduled follow-up with endocrinology.

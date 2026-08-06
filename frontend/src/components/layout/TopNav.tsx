@@ -40,6 +40,11 @@ export function TopNav() {
             </NavLink>
           </li>
           <li>
+            <NavLink to={ROUTES.demoGuide} className={navLinkClassName}>
+              Demo Guide
+            </NavLink>
+          </li>
+          <li>
             <NavLink to={ROUTES.about} className={navLinkClassName}>
               About
             </NavLink>

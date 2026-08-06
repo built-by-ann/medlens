@@ -1,0 +1,6 @@
+medication_name,dose,route,frequency,status,source,notes
+Amlodipine,10 mg,oral,once daily,active,patient_reported,
+Atorvastatin,20 mg,oral,nightly,active,patient_reported,
+Aspirin,81 mg,oral,once daily,active,patient_reported,
+Metoprolol tartrate,25 mg,oral,twice daily,active,patient_reported,
+Furosemide,20 mg,oral,once daily,active,patient_reported,

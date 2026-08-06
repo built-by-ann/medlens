@@ -1,0 +1,17 @@
+Cardiology Follow-Up Visit
+Patient: Robert Alvarez
+Date: August 12, 2026 (one week post-discharge)
+Provider: Cardiology
+
+History: Patient seen for heart failure follow-up after recent
+hospitalization. Reports feeling well, no recurrent shortness of breath or
+leg swelling. Weight stable since discharge.
+
+Furosemide 40 mg oral twice daily. Lisinopril 5 mg oral once daily. Both
+tolerated well since discharge. Amlodipine has not been restarted since
+being discontinued during the hospitalization.
+
+Assessment: Heart failure, euvolemic and stable on current regimen.
+
+Plan: Repeat basic metabolic panel today to monitor renal function and
+potassium. Follow up in one month.

@@ -1,0 +1,7 @@
+medication_name,dose,route,frequency,status,source,notes
+Warfarin,5 mg,oral,once daily,active,patient_reported,
+Metformin,1000 mg,oral,twice daily,active,patient_reported,
+Losartan,50 mg,oral,once daily,active,patient_reported,
+Furosemide,40 mg,oral,once daily,active,patient_reported,
+Calcium carbonate / Vitamin D3,600 mg / 400 IU,oral,twice daily,active,patient_reported,
+Ibuprofen,400 mg,oral,three times daily as needed,active,patient_reported,For osteoarthritis knee pain

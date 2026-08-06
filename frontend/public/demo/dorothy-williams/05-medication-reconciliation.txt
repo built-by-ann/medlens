@@ -1,0 +1,19 @@
+Medication Reconciliation Form
+Patient: Dorothy Williams
+Date: September 4, 2026
+Completed by: Cardiology Clinic (post-discharge follow-up)
+
+Current medications, confirmed across cardiology, nephrology, and primary
+care records:
+- Warfarin 7.5 mg oral once daily - active
+- Furosemide 20 mg oral once daily - active
+- Losartan 50 mg oral once daily - active
+- Metformin 1000 mg oral twice daily - active
+- Calcium carbonate / Vitamin D3 600 mg / 400 IU oral twice daily - active
+- Acetaminophen 500 mg oral as needed - active
+- Ibuprofen 400 mg oral three times daily as needed - discontinued
+  (nephrology, due to chronic kidney disease)
+
+Patient reports no other prescription or over-the-counter medications.
+
+Reconciled by: Cardiology RN

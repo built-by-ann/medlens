@@ -1,0 +1,13 @@
+Medication Reconciliation Form
+Patient: Jasmine Patel
+Date: August 5, 2026
+Completed by: Pediatric Pulmonology
+
+Current medications, confirmed with parent:
+- Fluticasone propionate 110 mcg inhalation twice daily - active
+- Albuterol HFA 90 mcg inhalation once daily - active
+- Montelukast 5 mg oral once daily - active
+
+Parent reports no other prescription or over-the-counter medications.
+
+Reconciled by: Pulmonology Clinic

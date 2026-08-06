@@ -1,0 +1,24 @@
+Urgent Care Visit
+Patient: Jasmine Patel
+Date: June 14, 2026
+Provider: Urgent Care
+
+Age: 9 years
+
+Chief complaint: Cough and wheeze for 2 days.
+
+History: Mother reports worsening cough and audible wheeze since a cold
+started two days ago. Patient has been using her Albuterol HFA 90 mcg
+inhaler roughly every 4 hours over the last 24 hours with only partial
+relief.
+
+Exam: Mild respiratory distress, diffuse expiratory wheeze bilaterally.
+Oxygen saturation 96% on room air.
+
+Assessment: Acute asthma exacerbation, likely viral trigger.
+
+Plan: Nebulized albuterol given in clinic with improvement. Prescribed a
+5-day course of oral prednisolone for the exacerbation. Other daily
+medications: Fluticasone propionate 44 mcg inhalation twice daily.
+Montelukast 5 mg oral once daily. Advised to follow up with pediatrics if
+symptoms do not improve or if rescue inhaler use continues to increase.

@@ -6,6 +6,7 @@ export const ROUTES = {
   dashboard: '/dashboard',
   patients: '/patients',
   settings: '/settings',
+  demoGuide: '/demo-guide',
   newPatient: '/patients/new',
   patientDetail: '/patients/:patientId',
   patientEdit: '/patients/:patientId/edit',

@@ -1,0 +1,19 @@
+Medication Reconciliation Form
+Patient: Robert Alvarez
+Date: August 12, 2026
+Completed by: Cardiology Clinic
+
+Current medications, confirmed with patient and discharge paperwork:
+- Furosemide 40 mg oral twice daily - active
+- Lisinopril 5 mg oral once daily - active
+- Metoprolol succinate 50 mg oral once daily - active
+- Atorvastatin 20 mg oral nightly - active
+- Aspirin 81 mg oral once daily - active
+- Amlodipine 10 mg oral once daily - discontinued (stopped during
+  hospitalization due to peripheral edema)
+- Metoprolol tartrate 25 mg oral twice daily - discontinued (replaced by
+  metoprolol succinate at discharge)
+
+Patient reports no other prescription or over-the-counter medications.
+
+Reconciled by: Cardiology RN
