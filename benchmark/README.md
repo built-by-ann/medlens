@@ -8,20 +8,21 @@ A version-controlled, hand-written benchmark of synthetic clinical documents and
 
 ## What this is (and isn't)
 
-This is a **dataset and ground truth only**. It contains:
+This directory contains the **dataset and ground truth** (`cases/`, `loader.py`) plus a **runner** that executes it (`runner/`, Issue #89):
 
 - 30 hand-written cases, each a set of one or more clinical note texts plus the medication data that should be extracted from them.
 - `loader.py`, a small utility to load and structurally validate the cases.
-- Nothing else. There is no code here that calls an AI provider, runs an extraction, or computes a score.
+- `runner/`, a developer CLI (`python -m benchmark.runner`) that sends each case's notes through the real MedLens prompt/provider path and records what came back - see "Running an evaluation," below.
+- Nothing that computes a score. The runner records raw/parsed predictions and failures; it does not compare them against `expected`, compute precision/recall/F1, or rank providers - that is #90/#91's work.
 
-Running the benchmark against a real provider, scoring the results (precision/recall/F1, etc.), and producing a comparison report are separate, future pieces of work:
+Scoring the results (precision/recall/F1, etc.) and producing a comparison report are separate, future pieces of work - see `benchmark/runner/` (Issue #89, documented below) for the part of this that does exist today: running the dataset against a real provider and recording what happened.
 
 | Issue | Scope |
 |---|---|
-| #86 (this) | The benchmark dataset and ground truth |
+| #86 | The benchmark dataset and ground truth |
 | #87 | OpenBioLLM provider integration |
 | #88 | MedGemma provider integration |
-| #89 | The evaluation framework (a runner that executes cases against a provider) |
+| #89 (this) | The evaluation runner - executes cases against one or more providers and records structured predictions/results. Computes no quality metric. |
 | #90 | Evaluation metrics (precision/recall/F1, etc.) |
 | #91 | The model comparison report |
 
@@ -31,7 +32,7 @@ Running the benchmark against a real provider, scoring the results (precision/re
 
 `benchmark/` is a top-level directory, a sibling of `backend/`, `frontend/`, `docs/`, and `infra/` - the same reasoning `infra/` already uses for a concern that isn't part of the shipped application itself. This isn't part of the FastAPI app; it's a fixture #89's future runner and #86-#91's tooling will share, so it gets its own home rather than being nested inside `backend/app/` (the real application source) or `backend/tests/` (this project's pytest suite for the application, not a benchmark corpus).
 
-One pytest test file does live under `backend/tests/` (`test_benchmark_dataset.py`) - it validates this dataset and is picked up automatically by the existing `pytest -v`/CI run, but the dataset itself is not backend application code.
+Two pytest test files do live under `backend/tests/` - `test_benchmark_dataset.py` (validates this dataset) and `test_evaluation_runner.py` (Issue #89, tests `runner/` against fakes, no network) - both picked up automatically by the existing `pytest -v`/CI run, but neither the dataset nor the runner is backend application code.
 
 ---
 
@@ -71,6 +72,17 @@ benchmark/
     BENCH-001.json
     BENCH-002.json
     ...
+  runner/               # Issue #89 - see "Running an evaluation" below
+    __main__.py
+    cli.py
+    providers.py
+    execution.py
+    models.py
+    storage.py
+  results/              # gitignored - created by the runner, never committed
+    <run-id>/
+      manifest.json
+      predictions.jsonl
 ```
 
 One case per file, `case_id` matching the filename. Each file:
@@ -151,20 +163,61 @@ This table is generated from the actual case files (`python benchmark/loader.py`
 
 ---
 
-## How future evaluation code (#89) should consume this
+## Running an evaluation
 
-```python
-from benchmark.loader import load_cases
+`benchmark/runner/` (Issue #89) sends every selected case's `input_notes` through the real, unmodified MedLens path - `build_summary_prompt()` (`app/ai/prompts.py`), then a real `AIProvider.generate_summary()` - and records what came back as structured JSON artifacts. It never builds its own prompt, never re-implements provider logic, and never compares a result against `expected`; scoring is #90's job.
 
-for case in load_cases():
-    # case.input_notes -> feed directly to AISummaryService.summarize()
-    # case.expected["medications"] -> the primary, field-by-field gradable ground truth
-    # case.expected["possible_inconsistencies"] / ["summary"] -> reference only, not exact-match graded
-    # case.tags / case.difficulty -> for breaking down results by category
-    ...
+```bash
+# From the repository root, with the backend virtualenv active:
+source backend/.venv/bin/activate
+python -m benchmark.runner --providers gemini openbiollm medgemma
 ```
 
-`load_cases()` already validates every case (including against the real `ClinicalSummary` model) and raises `BenchmarkValidationError` on anything malformed, so #89's runner does not need to re-implement that check - only import it.
+**Credentials.** The runner needs the same environment variables the application itself uses - `GEMINI_API_KEY` for `gemini`, `HUGGINGFACE_API_KEY` for `openbiollm`/`medgemma` (shared, exactly as in `docs/ai.md`). It never constructs `Settings` (which would require unrelated `DATABASE_URL`/`JWT_SECRET_KEY`, and only supports one active provider at a time via `AI_PROVIDER` - unworkable for a multi-provider run); instead it best-effort loads `backend/.env` (the same file, `override=False`, so a credential already exported into the shell always wins) and reads the two keys directly. A provider run with no credential configured is not a hard error at startup - it fails per case as `missing_credential` (see Failure categories, below), the same way the application itself treats a missing key.
+
+**Selecting providers/cases:**
+
+```bash
+# Only one provider
+python -m benchmark.runner --providers medgemma
+
+# Only specific cases
+python -m benchmark.runner --cases BENCH-006 BENCH-007
+
+# Only cases carrying a given tag
+python -m benchmark.runner --tags multi_document
+
+# --cases and --tags intersect when both are given: only cases matching BOTH
+python -m benchmark.runner --cases BENCH-006 BENCH-007 --tags multi_document
+
+# A custom output location (must not already exist)
+python -m benchmark.runner --output benchmark/results/my-run
+```
+
+Filtering to a combination that matches no cases fails clearly (a printed error, exit code 1, no output directory created) rather than silently writing an empty run.
+
+**Output.** Each run writes `benchmark/results/<UTC timestamp>-<random suffix>/` (or `--output`'s path), gitignored - never committed, even though every note in this dataset is synthetic; a raw model response hasn't been reviewed as safe to publish and there's no reason to risk it. Two files:
+
+- **`manifest.json`** - one object, written at the *start* of the run (`status: "running"`, `completed_at: null`) and rewritten at the end (`status: "complete"` or `"interrupted"`, real `completed_at`/`result_count`). A manifest still reading `"running"` on disk means the process crashed before finishing - not distinguished from a genuinely stuck run, deliberately: recovering further than "this run didn't finish" isn't worth the complexity. Records: `run_id`, `started_at`/`completed_at`, `status`, `benchmark_fingerprint` (a sha256 of every loaded case's canonical content - stable across file reformatting, changes if any case's actual content changes), `case_count`, `selected_providers`, `case_filter`/`tag_filter` (as passed on the command line, `null` if unset), each provider's `model`/`inference_backend`/`generation_params`, `git_commit`/`git_dirty` (best-effort, `null` outside a git checkout), `python_version`, `predictions_file`, `result_count`.
+- **`predictions.jsonl`** - one JSON object per line, one line per attempted `(case, provider)` pair, appended (and flushed) as the run progresses so a killed process still leaves a readable partial file. Each record's `provider_response` is **the exact string `AIProvider.generate_summary()` returned, before any evaluation-framework parsing or validation** - this is not the same thing for every provider: it's Gemini's genuinely raw output, but OpenBioLLM's/MedGemma's already syntactically-cleaned output (markdown fences and surrounding prose stripped inside the provider itself - see `docs/ai.md`'s Provider Abstraction section), since that cleanup is invisible outside `generate_summary()`. `parsed_clinical_summary` is present only when parsing fully succeeds; otherwise it's `null` and `parsing.error_category` says why.
+
+**Parsing.** Every response is parsed in two explicit stages - `json.loads()`, then `ClinicalSummary.model_validate()` (the real, unmodified schema) - rather than the one-line form `AISummaryService._parse_response` uses in production, specifically so "invalid JSON" and "valid JSON, wrong shape" can be told apart as separate categories. Neither stage repairs, cleans, or otherwise modifies `provider_response`.
+
+**Failure categories** (`parsing.error_category`), derived from each provider's own existing exception boundaries, not invented for this framework:
+
+| Category | Meaning |
+|---|---|
+| `missing_credential` | The relevant API key isn't configured. |
+| `empty_response` | The provider returned nothing usable. |
+| `timeout` | The provider's own SDK reported a timeout (`InferenceTimeoutError`, for OpenBioLLM/MedGemma). |
+| `provider_error` | A provider-SDK-level error/HTTP failure. |
+| `unexpected_error` | Anything else escaping a provider's own error wrapping - a defensive catch-all. |
+| `invalid_json` | The response wasn't valid JSON at all. |
+| `schema_validation_error` | Valid JSON that doesn't match `ClinicalSummary`. |
+
+A single `(case, provider)` failure never stops the run - every remaining case/provider pair is still attempted. **Known asymmetry:** `GeminiProvider` has no SDK exception distinct from a generic error for a network timeout (only `genai_errors.APIError` is caught specifically in `gemini_provider.py`), so a Gemini timeout currently classifies as `unexpected_error`, not `timeout`, unlike OpenBioLLM/MedGemma. This is a real, pre-existing difference between the provider implementations, documented here rather than fixed by modifying `GeminiProvider` as part of this issue.
+
+**Reproducibility.** The identical-prompt guarantee: `build_summary_prompt(case.input_notes)` is called exactly once per case, and that exact string (never rebuilt) is sent to every selected provider for that case - each prediction records a `prompt_hash` (sha256) proving it. Combined with the manifest's `benchmark_fingerprint`, `git_commit`, and each provider's `model`/`generation_params`, a later comparison (#90/#91) can tell precisely what dataset state, code state, and configuration a given run reflects.
 
 ---
 
@@ -173,7 +226,7 @@ for case in load_cases():
 ```bash
 cd backend
 source .venv/bin/activate
-pytest tests/test_benchmark_dataset.py -v
+pytest tests/test_benchmark_dataset.py tests/test_evaluation_runner.py -v
 ```
 
 or, to see the coverage breakdown directly:
@@ -182,4 +235,4 @@ or, to see the coverage breakdown directly:
 python benchmark/loader.py
 ```
 
-Both check structure and schema compatibility only - neither calls an AI provider or the network.
+All three check structure/schema compatibility and runner behavior using fakes only - none call a real AI provider or the network. Only `python -m benchmark.runner` itself makes real provider calls.
