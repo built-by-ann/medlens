@@ -35,8 +35,12 @@ This split is why "AI decisions vs. deterministic application logic" is a load-b
 ```text
 app/ai/
     providers/
-        base.py             AIProvider interface, AIProviderError
-        gemini_provider.py  GeminiProvider (the only implementation today)
+        base.py                 AIProvider interface, AIProviderError
+        gemini_provider.py      GeminiProvider (the default)
+        openbiollm_provider.py  OpenBioLLMProvider
+        medgemma_provider.py    MedGemmaProvider
+        text_cleanup.py         strip_code_fences(), extract_json_object() -
+                                 shared by OpenBioLLMProvider and MedGemmaProvider
     prompts.py               SUMMARY_PROMPT_TEMPLATE, build_summary_prompt()
     schemas.py                Medication, ClinicalSummary (the validated response shape)
     service.py                 AISummaryService, get_ai_summary_service()
@@ -47,11 +51,11 @@ Everything under `app/ai/` is responsible for exactly one thing: turning a list 
 ```text
                      ┌─────────────────────────  app/ai/  (this document)  ─────────────────────────┐
                      │                                                                                │
- clinical note text  │   AISummaryService          AIProvider            Gemini API                  │
- (list[str])  ─────► │   .summarize()      ─────►  .generate_summary()  ─────►  (google-genai SDK)    │
-                     │        │                          ▲                                            │
-                     │        │ builds prompt via        │ GeminiProvider is the only                 │
-                     │        │ prompts.py                │ concrete implementation today              │
+ clinical note text  │   AISummaryService          AIProvider            active provider's API        │
+ (list[str])  ─────► │   .summarize()      ─────►  .generate_summary()  ─────►  (Gemini, OpenBioLLM, or │
+                     │        │                          ▲                       MedGemma - AI_PROVIDER)│
+                     │        │ builds prompt via        │ one active implementation per                │
+                     │        │ prompts.py                │ deployment (see Configuration)              │
                      │        ▼                                                                        │
                      │   raw JSON text  ──►  ClinicalSummary.model_validate_json()  ──►  validated     │
                      │                                                                    ClinicalSummary
@@ -112,12 +116,22 @@ and one exception type, `AIProviderError`, that every provider implementation ra
 - **Output cleanup is strictly syntactic.** Unlike Gemini (see Structured Output, below), this provider's underlying API has no equivalent of `response_mime_type="application/json"` - nothing constrains the raw generated text to be valid JSON, let alone free of markdown fences or surrounding prose. `generate_summary` strips a wrapping code fence and trims text outside the outermost `{...}` before returning - and nothing more: it never repairs malformed JSON, adds a missing brace, renames a field, or otherwise touches the JSON's own content. `AISummaryService._parse_response` remains the only thing that validates the result, exactly as it does for Gemini - this provider's cleanup step exists so a wrapped-but-otherwise-valid response isn't rejected on a technicality, not to make an invalid response look valid.
 - **Generation parameters are hardcoded constants** (`GENERATION_PARAMS` in `openbiollm_provider.py`), not `Settings`/environment configuration - greedy decoding (`do_sample=False`) and a fixed `max_new_tokens`, chosen for a structured-extraction task with one intended correct answer rather than open-ended generation. A future evaluation run (#89) should record these exact values alongside its results, since changing them changes what's being measured.
 
+**`MedGemmaProvider`** (`app/ai/providers/medgemma_provider.py`) calls `google/medgemma-27b-text-it` through the same Hugging Face Inference Providers mechanism as OpenBioLLM (`huggingface_hub.InferenceClient`, provider pinned to `"featherless-ai"` for the same reproducibility reason), but through a different task: this checkpoint's only live Inference Provider mapping is `"conversational"`, not `"text-generation"` - it is Gemma3-based and instruction-tuned for chat, not plain text completion. Concretely:
+
+- **`google/medgemma-27b-text-it` is the only MedGemma checkpoint chosen**, and the only one available. MedGemma's two 4B checkpoints (the original and "1.5") are both multimodal (image-text-to-text) and, as of this integration, have **no** Hugging Face Inference Provider serving either one at all ("This model isn't deployed by any Inference Provider", per their own model pages) - so they were not a live-inference option to weigh against the 27B checkpoint at all, independent of size. The 27B checkpoint is also the one Google's own documentation recommends for pure clinical-text tasks (it was "trained exclusively on medical text"), which is what MedLens needs.
+- **Called via `chat_completion`, not `text_generation`.** `AIProvider.generate_summary(prompt: str) -> str` is unchanged, and `build_summary_prompt()` still returns one plain string - `MedGemmaProvider` internally wraps that string as a single user-turn message, `messages=[{"role": "user", "content": prompt}]`, before calling `client.chat_completion(...)`, then extracts `response.choices[0].message.content`. This is the same category of provider-internal request-shaping `GeminiProvider` (`contents=prompt`) and `OpenBioLLMProvider` (`inputs=prompt`) already each do differently - no interface change was needed.
+- **No `response_format`/schema-constrained generation.** `chat_completion` does expose a `response_format` parameter, but MedGemma is deliberately called without it: #89's benchmark needs to measure this model's actual, unassisted ability to produce the requested JSON shape, not a provider-enforced grammar. Output cleanup is therefore the same strictly syntactic step used for OpenBioLLM - `strip_code_fences`/`extract_json_object`, now shared by both providers via `app/ai/providers/text_cleanup.py` rather than duplicated.
+- **Generation parameters are hardcoded constants** (`GENERATION_PARAMS` in `medgemma_provider.py`), mirroring OpenBioLLM's own treatment: `temperature=0` (the closest thing to deterministic, greedy decoding this task type exposes - there is no `do_sample` equivalent here) and a fixed `max_tokens`.
+- **Gated model.** MedGemma is released under Google's "Health AI Developer Foundations" license. The Hugging Face account behind `HUGGINGFACE_API_KEY` must accept that license's terms (on the model's own Hugging Face page) before any call succeeds - MedLens performs no license-acceptance logic of its own; a request made without having accepted the terms fails the same way any other provider request failure does, as an `AIProviderError` (see Error Handling, below). This is a one-time, manual, account-level prerequisite, not an application setting.
+
 **`get_ai_summary_service()`** (`app/ai/service.py`) is the provider factory, split into two functions mirroring `app/storage/service.py`'s `build_storage_service`/`get_storage_service` shape exactly:
 
 ```python
 def build_ai_summary_service(app_settings: Settings) -> AISummaryService:
     if app_settings.ai_provider == "openbiollm":
         provider = OpenBioLLMProvider(api_key=app_settings.huggingface_api_key, model=app_settings.openbiollm_model)
+    elif app_settings.ai_provider == "medgemma":
+        provider = MedGemmaProvider(api_key=app_settings.huggingface_api_key, model=app_settings.medgemma_model)
     elif app_settings.ai_provider == "gemini":
         provider = GeminiProvider(api_key=app_settings.gemini_api_key, model=app_settings.gemini_model)
     ...
@@ -129,7 +143,7 @@ def get_ai_summary_service() -> AISummaryService:
 
 `get_ai_summary_service()` (the zero-argument form) is used as the FastAPI dependency (`Depends(get_ai_summary_service)` in `app/api/routes/analyses.py`), which is also the seam route-level tests use to substitute a fake provider via `app.dependency_overrides` (see Testing below). `build_ai_summary_service` taking an explicit `Settings` instance is what makes provider selection itself unit-testable with a constructed `Settings(...)`, no monkeypatching required. See Configuration below for the exact `AI_PROVIDER` setting this branches on.
 
-**Why this abstraction exists** (Decision 15, `docs/design-decisions.md`): the project intends to evaluate more than one provider over time (see README's roadmap - MedGemma and general provider benchmarking remain planned; OpenBioLLM is now implemented, not just planned). Behind this interface, adding one is a new class implementing one method and translating its own SDK's exceptions into `AIProviderError` - nothing in `AISummaryService`, the prompt template, or the API route needs to change. See Extending the AI Layer, below, for the concrete steps.
+**Why this abstraction exists** (Decision 15, `docs/design-decisions.md`): the project intends to evaluate more than one provider over time (see README's roadmap). Three providers are implemented today - Gemini (the default), OpenBioLLM, and MedGemma; general provider benchmarking remains planned. Behind this interface, adding one is a new class implementing one method and translating its own SDK's exceptions into `AIProviderError` - nothing in `AISummaryService`, the prompt template, or the API route needs to change. See Extending the AI Layer, below, for the concrete steps.
 
 ---
 
@@ -161,7 +175,7 @@ JSON_RESPONSE_CONFIG = GenerateContentConfig(response_mime_type="application/jso
 
 This constrains the response to well-formed JSON at the API level (not just by asking nicely in the prompt text), but does **not** pin down the exact JSON *shape* - `response_schema` is not set. The shape is described only in the prompt and enforced only afterward, by Pydantic; defining it in two places (an SDK-level schema and a Pydantic model) was a deliberate non-choice, to avoid the two drifting out of sync with each other.
 
-`OpenBioLLMProvider` has no equivalent SDK-level JSON constraint to lean on - it relies on the prompt's own instructions plus a strictly syntactic cleanup step (see Provider Abstraction, above) before the same Pydantic validation below ever sees the text.
+`OpenBioLLMProvider` and `MedGemmaProvider` have no equivalent SDK-level JSON constraint to lean on - both rely on the prompt's own instructions plus the same strictly syntactic cleanup step (`app/ai/providers/text_cleanup.py` - see Provider Abstraction, above) before the same Pydantic validation below ever sees the text.
 
 **Pydantic models** (`app/ai/schemas.py`):
 
@@ -256,24 +270,26 @@ persist_analysis_result() → mark_analysis_completed()
 ## Configuration
 
 ```text
-AI_PROVIDER=gemini       # "gemini" (default) or "openbiollm"
+AI_PROVIDER=gemini       # "gemini" (default), "openbiollm", or "medgemma"
 
 GEMINI_API_KEY=          # optional - see below
 GEMINI_MODEL=gemini-2.5-flash
 
-HUGGINGFACE_API_KEY=     # only required when AI_PROVIDER=openbiollm
+HUGGINGFACE_API_KEY=     # required for AI_PROVIDER=openbiollm or AI_PROVIDER=medgemma (shared)
 OPENBIOLLM_MODEL=aaditya/Llama3-OpenBioLLM-8B
+MEDGEMMA_MODEL=google/medgemma-27b-text-it
 ```
 
 Read via `app/core/config.py`'s `Settings` (a `pydantic-settings` `BaseSettings`, loaded from `.env`/the environment):
 
-- **`AI_PROVIDER`** (`Settings.ai_provider: str = "gemini"`) - which `AIProvider` `get_ai_summary_service()` constructs. Validated at startup (`Settings`' own `model_validator`, the same "fail at startup, not on first use" treatment `storage_backend` already gets) - a value other than `"gemini"`/`"openbiollm"` fails the application immediately with a clear error, not on the first analysis request. Defaults to `"gemini"`, so an existing deployment with no `AI_PROVIDER` set at all keeps working unchanged.
-- **`GEMINI_API_KEY`** (`Settings.gemini_api_key: str | None = None`) - optional at the application level. The backend starts normally with no key configured at all; only a request that actually needs to call Gemini fails, with a `503` and the message `"Gemini API key is not configured"` (see Error Handling, below). This is unlike the storage backend's own `S3_BUCKET_NAME`/`AWS_REGION`, which fail application *startup* if missing while `STORAGE_BACKEND=s3` (`docs/architecture.md`'s Storage Abstraction section) - a missing provider credential is treated as a normal, expected local-development state, not a misconfiguration to catch early, for either AI provider.
+- **`AI_PROVIDER`** (`Settings.ai_provider: str = "gemini"`) - which `AIProvider` `get_ai_summary_service()` constructs. Validated at startup (`Settings`' own `model_validator`, the same "fail at startup, not on first use" treatment `storage_backend` already gets) - a value other than `"gemini"`/`"openbiollm"`/`"medgemma"` fails the application immediately with a clear error, not on the first analysis request. Defaults to `"gemini"`, so an existing deployment with no `AI_PROVIDER` set at all keeps working unchanged.
+- **`GEMINI_API_KEY`** (`Settings.gemini_api_key: str | None = None`) - optional at the application level. The backend starts normally with no key configured at all; only a request that actually needs to call Gemini fails, with a `503` and the message `"Gemini API key is not configured"` (see Error Handling, below). This is unlike the storage backend's own `S3_BUCKET_NAME`/`AWS_REGION`, which fail application *startup* if missing while `STORAGE_BACKEND=s3` (`docs/architecture.md`'s Storage Abstraction section) - a missing provider credential is treated as a normal, expected local-development state, not a misconfiguration to catch early, for any AI provider.
 - **`GEMINI_MODEL`** (`Settings.gemini_model: str = "gemini-2.5-flash"`) - which Gemini model to call. A plain environment variable specifically so recovering from a model retirement (Google periodically retires older model versions) never requires a code change or image rebuild - see "A Note on Model Retirement" under Error Handling, below.
-- **`HUGGINGFACE_API_KEY`** (`Settings.huggingface_api_key: str | None = None`) - only used when `AI_PROVIDER=openbiollm`. A Hugging Face user access token (fine-grained, scoped to "Make calls to Inference Providers"). Optional at the application level for the same reason `GEMINI_API_KEY` is: the backend starts normally without it, and only a request that actually needs `OpenBioLLMProvider` fails, with a `503` and the message `"Hugging Face API key is not configured"`.
+- **`HUGGINGFACE_API_KEY`** (`Settings.huggingface_api_key: str | None = None`) - shared by `AI_PROVIDER=openbiollm` and `AI_PROVIDER=medgemma`, both of which call Hugging Face's Inference Providers mechanism. A Hugging Face user access token (fine-grained, scoped to "Make calls to Inference Providers"). Optional at the application level for the same reason `GEMINI_API_KEY` is: the backend starts normally without it, and only a request that actually needs `OpenBioLLMProvider`/`MedGemmaProvider` fails, with a `503` and the message `"Hugging Face API key is not configured"`. For MedGemma specifically, the account behind this token must additionally have accepted Google's "Health AI Developer Foundations" license terms on the model's own Hugging Face page - a request otherwise fails the same way as a missing/invalid token, as an `AIProviderError`.
 - **`OPENBIOLLM_MODEL`** (`Settings.openbiollm_model: str = "aaditya/Llama3-OpenBioLLM-8B"`) - which OpenBioLLM checkpoint to call. A plain environment variable for the same reason `GEMINI_MODEL` is: recovering from this checkpoint being retired or moved to a different Hugging Face Inference Provider shouldn't require a code change.
-- **Request timeout** - `GeminiProvider.DEFAULT_TIMEOUT_MS = 30_000` (30 seconds) and `OpenBioLLMProvider.DEFAULT_TIMEOUT_S = 30.0` (also 30 seconds, in the unit `InferenceClient` itself expects), each a hardcoded constant in its own provider module, **not** read from `Settings` or any environment variable.
-- **Generation parameters** (OpenBioLLM only) - `OpenBioLLMProvider.GENERATION_PARAMS` (greedy decoding, a fixed `max_new_tokens`) is likewise a hardcoded constant, not environment configuration - see Provider Abstraction, above, for why.
+- **`MEDGEMMA_MODEL`** (`Settings.medgemma_model: str = "google/medgemma-27b-text-it"`) - which MedGemma checkpoint to call, for the same reason `OPENBIOLLM_MODEL` is a plain environment variable.
+- **Request timeout** - `GeminiProvider.DEFAULT_TIMEOUT_MS = 30_000` (30 seconds), `OpenBioLLMProvider.DEFAULT_TIMEOUT_S = 30.0`, and `MedGemmaProvider.DEFAULT_TIMEOUT_S = 30.0` (all 30 seconds, the latter two in the unit `InferenceClient` itself expects), each a hardcoded constant in its own provider module, **not** read from `Settings` or any environment variable.
+- **Generation parameters** (OpenBioLLM and MedGemma only) - `OpenBioLLMProvider.GENERATION_PARAMS` (greedy decoding, a fixed `max_new_tokens`) and `MedGemmaProvider.GENERATION_PARAMS` (`temperature=0`, a fixed `max_tokens`) are likewise hardcoded constants, not environment configuration - see Provider Abstraction, above, for why.
 - **Production configuration** - no AI-specific settings differ between environments; every variable above is set the same way (`infra/.env`, see `docs/deployment.md`) in every environment. There is no separate "production model" or "production timeout."
 
 ---
@@ -301,8 +317,8 @@ Google periodically retires older Gemini model versions, at which point every re
 
 AI is tested at three separate layers, each replacing a different real dependency with a fake, so the full test suite (`docs/testing.md`) never makes a live network call to Gemini or to Hugging Face:
 
-1. **Provider level** (`tests/test_gemini_provider.py`, `tests/test_openbiollm_provider.py`) - the underlying SDK client (`google.genai.Client` / `huggingface_hub.InferenceClient`) is replaced via `monkeypatch`, with small hand-written fakes that record what they were called with and return a scripted response or raise a scripted error - no mocking library, matching this project's general testing convention (`docs/testing.md`). Exercises each provider's own logic: lazy client construction, the missing-credential case, successful text extraction, provider-specific request configuration (Gemini's JSON `response_mime_type`; OpenBioLLM's pinned `provider="featherless-ai"` and generation parameters), and error normalization to `AIProviderError`. `test_openbiollm_provider.py` additionally covers its cleanup step directly: stripping a markdown fence, stripping surrounding prose, and - just as important - that malformed JSON is still malformed after cleanup, never repaired.
-2. **Service level** (`tests/test_ai_service.py`) - a fake in-memory `AIProvider` subclass (`FakeProvider`, defined in the test file itself) is injected directly into `AISummaryService`, one layer further removed from any SDK. Exercises prompt building, response parsing/validation (valid responses, malformed JSON, schema violations), and error propagation - with no provider SDK involved at all. This same file also tests `build_ai_summary_service()`'s provider selection directly (default/explicit `gemini`, `openbiollm`), passing a constructed `Settings(...)` instance rather than monkeypatching the module-level singleton.
+1. **Provider level** (`tests/test_gemini_provider.py`, `tests/test_openbiollm_provider.py`, `tests/test_medgemma_provider.py`) - the underlying SDK client (`google.genai.Client` / `huggingface_hub.InferenceClient`) is replaced via `monkeypatch`, with small hand-written fakes that record what they were called with and return a scripted response or raise a scripted error - no mocking library, matching this project's general testing convention (`docs/testing.md`). Exercises each provider's own logic: lazy client construction, the missing-credential case, successful text extraction, provider-specific request configuration (Gemini's JSON `response_mime_type`; OpenBioLLM's pinned `provider="featherless-ai"` and generation parameters; MedGemma's own pinned `provider="featherless-ai"`, its prompt-to-`messages` wrapping, and its `chat_completion` response extraction), and error normalization to `AIProviderError`. `test_openbiollm_provider.py` and `test_medgemma_provider.py` each additionally cover the shared cleanup step from `text_cleanup.py`: stripping a markdown fence, stripping surrounding prose, and - just as important - that malformed JSON is still malformed after cleanup, never repaired.
+2. **Service level** (`tests/test_ai_service.py`) - a fake in-memory `AIProvider` subclass (`FakeProvider`, defined in the test file itself) is injected directly into `AISummaryService`, one layer further removed from any SDK. Exercises prompt building, response parsing/validation (valid responses, malformed JSON, schema violations), and error propagation - with no provider SDK involved at all. This same file also tests `build_ai_summary_service()`'s provider selection directly (`gemini` default/explicit, `openbiollm`, `medgemma`), passing a constructed `Settings(...)` instance rather than monkeypatching the module-level singleton.
 3. **Route level** (`tests/test_analyses.py`) - a third, route-test-local fake provider is wired in via FastAPI's own `app.dependency_overrides[get_ai_summary_service]`, so `POST /patients/{patient_id}/analyses` can be exercised end-to-end (HTTP request through to persisted Analysis) without any real AI call. One test, `test_summarize_uses_real_gemini_provider_by_default_when_key_missing`, deliberately does **not** override the dependency - it exercises the real `get_ai_summary_service()` wiring end-to-end, relying on no `GEMINI_API_KEY` being present in the test environment, and asserts the request fails gracefully as a `503` with the expected message rather than a crash.
 
 Alongside these:
@@ -317,7 +333,7 @@ This layering means a change to the prompt template, the Gemini SDK integration,
 
 ## Extending the AI Layer
 
-`OpenBioLLMProvider` is the first real instance of this section's steps, not just a hypothetical - MedGemma and general provider benchmarking remain planned. To add another provider:
+`OpenBioLLMProvider` and `MedGemmaProvider` are real instances of this section's steps, not just a hypothetical - general provider benchmarking remains planned (#89-#91). To add another provider:
 
 1. Create a new module under `app/ai/providers/` (e.g. `medgemma_provider.py`).
 2. Implement a class that subclasses `AIProvider`, sets `name` and `model`, and implements `generate_summary(prompt: str) -> str`.
@@ -338,5 +354,5 @@ No changes are needed to `AISummaryService`, `prompts.py`, `ClinicalSummary`, th
 ## Limitations
 
 - The AI response itself is never checked for internal consistency by the AI layer - `possible_inconsistencies` is the model's own observation, not a deterministic check. Comparison against the user's Medication list is deterministic backend logic, not part of the AI layer (see Reconciliation Pipeline, above).
-- Two providers are implemented: Gemini (the default) and OpenBioLLM. MedGemma and general provider benchmarking remain planned future work, behind the same `AIProvider` interface described above. No benchmark has been run against OpenBioLLM yet, and this document makes no claim about its extraction accuracy relative to Gemini - that is #89-#91's work, not this one's.
+- Three providers are implemented: Gemini (the default), OpenBioLLM, and MedGemma (`google/medgemma-27b-text-it`). General provider benchmarking remains planned future work, behind the same `AIProvider` interface described above. No benchmark has been run against OpenBioLLM or MedGemma yet, and this document makes no claim about either's extraction accuracy relative to Gemini or to each other - that is #89-#91's work, not this one's.
 - There is no retry, fallback, or evaluation system of any kind (see Validation, above) - a provider failure is a failed analysis, once, every time.

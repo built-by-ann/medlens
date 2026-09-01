@@ -161,3 +161,32 @@ def test_settings_rejects_an_unsupported_ai_provider(monkeypatch):
 
     with pytest.raises(ValueError, match="AI_PROVIDER"):
         Settings(_env_file=None)
+
+
+# --- ai_provider validation, medgemma (Issue #88) ---
+
+
+def test_settings_accepts_medgemma_as_ai_provider(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("AI_PROVIDER", "medgemma")
+    monkeypatch.setenv("HUGGINGFACE_API_KEY", "hf-fake-key")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_provider == "medgemma"
+    assert settings.huggingface_api_key == "hf-fake-key"
+    assert settings.medgemma_model == "google/medgemma-27b-text-it"
+
+
+def test_settings_accepts_medgemma_without_a_huggingface_api_key(monkeypatch):
+    # Mirrors openbiollm's own optionality (see above): selecting a
+    # provider with no credential configured yet must not block the
+    # application from starting - only the first actual analysis request
+    # should fail, with a clear AIProviderError.
+    _base_env(monkeypatch)
+    monkeypatch.setenv("AI_PROVIDER", "medgemma")
+    monkeypatch.delenv("HUGGINGFACE_API_KEY", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.huggingface_api_key is None

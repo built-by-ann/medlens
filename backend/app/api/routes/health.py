@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.ai.providers.gemini_provider import GeminiProvider
+from app.ai.providers.medgemma_provider import MedGemmaProvider
 from app.ai.providers.openbiollm_provider import OpenBioLLMProvider
 from app.core.config import settings
 from app.db.session import SessionLocal
@@ -39,6 +40,8 @@ def health_check() -> JSONResponse:
 
     if settings.ai_provider == "openbiollm":
         ai = AIHealth(provider=OpenBioLLMProvider.name, model=settings.openbiollm_model)
+    elif settings.ai_provider == "medgemma":
+        ai = AIHealth(provider=MedGemmaProvider.name, model=settings.medgemma_model)
     else:
         ai = AIHealth(provider=GeminiProvider.name, model=settings.gemini_model)
 

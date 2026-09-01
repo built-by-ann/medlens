@@ -5,6 +5,7 @@ import pytest
 
 from app.ai.providers.base import AIProvider, AIProviderError
 from app.ai.providers.gemini_provider import GeminiProvider
+from app.ai.providers.medgemma_provider import MedGemmaProvider
 from app.ai.providers.openbiollm_provider import OpenBioLLMProvider
 from app.ai.service import AISummaryService, build_ai_summary_service
 from app.core.config import Settings
@@ -340,4 +341,18 @@ def test_build_ai_summary_service_selects_openbiollm():
 
     assert isinstance(service._provider, OpenBioLLMProvider)
     assert service._provider.model == "aaditya/Llama3-OpenBioLLM-8B"
+    assert service._provider._api_key == "hf-fake-key"
+
+
+def test_build_ai_summary_service_selects_medgemma():
+    service = build_ai_summary_service(
+        _settings(
+            ai_provider="medgemma",
+            huggingface_api_key="hf-fake-key",
+            medgemma_model="google/medgemma-27b-text-it",
+        )
+    )
+
+    assert isinstance(service._provider, MedGemmaProvider)
+    assert service._provider.model == "google/medgemma-27b-text-it"
     assert service._provider._api_key == "hf-fake-key"

@@ -1,11 +1,11 @@
 import logging
-import re
 import time
 
 from huggingface_hub import InferenceClient
 from huggingface_hub.errors import HfHubHTTPError, InferenceTimeoutError, ValidationError
 
 from app.ai.providers.base import AIProvider, AIProviderError
+from app.ai.providers.text_cleanup import extract_json_object, strip_code_fences
 
 logger = logging.getLogger(__name__)
 
@@ -59,40 +59,6 @@ GENERATION_PARAMS = {
     # unnecessarily fragile for no benefit.
     "return_full_text": False,
 }
-
-_CODE_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
-
-
-def _strip_code_fences(text: str) -> str:
-    """Removes a single markdown code fence wrapping the text, if present.
-
-    Purely syntactic: if a fence is found, its contents are returned
-    verbatim with no other change; if not, the text is returned
-    unchanged. Never inspects or alters what's inside a fence beyond
-    removing the fence markers themselves.
-    """
-    match = _CODE_FENCE_RE.search(text)
-    return match.group(1) if match else text
-
-
-def _extract_json_object(text: str) -> str:
-    """Trims text before the first '{' and after the last '}'.
-
-    This is a boundary-finding operation, not a parser or a repair step:
-    it never checks that what's between those two characters is
-    well-formed JSON, and never adds, removes, or reorders anything
-    within that span. Malformed JSON in the model's output is still
-    exactly as malformed after this call - ClinicalSummary.
-    model_validate_json() (AISummaryService, not this provider) remains
-    the only thing that actually validates the result.
-    """
-    start = text.find("{")
-    end = text.rfind("}")
-
-    if start == -1 or end == -1 or end < start:
-        return text.strip()
-
-    return text[start : end + 1]
 
 
 class OpenBioLLMProvider(AIProvider):
@@ -159,11 +125,11 @@ class OpenBioLLMProvider(AIProvider):
             self._log_failure(started_at, None, reason="empty response")
             raise AIProviderError("OpenBioLLM returned an empty or invalid response")
 
-        # Strictly syntactic cleanup only - see the two helpers' own
-        # docstrings above. Never repairs, never touches field content.
+        # Strictly syntactic cleanup only - see text_cleanup.py's own
+        # docstrings. Never repairs, never touches field content.
         # AISummaryService._parse_response is still the only thing that
         # validates the result against ClinicalSummary.
-        cleaned_text = _extract_json_object(_strip_code_fences(raw_text))
+        cleaned_text = extract_json_object(strip_code_fences(raw_text))
 
         duration_ms = (time.monotonic() - started_at) * 1000
         logger.info(

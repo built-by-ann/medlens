@@ -27,17 +27,20 @@ class Settings(BaseSettings):
 
     # Which AIProvider implementation get_ai_summary_service()
     # (app/ai/service.py) constructs - "gemini" (the default, so an
-    # existing deployment with no AI_PROVIDER set keeps working unchanged)
-    # or "openbiollm". See the model_validator below for the startup check
-    # that keeps this from being anything else - the same "fail at
-    # startup, not on first use" treatment storage_backend already gets.
+    # existing deployment with no AI_PROVIDER set keeps working unchanged),
+    # "openbiollm", or "medgemma". See the model_validator below for the
+    # startup check that keeps this from being anything else - the same
+    # "fail at startup, not on first use" treatment storage_backend
+    # already gets.
     ai_provider: str = "gemini"
 
-    # Only used when ai_provider == "openbiollm" - a Hugging Face user
-    # access token (fine-grained, scoped to "Make calls to Inference
-    # Providers") authenticating every call to OpenBioLLMProvider. Not
-    # required while ai_provider == "gemini" (the default), so an existing
-    # deployment needs no new configuration at all.
+    # Used by both openbiollm and medgemma (both call Hugging Face's
+    # Inference Providers mechanism - see openbiollm_provider.py and
+    # medgemma_provider.py) - a Hugging Face user access token
+    # (fine-grained, scoped to "Make calls to Inference Providers")
+    # authenticating every call to either provider. Not required while
+    # ai_provider == "gemini" (the default), so an existing deployment
+    # needs no new configuration at all.
     huggingface_api_key: str | None = None
     # Which OpenBioLLM checkpoint to call, and the one Hugging Face
     # currently reports as actually served (via the featherless-ai
@@ -46,6 +49,13 @@ class Settings(BaseSettings):
     # exact checkpoint is ever retired or moved to a different provider,
     # recovering shouldn't require a code change.
     openbiollm_model: str = "aaditya/Llama3-OpenBioLLM-8B"
+    # Which MedGemma checkpoint to call, and the only one Hugging Face
+    # currently serves through any Inference Provider (via featherless-ai
+    # - see medgemma_provider.py's own comments for why this exact
+    # checkpoint, and not one of the 4B variants, was chosen). Gated under
+    # Google's "Health AI Developer Foundations" license - see docs/ai.md
+    # for the manual account-level prerequisite this requires.
+    medgemma_model: str = "google/medgemma-27b-text-it"
 
     # Issue #58: which StorageService implementation
     # app/storage/service.py builds - "local" (the default, zero-config)
@@ -119,16 +129,18 @@ class Settings(BaseSettings):
         two concerns are unrelated.
 
         Deliberately does not require huggingface_api_key even when
-        ai_provider == "openbiollm": OpenBioLLMProvider already fails with
-        a clear AIProviderError on first use if it's missing (mirroring
-        how gemini_api_key is optional at the application level too - see
-        docs/ai.md's Configuration section), so a developer can select
-        openbiollm without a token yet and see every other feature work
-        normally, the same tradeoff already made for Gemini.
+        ai_provider is "openbiollm" or "medgemma": both providers already
+        fail with a clear AIProviderError on first use if it's missing
+        (mirroring how gemini_api_key is optional at the application
+        level too - see docs/ai.md's Configuration section), so a
+        developer can select either without a token yet and see every
+        other feature work normally, the same tradeoff already made for
+        Gemini.
         """
-        if self.ai_provider not in ("gemini", "openbiollm"):
+        if self.ai_provider not in ("gemini", "openbiollm", "medgemma"):
             raise ValueError(
-                f"AI_PROVIDER must be 'gemini' or 'openbiollm', got: {self.ai_provider!r}"
+                "AI_PROVIDER must be 'gemini', 'openbiollm', or 'medgemma', "
+                f"got: {self.ai_provider!r}"
             )
 
         return self
