@@ -24,7 +24,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from benchmark.loader import BenchmarkCase  # noqa: E402
 from benchmark.metrics import cli as metrics_cli  # noqa: E402
-from benchmark.report import charts  # noqa: E402
+from benchmark.report import chart_data, chart_style, charts  # noqa: E402
 from benchmark.report import cli as report_cli  # noqa: E402
 from benchmark.report.qualitative import build_qualitative_findings  # noqa: E402
 from benchmark.report.render import render_report  # noqa: E402
@@ -637,18 +637,68 @@ def test_render_report_qualitative_section_does_not_leak_between_providers_shari
 
 
 # ============================================================================
-# charts.py
+# chart_style.py
 # ============================================================================
 
 
-def test_bar_height_is_proportional_and_clamped():
-    assert charts._bar_height(0.5, y_max=1.0, plot_height=100) == 50.0
-    assert charts._bar_height(0.0, y_max=1.0, plot_height=100) == 0.0
-    assert charts._bar_height(2.0, y_max=1.0, plot_height=100) == 100.0  # clamped, never overflows
-    assert charts._bar_height(1.0, y_max=0.0, plot_height=100) == 0.0  # never divides by zero
+def test_build_provider_colors_is_deterministic_and_order_based():
+    colors_a = chart_style.build_provider_colors(["gemini", "openbiollm", "medgemma"])
+    colors_b = chart_style.build_provider_colors(["gemini", "openbiollm", "medgemma"])
+
+    assert colors_a == colors_b
+    assert len(set(colors_a.values())) == 3  # three distinct colors, one per provider
 
 
-def test_reliability_chart_contains_one_bar_group_per_provider():
+def test_build_provider_colors_assigns_by_citation_order_not_name():
+    # The same provider gets a different color if cited in a different
+    # position - color follows citation order, never a hardcoded mapping
+    # keyed by literal provider name (a report could cite any provider
+    # set, not just these three).
+    colors = chart_style.build_provider_colors(["medgemma", "gemini"])
+
+    assert colors["medgemma"] == chart_style.PROVIDER_PALETTE[0]
+    assert colors["gemini"] == chart_style.PROVIDER_PALETTE[1]
+
+
+def test_build_provider_colors_cycles_if_more_providers_than_palette_entries():
+    providers = [f"provider-{i}" for i in range(len(chart_style.PROVIDER_PALETTE) + 2)]
+
+    colors = chart_style.build_provider_colors(providers)
+
+    assert colors[providers[0]] == colors[providers[len(chart_style.PROVIDER_PALETTE)]]
+
+
+@pytest.mark.parametrize(
+    ("tag_id", "expected"),
+    [
+        ("conflicting_across_documents", "Conflicting across documents"),
+        ("mentioned_not_active", "Mentioned not active"),
+        ("route_variety", "Route variety"),
+        ("straightforward_list", "Straightforward list"),
+        ("abbreviation", "Abbreviation"),
+    ],
+)
+def test_humanize_tag_formats_known_examples(tag_id, expected):
+    assert chart_style.humanize_tag(tag_id) == expected
+
+
+def test_humanize_tag_never_changes_the_identifier_itself():
+    # humanize_tag is display-only; callers must still key every metrics
+    # lookup by the untouched, original tag_id (see chart_data.py's own
+    # builders, which always look up group_data_by_provider[...][tag]
+    # using the raw identifier, never the humanized string).
+    tag_id = "conflicting_across_documents"
+    chart_style.humanize_tag(tag_id)
+
+    assert tag_id == "conflicting_across_documents"
+
+
+# ============================================================================
+# chart_data.py (pure data-to-chart-specification logic)
+# ============================================================================
+
+
+def test_build_reliability_heatmap_spec_preserves_order_and_values():
     reliability_by_provider = {
         "gemini": {
             "provider_call_success_rate": 1.0,
@@ -664,51 +714,266 @@ def test_reliability_chart_contains_one_bar_group_per_provider():
         },
     }
 
-    svg = charts.reliability_chart(["gemini", "openbiollm"], reliability_by_provider)
+    spec = chart_data.build_reliability_heatmap_spec(
+        ["gemini", "openbiollm"], reliability_by_provider
+    )
 
-    assert svg.startswith("<svg")
-    assert svg.count("<rect") >= 2 * 4  # 2 providers x 4 rate series, plus legend swatches
-    assert "gemini" in svg
-    assert "openbiollm" in svg
+    assert spec.providers == ["gemini", "openbiollm"]
+    assert spec.columns == ["Call success", "JSON validity", "Schema validity", "Evaluable cases"]
+    assert spec.values[0] == [100.0, 100.0, 100.0, 100.0]
+    assert spec.values[1] == [100.0, 0.0, 0.0, 0.0]
+    # Every column names its own denominator - the chart must never let a
+    # reader assume all four percentages share one common base.
+    assert len(spec.column_subtitles) == 4
+    assert len(set(spec.column_subtitles)) >= 2
 
 
-def test_medication_detection_chart_is_valid_svg_shape():
+def test_build_medication_detection_dotplot_spec_marks_only_precision_as_not_applicable():
     detection_by_provider = {
-        "gemini": {"end_to_end": {"micro": {"precision": 0.9, "recall": 0.95, "f1": 0.92}}},
-    }
-
-    svg = charts.medication_detection_chart(["gemini"], detection_by_provider)
-
-    assert svg.startswith("<svg")
-    assert svg.rstrip().endswith("</svg>")
-
-
-def test_medication_detection_chart_renders_precision_not_applicable_as_zero_height_labeled_na():
-    detection_by_provider = {
-        "gemini": {"end_to_end": {"micro": {"precision": 0.9, "recall": 0.95, "f1": 0.92}}},
         "openbiollm": {"end_to_end": {"micro": {"precision": 1.0, "recall": 0.0, "f1": 0.0}}},
     }
 
-    svg = charts.medication_detection_chart(
-        ["gemini", "openbiollm"],
-        detection_by_provider,
-        precision_not_applicable=frozenset({"openbiollm"}),
+    spec = chart_data.build_medication_detection_dotplot_spec(
+        ["openbiollm"], detection_by_provider, precision_not_applicable=frozenset({"openbiollm"})
     )
 
-    assert ">N/A<" in svg
-    # openbiollm's own precision value (1.0, the vacuous #90 convention)
-    # must never surface as a rendered percentage anywhere in the chart.
-    assert "100%" not in svg
+    values_by_label = {row.label: row.values["openbiollm"] for row in spec.rows}
+    assert values_by_label["Precision"] is None
+    # Recall/F1 are real, defined zeros, never suppressed alongside
+    # precision - the vacuous-precision convention doesn't apply to them.
+    assert values_by_label["Recall"] == 0.0
+    assert values_by_label["F1"] == 0.0
 
 
-def test_latency_chart_handles_zero_successful_calls_without_dividing_by_zero():
-    latency_by_provider = {
-        "openbiollm": {"count": 0, "mean": 0.0, "median": 0.0, "p95": 0.0, "min": 0.0, "max": 0.0}
+def test_build_medication_detection_dotplot_spec_never_suppresses_a_real_predicted_positive():
+    detection_by_provider = {
+        "gemini": {"end_to_end": {"micro": {"precision": 0.9, "recall": 0.97, "f1": 0.935}}},
     }
 
-    svg = charts.latency_chart(["openbiollm"], latency_by_provider)
+    spec = chart_data.build_medication_detection_dotplot_spec(
+        ["gemini"], detection_by_provider, precision_not_applicable=frozenset()
+    )
 
-    assert svg.startswith("<svg")
+    precision_row = next(row for row in spec.rows if row.label == "Precision")
+    assert precision_row.values["gemini"] == pytest.approx(90.0)
+
+
+def test_build_difficulty_dotplot_spec_suppresses_every_row_for_a_zero_evaluable_provider():
+    group_data_by_provider = {
+        "gemini": {
+            "easy": {"micro": {"f1": 1.0}, "n": 9},
+            "medium": {"micro": {"f1": 0.8}, "n": 11},
+            "hard": {"micro": {"f1": 0.97}, "n": 10},
+        },
+        "openbiollm": {
+            "easy": {"micro": {"f1": 1.0}, "n": 9},  # the real, vacuous #90 value
+            "medium": {"micro": {"f1": 0.0}, "n": 11},
+            "hard": {"micro": {"f1": 1.0}, "n": 10},  # also vacuous
+        },
+    }
+
+    spec = chart_data.build_difficulty_dotplot_spec(
+        ["gemini", "openbiollm"], group_data_by_provider, zero_evaluable=frozenset({"openbiollm"})
+    )
+
+    # Natural easy/medium/hard order, not alphabetical (which would be
+    # easy/hard/medium): the one place this chart deliberately diverges
+    # from the difficulty *table*'s own alphabetical order.
+    assert [row.label.split(" (")[0] for row in spec.rows] == ["Easy", "Medium", "Hard"]
+    # openbiollm is omitted entirely (not a None placeholder in every
+    # row) - see DotPlotSpec.omitted_providers for the single-annotation
+    # treatment this enables instead of three repeated "not applicable"
+    # marks.
+    assert spec.providers == ["gemini"]
+    assert spec.omitted_providers == ["openbiollm"]
+    assert all("openbiollm" not in row.values for row in spec.rows)
+    assert [row.values["gemini"] for row in spec.rows] == pytest.approx([100.0, 80.0, 97.0])
+
+
+def test_build_difficulty_dotplot_spec_includes_sample_size_in_the_label():
+    group_data_by_provider = {"gemini": {"easy": {"micro": {"f1": 1.0}, "n": 9}}}
+
+    spec = chart_data.build_difficulty_dotplot_spec(["gemini"], group_data_by_provider, frozenset())
+
+    assert spec.rows[0].label == "Easy (n=9)"
+
+
+def test_build_tag_dumbbell_spec_omits_zero_evaluable_provider_entirely():
+    group_data_by_provider = {
+        "gemini": {"irrelevant_text": {"micro": {"f1": 1.0}, "n": 3}},
+        "medgemma": {"irrelevant_text": {"micro": {"f1": 0.0}, "n": 3}},
+        "openbiollm": {"irrelevant_text": {"micro": {"f1": 1.0}, "n": 3}},  # vacuous
+    }
+
+    spec = chart_data.build_tag_dumbbell_spec(
+        ["gemini", "openbiollm", "medgemma"],
+        ["irrelevant_text"],
+        group_data_by_provider,
+        zero_evaluable=frozenset({"openbiollm"}),
+    )
+
+    assert spec.plotted_providers == ["gemini", "medgemma"]
+    assert spec.omitted_providers == ["openbiollm"]
+    row = spec.rows[0]
+    # Not a None placeholder - the key is absent entirely, so an omitted
+    # provider can never be accidentally iterated over as if it were a
+    # real (if unusual) data point.
+    assert "openbiollm" not in row.values
+    assert row.values == {"gemini": 100.0, "medgemma": 0.0}
+
+
+def test_build_tag_dumbbell_spec_humanizes_the_label_but_keeps_the_real_tag_id():
+    group_data_by_provider = {
+        "gemini": {"conflicting_across_documents": {"micro": {"f1": 1.0}, "n": 4}}
+    }
+
+    spec = chart_data.build_tag_dumbbell_spec(
+        ["gemini"], ["conflicting_across_documents"], group_data_by_provider, frozenset()
+    )
+
+    assert spec.rows[0].tag_id == "conflicting_across_documents"
+    assert spec.rows[0].display_label == "Conflicting across documents (n=4)"
+
+
+def test_build_tag_dumbbell_spec_preserves_the_given_alphabetical_order():
+    tags = ["abbreviation", "irrelevant_text", "route_variety"]
+    group_data_by_provider = {"gemini": {tag: {"micro": {"f1": 1.0}, "n": 2} for tag in tags}}
+
+    spec = chart_data.build_tag_dumbbell_spec(["gemini"], tags, group_data_by_provider, frozenset())
+
+    assert [row.tag_id for row in spec.rows] == tags
+
+
+def test_build_latency_spec_maps_median_and_p95_per_provider():
+    latency_by_provider = {"gemini": {"median": 3414.0, "p95": 12013.0}}
+
+    spec = chart_data.build_latency_spec(["gemini"], latency_by_provider)
+
+    assert spec.rows == [chart_data.LatencyRow(provider="gemini", median=3414.0, p95=12013.0)]
+
+
+# ============================================================================
+# charts.py (thin rendering smoke tests: rendering completes, output is
+# well-formed SVG - never asserting on matplotlib's own internal SVG
+# structure or pixel output; see chart_data.py's tests, above, for the
+# actual data/business-rule coverage)
+# ============================================================================
+
+
+def _assert_well_formed_svg(svg: str) -> None:
+    assert "<svg" in svg[:400]
+    assert svg.rstrip().endswith("</svg>")
+    assert len(svg) > 500  # not a trivial/empty document
+
+
+def test_render_reliability_heatmap_produces_well_formed_svg():
+    spec = chart_data.HeatmapSpec(
+        providers=["gemini", "openbiollm"],
+        columns=["Call success", "JSON validity", "Schema validity", "Evaluable cases"],
+        column_subtitles=[
+            "% of attempted",
+            "% of successful calls",
+            "% of valid JSON",
+            "% of attempted",
+        ],
+        values=[[100.0, 100.0, 100.0, 100.0], [100.0, 0.0, 0.0, 0.0]],
+    )
+
+    svg = charts.render_reliability_heatmap(spec)
+
+    _assert_well_formed_svg(svg)
+    # Humanized, public-facing provider names, never the lowercase
+    # internal identifier (chart_style.humanize_provider).
+    assert "Gemini" in svg
+    assert "OpenBioLLM" in svg
+
+
+def test_render_dotplot_renders_na_text_and_never_a_zero_percent_label_for_it():
+    spec = chart_data.DotPlotSpec(
+        rows=[
+            chart_data.DotPlotRow(label="Precision", values={"gemini": 90.0, "openbiollm": None}),
+            chart_data.DotPlotRow(label="Recall", values={"gemini": 97.0, "openbiollm": 0.0}),
+        ],
+        providers=["gemini", "openbiollm"],
+    )
+    colors = chart_style.build_provider_colors(spec.providers)
+
+    # No title parameter: charts no longer embed their own titles (the
+    # report's own section heading already provides figure context).
+    svg = charts.render_dotplot(spec, colors)
+
+    _assert_well_formed_svg(svg)
+    assert chart_style.NOT_APPLICABLE_LABEL in svg
+    # openbiollm's real, defined 0.0% recall must still render normally.
+    assert "0.0%" in svg
+
+
+def test_render_tag_dumbbell_renders_all_rows_and_the_omission_annotation():
+    rows = [
+        chart_data.DumbbellRow(
+            tag_id=f"tag_{i}",
+            display_label=f"Tag {i} (n=3)",
+            values={"gemini": 90.0, "medgemma": 80.0},
+        )
+        for i in range(18)
+    ]
+    spec = chart_data.DumbbellSpec(
+        rows=rows, plotted_providers=["gemini", "medgemma"], omitted_providers=["openbiollm"]
+    )
+    colors = chart_style.build_provider_colors(["gemini", "openbiollm", "medgemma"])
+
+    svg = charts.render_tag_dumbbell(spec, colors)
+
+    _assert_well_formed_svg(svg)
+    for row in rows:
+        assert row.display_label in svg
+    # Named once, humanized, in the omission annotation - never once per
+    # row (that would be 18 meaningless N/A marks for a zero-evaluable
+    # provider).
+    assert "OpenBioLLM" in svg
+    assert svg.count("OpenBioLLM") == 1
+
+
+def test_render_tag_dumbbell_with_no_omitted_providers_has_no_annotation():
+    rows = [
+        chart_data.DumbbellRow(
+            tag_id="abbreviation", display_label="Abbreviation (n=3)", values={"gemini": 100.0}
+        )
+    ]
+    spec = chart_data.DumbbellSpec(rows=rows, plotted_providers=["gemini"], omitted_providers=[])
+    colors = chart_style.build_provider_colors(["gemini"])
+
+    svg = charts.render_tag_dumbbell(spec, colors)
+
+    _assert_well_formed_svg(svg)
+
+
+def test_render_latency_handles_a_single_provider_without_dividing_by_zero():
+    spec = chart_data.LatencySpec(
+        rows=[chart_data.LatencyRow(provider="openbiollm", median=0.0, p95=0.0)]
+    )
+    colors = chart_style.build_provider_colors(["openbiollm"])
+
+    svg = charts.render_latency(spec, colors)
+
+    _assert_well_formed_svg(svg)
+
+
+def test_render_latency_places_no_methodological_caption_in_the_svg():
+    # The "not hardware-comparable" interpretation stays in render.py's
+    # own prose; the chart itself communicates only the numbers.
+    spec = chart_data.LatencySpec(
+        rows=[
+            chart_data.LatencyRow(provider="gemini", median=3414.0, p95=12013.0),
+            chart_data.LatencyRow(provider="openbiollm", median=13136.0, p95=94478.0),
+        ]
+    )
+    colors = chart_style.build_provider_colors(["gemini", "openbiollm"])
+
+    svg = charts.render_latency(spec, colors)
+
+    assert "hardware" not in svg.lower()
+    assert "comparable" not in svg.lower()
 
 
 # ============================================================================
@@ -879,7 +1144,7 @@ def test_render_report_returns_a_figure_per_chart(two_consistent_runs):
         "latency.svg",
     }
     for svg in figures.values():
-        assert svg.startswith("<svg")
+        _assert_well_formed_svg(svg)
 
 
 # ============================================================================
@@ -1059,8 +1324,10 @@ def test_render_report_suppresses_tag_breakdown_for_zero_evaluable_provider(
     markdown_text, _figures = _render_vacuous(zero_evaluable_with_vacuous_groups)
 
     tag_section = _extract_section(markdown_text, "## Tag Breakdown")
+    # The table displays the humanized tag label ("Irrelevant text"), not
+    # the raw identifier ("irrelevant_text") - see chart_style.humanize_tag.
     irrelevant_row = next(
-        line for line in tag_section.splitlines() if line.startswith("| irrelevant_text")
+        line for line in tag_section.splitlines() if line.startswith("| Irrelevant text")
     )
 
     cells = [cell.strip() for cell in irrelevant_row.strip("|").split("|")]
@@ -1092,38 +1359,6 @@ def test_render_report_reliability_presentation_is_unaffected_by_vacuous_suppres
     assert schema_validity == "0.0%"
     assert evaluable_rate == "0.0%"
     assert "not applicable" not in reliability_section
-
-
-def test_group_breakdown_chart_marks_zero_evaluable_provider_as_not_applicable():
-    f1_by_provider_and_group = {
-        "openbiollm": {"hard": {"micro": {"f1": 1.0}, "n": 1}},
-        "medgemma": {"hard": {"micro": {"f1": 1.0}, "n": 1}},
-    }
-
-    svg = charts.group_breakdown_chart(
-        "F1 by difficulty (end-to-end, micro)",
-        ["openbiollm", "medgemma"],
-        ["hard"],
-        f1_by_provider_and_group,
-        not_applicable_providers=frozenset({"openbiollm"}),
-    )
-
-    assert ">N/A<" in svg
-    # medgemma's real 100% must still render normally.
-    assert "100%" in svg
-
-
-def test_group_breakdown_chart_with_no_not_applicable_providers_renders_all_values():
-    f1_by_provider_and_group = {
-        "gemini": {"easy": {"micro": {"f1": 0.9}, "n": 3}},
-    }
-
-    svg = charts.group_breakdown_chart(
-        "F1 by difficulty (end-to-end, micro)", ["gemini"], ["easy"], f1_by_provider_and_group
-    )
-
-    assert ">N/A<" not in svg
-    assert "90%" in svg
 
 
 # ============================================================================

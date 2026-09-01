@@ -1,6 +1,6 @@
 # MedLens Model Evaluation Report
 
-Generated: 2026-09-01T21:13:45Z
+Generated: 2026-09-01T23:05:29Z
 
 See `docs/model-evaluation.md` for the full evaluation methodology this report's numbers were produced under; this document is the reviewed, promoted results of one comparison run, regenerated periodically from `benchmark/report/`, not the methodology itself.
 
@@ -36,7 +36,7 @@ Precision is shown as "not applicable" for a provider with zero evaluable cases 
 
 ## Reliability
 
-`json_validity_rate` is computed over calls that succeeded at all; `schema_validity_rate` over responses that were valid JSON at all: each rate has its own denominator, not the total attempted count (see benchmark/README.md). A provider can have a perfect call-success rate and a zero schema-validity rate at the same time; that combination is a real, distinct outcome, not a contradiction. See the reliability chart below.
+`json_validity_rate` is computed over calls that succeeded at all; `schema_validity_rate` over responses that were valid JSON at all: each rate has its own denominator, not the total attempted count (see benchmark/README.md). A provider can have a perfect call-success rate and a zero schema-validity rate at the same time; that combination is a real, distinct outcome, not a contradiction. The chart below shows each provider's own four rates as an independent column, each labeled with its own denominator, never as a single funnel computed from one shared base.
 
 | Provider | Attempted | Call success | JSON validity | Schema validity | Evaluable case rate |
 | --- | --- | --- | --- | --- | --- |
@@ -123,28 +123,28 @@ End-to-end micro F1 (the same interpretation as the headline numbers above), gro
 
 A case can carry more than one tag, so `n` values do not sum to the total case count. Small groups (as few as 2 cases) are shown in full, never suppressed; always read `n` alongside the score.
 
-Every cell is reported as "not applicable" for openbiollm: #90's own per-tag scoring gives a vacuous 100% to a group made up entirely of zero-expected-medication cases, whether or not the provider produced any real structured output, so a real numeric cell here would risk being read as genuine performance for a provider that had none to show.
+Every cell is reported as "not applicable" for openbiollm: #90's own per-tag scoring gives a vacuous 100% to a group made up entirely of zero-expected-medication cases, whether or not the provider produced any real structured output, so a real numeric cell here would risk being read as genuine performance for a provider that had none to show. The chart below omits openbiollm from every tag entirely, with a single annotation explaining why, rather than 18 individually meaningless "not applicable" marks.
 
-| Group | gemini | openbiollm | medgemma |
+| Tag | gemini | openbiollm | medgemma |
 | --- | --- | --- | --- |
-| abbreviation | 100.0% (n=3) | not applicable | 100.0% (n=3) |
-| active_medication | 100.0% (n=2) | not applicable | 80.0% (n=2) |
-| brand_vs_generic | 100.0% (n=2) | not applicable | 100.0% (n=2) |
-| conflicting_across_documents | 100.0% (n=4) | not applicable | 94.7% (n=4) |
-| discontinued | 100.0% (n=2) | not applicable | 88.9% (n=2) |
-| dose_change | 100.0% (n=2) | not applicable | 88.9% (n=2) |
-| frequency_variety | 100.0% (n=3) | not applicable | 100.0% (n=3) |
-| irrelevant_text | 100.0% (n=3) | not applicable | 0.0% (n=3) |
-| mentioned_not_active | 0.0% (n=4) | not applicable | 0.0% (n=4) |
-| missing_fields | 90.9% (n=4) | not applicable | 85.7% (n=4) |
-| multi_document | 98.6% (n=10) | not applicable | 82.0% (n=10) |
-| narrative_text | 87.5% (n=7) | not applicable | 94.1% (n=7) |
-| newly_started | 100.0% (n=3) | not applicable | 87.5% (n=3) |
-| prn | 100.0% (n=4) | not applicable | 100.0% (n=4) |
-| reconciliation_relevant | 98.6% (n=9) | not applicable | 80.7% (n=9) |
-| route_variety | 85.7% (n=4) | not applicable | 71.4% (n=4) |
-| status_change | 100.0% (n=3) | not applicable | 85.7% (n=3) |
-| straightforward_list | 95.5% (n=8) | not applicable | 81.4% (n=8) |
+| Abbreviation | 100.0% (n=3) | not applicable | 100.0% (n=3) |
+| Active medication | 100.0% (n=2) | not applicable | 80.0% (n=2) |
+| Brand vs generic | 100.0% (n=2) | not applicable | 100.0% (n=2) |
+| Conflicting across documents | 100.0% (n=4) | not applicable | 94.7% (n=4) |
+| Discontinued | 100.0% (n=2) | not applicable | 88.9% (n=2) |
+| Dose change | 100.0% (n=2) | not applicable | 88.9% (n=2) |
+| Frequency variety | 100.0% (n=3) | not applicable | 100.0% (n=3) |
+| Irrelevant text | 100.0% (n=3) | not applicable | 0.0% (n=3) |
+| Mentioned not active | 0.0% (n=4) | not applicable | 0.0% (n=4) |
+| Missing fields | 90.9% (n=4) | not applicable | 85.7% (n=4) |
+| Multi document | 98.6% (n=10) | not applicable | 82.0% (n=10) |
+| Narrative text | 87.5% (n=7) | not applicable | 94.1% (n=7) |
+| Newly started | 100.0% (n=3) | not applicable | 87.5% (n=3) |
+| Prn | 100.0% (n=4) | not applicable | 100.0% (n=4) |
+| Reconciliation relevant | 98.6% (n=9) | not applicable | 80.7% (n=9) |
+| Route variety | 85.7% (n=4) | not applicable | 71.4% (n=4) |
+| Status change | 100.0% (n=3) | not applicable | 85.7% (n=3) |
+| Straightforward list | 95.5% (n=8) | not applicable | 81.4% (n=8) |
 
 ![Tag breakdown](assets/evaluation/by_tag.svg)
 

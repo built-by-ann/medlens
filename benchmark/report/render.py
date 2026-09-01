@@ -14,7 +14,7 @@ never scores (possible_inconsistencies, summary) via qualitative.py.
 
 from __future__ import annotations
 
-from benchmark.report import charts
+from benchmark.report import chart_data, chart_style, charts
 from benchmark.report.qualitative import QualitativeFindings
 from benchmark.report.sources import ProviderSource
 from benchmark.report.validation import ValidationWarning
@@ -126,17 +126,21 @@ def render_report(
 ) -> tuple[str, dict[str, str]]:
     figures: dict[str, str] = {}
     sections: list[str] = []
+    # Built once and threaded through every chart-rendering call below,
+    # so the same provider gets the same color in every figure of this
+    # report; see chart_style.build_provider_colors's own docstring.
+    provider_colors = chart_style.build_provider_colors(provider_order)
 
     sections.append(f"# MedLens Model Evaluation Report\n\nGenerated: {generated_at}")
 
     sections.append(_render_provenance(provider_order, sources, warnings, cli_invocation))
     sections.append(_render_executive_summary(provider_order, sources))
     sections.append(_render_reliability(provider_order, sources, figures))
-    sections.append(_render_medication_detection(provider_order, sources, figures))
+    sections.append(_render_medication_detection(provider_order, sources, figures, provider_colors))
     sections.append(_render_attributes(provider_order, sources))
-    sections.append(_render_group_breakdown(provider_order, sources, figures, key="by_difficulty"))
-    sections.append(_render_group_breakdown(provider_order, sources, figures, key="by_tag"))
-    sections.append(_render_latency(provider_order, sources, figures))
+    sections.append(_render_difficulty_breakdown(provider_order, sources, figures, provider_colors))
+    sections.append(_render_tag_breakdown(provider_order, sources, figures, provider_colors))
+    sections.append(_render_latency(provider_order, sources, figures, provider_colors))
     sections.append(_render_qualitative(provider_order, qualitative_by_provider))
     sections.append(_render_zero_evaluable_notes(provider_order, sources))
     sections.append(_render_limitations())
@@ -267,7 +271,8 @@ def _render_reliability(
         rows,
     )
 
-    figures["reliability.svg"] = charts.reliability_chart(provider_order, reliability_by_provider)
+    heatmap_spec = chart_data.build_reliability_heatmap_spec(provider_order, reliability_by_provider)
+    figures["reliability.svg"] = charts.render_reliability_heatmap(heatmap_spec)
 
     return (
         "## Reliability\n\n"
@@ -275,14 +280,19 @@ def _render_reliability(
         "over responses that were valid JSON at all: each rate has its own denominator, not the "
         "total attempted count (see benchmark/README.md). A provider can have a perfect "
         "call-success rate and a zero schema-validity rate at the same time; that combination is "
-        "a real, distinct outcome, not a contradiction. See the reliability chart below.\n\n"
+        "a real, distinct outcome, not a contradiction. The chart below shows each provider's own "
+        "four rates as an independent column, each labeled with its own denominator, never as a "
+        "single funnel computed from one shared base.\n\n"
         f"{table}\n\n"
         "![Reliability](figures/reliability.svg)"
     )
 
 
 def _render_medication_detection(
-    provider_order: list[str], sources: dict[str, ProviderSource], figures: dict[str, str]
+    provider_order: list[str],
+    sources: dict[str, ProviderSource],
+    figures: dict[str, str],
+    provider_colors: dict[str, str],
 ) -> str:
     detection_by_provider = {
         provider: sources[provider].provider_metrics["medication_detection"]
@@ -377,9 +387,10 @@ def _render_medication_detection(
             + " (0 evaluable cases; see the notes further down)."
         )
 
-    figures["medication_detection.svg"] = charts.medication_detection_chart(
+    dotplot_spec = chart_data.build_medication_detection_dotplot_spec(
         provider_order, detection_by_provider, precision_not_applicable
     )
+    figures["medication_detection.svg"] = charts.render_dotplot(dotplot_spec, provider_colors)
 
     return (
         "## Medication Detection\n\n"
@@ -436,14 +447,14 @@ def _render_attributes(provider_order: list[str], sources: dict[str, ProviderSou
     )
 
 
-def _render_group_breakdown(
+def _render_difficulty_breakdown(
     provider_order: list[str],
     sources: dict[str, ProviderSource],
     figures: dict[str, str],
-    key: str,
+    provider_colors: dict[str, str],
 ) -> str:
     group_data_by_provider = {
-        provider: sources[provider].provider_metrics[key] for provider in provider_order
+        provider: sources[provider].provider_metrics["by_difficulty"] for provider in provider_order
     }
     groups = sorted({group for data in group_data_by_provider.values() for group in data})
 
@@ -467,48 +478,106 @@ def _render_group_breakdown(
 
     table = _md_table(["Group", *provider_order], rows)
 
-    label = "Difficulty" if key == "by_difficulty" else "Tag"
-    filename = f"{key}.svg"
-    figures[filename] = charts.group_breakdown_chart(
-        f"F1 by {label.lower()} (end-to-end, micro)",
-        provider_order,
-        groups,
-        group_data_by_provider,
-        not_applicable_providers=zero_evaluable,
+    dotplot_spec = chart_data.build_difficulty_dotplot_spec(
+        provider_order, group_data_by_provider, zero_evaluable
     )
-
-    tag_note = (
-        "\n\nA case can carry more than one tag, so `n` values do not sum to the total case count. "
-        "Small groups (as few as 2 cases) are shown in full, never suppressed; always read `n` "
-        "alongside the score."
-        if key == "by_tag"
-        else ""
-    )
+    figures["by_difficulty.svg"] = charts.render_dotplot(dotplot_spec, provider_colors)
 
     zero_evaluable_note = ""
     if zero_evaluable:
         zero_evaluable_note = (
             '\n\nEvery cell is reported as "not applicable" for '
             + ", ".join(sorted(zero_evaluable))
-            + f": #90's own per-{label.lower()} scoring gives a vacuous 100% to a group made up "
+            + ": #90's own per-difficulty scoring gives a vacuous 100% to a group made up "
             "entirely of zero-expected-medication cases, whether or not the provider produced "
             "any real structured output, so a real numeric cell here would risk being read as "
             "genuine performance for a provider that had none to show."
         )
 
     return (
-        f"## {label} Breakdown\n\n"
-        f"End-to-end micro F1 (the same interpretation as the headline numbers above), grouped by "
-        f"{label.lower()}. `n` is always shown so a group's numbers are never read as more "
-        f"statistically meaningful than the sample size actually supports."
-        f"{tag_note}{zero_evaluable_note}\n\n"
+        "## Difficulty Breakdown\n\n"
+        "End-to-end micro F1 (the same interpretation as the headline numbers above), grouped by "
+        "difficulty. `n` is always shown so a group's numbers are never read as more "
+        "statistically meaningful than the sample size actually supports."
+        f"{zero_evaluable_note}\n\n"
         f"{table}\n\n"
-        f"![{label} breakdown](figures/{filename})"
+        "![Difficulty breakdown](figures/by_difficulty.svg)"
+    )
+
+
+def _render_tag_breakdown(
+    provider_order: list[str],
+    sources: dict[str, ProviderSource],
+    figures: dict[str, str],
+    provider_colors: dict[str, str],
+) -> str:
+    group_data_by_provider = {
+        provider: sources[provider].provider_metrics["by_tag"] for provider in provider_order
+    }
+    # Alphabetical by the canonical tag identifier, never by its
+    # humanized display text, so this order always matches the chart's
+    # own row order (chart_data.build_tag_dumbbell_spec preserves
+    # whatever order it's given here unchanged).
+    groups = sorted({group for data in group_data_by_provider.values() for group in data})
+
+    zero_evaluable = frozenset(
+        provider for provider in provider_order if _zero_evaluable_cases(sources[provider])
+    )
+
+    rows = []
+    for group in groups:
+        row = [chart_style.humanize_tag(group)]
+        for provider in provider_order:
+            if provider in zero_evaluable:
+                row.append("not applicable")
+                continue
+            entry = group_data_by_provider[provider].get(group)
+            if entry is None:
+                row.append("-")
+            else:
+                row.append(f"{_pct(entry['micro']['f1'])} (n={entry['n']})")
+        rows.append(row)
+
+    table = _md_table(["Tag", *provider_order], rows)
+
+    dumbbell_spec = chart_data.build_tag_dumbbell_spec(
+        provider_order, groups, group_data_by_provider, zero_evaluable
+    )
+    figures["by_tag.svg"] = charts.render_tag_dumbbell(dumbbell_spec, provider_colors)
+
+    zero_evaluable_note = ""
+    if zero_evaluable:
+        zero_evaluable_note = (
+            '\n\nEvery cell is reported as "not applicable" for '
+            + ", ".join(sorted(zero_evaluable))
+            + ": #90's own per-tag scoring gives a vacuous 100% to a group made up entirely of "
+            "zero-expected-medication cases, whether or not the provider produced any real "
+            "structured output, so a real numeric cell here would risk being read as genuine "
+            "performance for a provider that had none to show. The chart below omits "
+            + ", ".join(sorted(zero_evaluable))
+            + ' from every tag entirely, with a single annotation explaining why, rather than '
+            '18 individually meaningless "not applicable" marks.'
+        )
+
+    return (
+        "## Tag Breakdown\n\n"
+        "End-to-end micro F1 (the same interpretation as the headline numbers above), grouped by "
+        "tag. `n` is always shown so a group's numbers are never read as more statistically "
+        "meaningful than the sample size actually supports.\n\n"
+        "A case can carry more than one tag, so `n` values do not sum to the total case count. "
+        "Small groups (as few as 2 cases) are shown in full, never suppressed; always read `n` "
+        "alongside the score."
+        f"{zero_evaluable_note}\n\n"
+        f"{table}\n\n"
+        "![Tag breakdown](figures/by_tag.svg)"
     )
 
 
 def _render_latency(
-    provider_order: list[str], sources: dict[str, ProviderSource], figures: dict[str, str]
+    provider_order: list[str],
+    sources: dict[str, ProviderSource],
+    figures: dict[str, str],
+    provider_colors: dict[str, str],
 ) -> str:
     latency_by_provider = {
         provider: sources[provider].provider_metrics["latency_ms"] for provider in provider_order
@@ -524,7 +593,8 @@ def _render_latency(
     ]
     table = _md_table(["Provider", "Successful calls", "Median (ms)", "p95 (ms)"], rows)
 
-    figures["latency.svg"] = charts.latency_chart(provider_order, latency_by_provider)
+    latency_spec = chart_data.build_latency_spec(provider_order, latency_by_provider)
+    figures["latency.svg"] = charts.render_latency(latency_spec, provider_colors)
 
     return (
         "## Latency\n\n"
