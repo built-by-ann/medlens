@@ -1,0 +1,42 @@
+{
+  "case_id": "BENCH-007",
+  "tags": [
+    "multi_document",
+    "status_change",
+    "conflicting_across_documents",
+    "reconciliation_relevant",
+    "active_medication"
+  ],
+  "difficulty": "medium",
+  "description": "A medication listed as active is reported discontinued in a specialist note.",
+  "input_notes": [
+    "Medication list on file: Naproxen 500 mg oral twice daily, active.",
+    "Gastroenterology consultation: Patient was advised to stop Naproxen given a history of peptic ulcer disease; she reports she discontinued it two weeks ago and has not taken any NSAIDs since."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Naproxen",
+        "dosage": "500 mg",
+        "route": "oral",
+        "frequency": "twice daily",
+        "status": "active",
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Naproxen",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": "discontinued",
+        "notes": "discontinued per gastroenterology due to peptic ulcer disease history",
+        "source_note": 2
+      }
+    ],
+    "possible_inconsistencies": [
+      "Naproxen is listed as active on the medication list but was reported discontinued in the gastroenterology note."
+    ],
+    "summary": "Naproxen is listed as active on the medication list, but the gastroenterology note reports it was discontinued two weeks ago due to a history of peptic ulcer disease."
+  }
+}

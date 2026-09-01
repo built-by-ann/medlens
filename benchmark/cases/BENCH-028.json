@@ -1,0 +1,37 @@
+{
+  "case_id": "BENCH-028",
+  "tags": [
+    "narrative_text",
+    "status_change",
+    "newly_started"
+  ],
+  "difficulty": "hard",
+  "description": "One medication discontinued and a different one started within the same single note.",
+  "input_notes": [
+    "Diabetes follow-up: A1c remains elevated at 8.9% despite adherence to NPH insulin 20 units subcutaneously twice daily. Discontinuing NPH insulin today and starting insulin glargine 24 units subcutaneously once daily at bedtime instead, which should provide more consistent coverage."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "NPH insulin",
+        "dosage": "20 units",
+        "route": "subcutaneously",
+        "frequency": "twice daily",
+        "status": "discontinuing",
+        "notes": "discontinued due to inadequate glycemic control",
+        "source_note": 1
+      },
+      {
+        "name": "Insulin glargine",
+        "dosage": "24 units",
+        "route": "subcutaneously",
+        "frequency": "once daily at bedtime",
+        "status": "starting",
+        "notes": "started in place of NPH insulin for more consistent coverage",
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "NPH insulin was discontinued today due to inadequate glycemic control and replaced with insulin glargine 24 units subcutaneously once daily at bedtime."
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "case_id": "BENCH-010",
+  "tags": [
+    "multi_document",
+    "straightforward_list",
+    "reconciliation_relevant"
+  ],
+  "difficulty": "hard",
+  "description": "Three independent encounters agree completely; a negative control where nothing should be flagged and no medication should be invented for a note that doesn't mention it.",
+  "input_notes": [
+    "Annual physical: Current medications confirmed: Metformin 1000 mg oral twice daily, Lisinopril 20 mg oral once daily.",
+    "Endocrinology follow-up: Reviewed medications; patient remains on Metformin 1000 mg oral twice daily. No changes made.",
+    "Pharmacy medication synchronization call: Confirmed refills for Metformin 1000 mg oral twice daily and Lisinopril 20 mg oral once daily; both taken as prescribed."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Metformin",
+        "dosage": "1000 mg",
+        "route": "oral",
+        "frequency": "twice daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Lisinopril",
+        "dosage": "20 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Metformin",
+        "dosage": "1000 mg",
+        "route": "oral",
+        "frequency": "twice daily",
+        "status": null,
+        "notes": null,
+        "source_note": 2
+      },
+      {
+        "name": "Metformin",
+        "dosage": "1000 mg",
+        "route": "oral",
+        "frequency": "twice daily",
+        "status": null,
+        "notes": null,
+        "source_note": 3
+      },
+      {
+        "name": "Lisinopril",
+        "dosage": "20 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": null,
+        "source_note": 3
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Metformin and lisinopril doses are consistently documented across three separate encounters with no discrepancies noted."
+  }
+}

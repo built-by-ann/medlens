@@ -1,0 +1,28 @@
+{
+  "case_id": "BENCH-011",
+  "tags": [
+    "prn",
+    "abbreviation",
+    "route_variety"
+  ],
+  "difficulty": "easy",
+  "description": "A PRN inhaler with a formulation abbreviation and an indication in prose.",
+  "input_notes": [
+    "Home medications include an Albuterol HFA 90 mcg inhaler, two puffs by inhalation every 4 hours as needed for wheezing."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Albuterol HFA",
+        "dosage": "90 mcg",
+        "route": "by inhalation",
+        "frequency": "two puffs every 4 hours as needed",
+        "status": null,
+        "notes": "for wheezing",
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Patient uses an Albuterol HFA inhaler as needed, up to every 4 hours, for wheezing."
+  }
+}

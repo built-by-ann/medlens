@@ -1,0 +1,54 @@
+{
+  "case_id": "BENCH-001",
+  "tags": [
+    "straightforward_list",
+    "missing_fields"
+  ],
+  "difficulty": "easy",
+  "description": "A clean numbered current-medications list with no ambiguity.",
+  "input_notes": [
+    "Current Medications (reviewed and confirmed today):\n1. Metformin 500 mg oral twice daily\n2. Lisinopril 10 mg oral once daily\n3. Atorvastatin 20 mg oral nightly\n4. Aspirin 81 mg oral once daily"
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Metformin",
+        "dosage": "500 mg",
+        "route": "oral",
+        "frequency": "twice daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Lisinopril",
+        "dosage": "10 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Atorvastatin",
+        "dosage": "20 mg",
+        "route": "oral",
+        "frequency": "nightly",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Aspirin",
+        "dosage": "81 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Patient is on four medications for hypertension, diabetes, and cardiovascular risk reduction: metformin, lisinopril, atorvastatin, and aspirin, all confirmed current today."
+  }
+}

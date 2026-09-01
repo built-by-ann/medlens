@@ -1,0 +1,27 @@
+{
+  "case_id": "BENCH-005",
+  "tags": [
+    "narrative_text",
+    "newly_started"
+  ],
+  "difficulty": "medium",
+  "description": "A medication started the same day as the visit, for a newly diagnosed condition.",
+  "input_notes": [
+    "Patient was recently diagnosed with hypothyroidism. Started on levothyroxine 75 mcg by mouth once daily this morning; will recheck TSH in six weeks to guide further dose adjustment."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Levothyroxine",
+        "dosage": "75 mcg",
+        "route": "by mouth",
+        "frequency": "once daily",
+        "status": "started",
+        "notes": null,
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Levothyroxine 75 mcg by mouth once daily was newly started today for hypothyroidism."
+  }
+}

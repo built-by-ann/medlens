@@ -1,0 +1,78 @@
+{
+  "case_id": "BENCH-022",
+  "tags": [
+    "newly_started",
+    "dose_change",
+    "multi_document",
+    "reconciliation_relevant"
+  ],
+  "difficulty": "hard",
+  "description": "A hospitalization where one medication is started and later stopped, and a home medication's dose is increased, across an admission note and a discharge summary.",
+  "input_notes": [
+    "Hospital admission note: Admitted for community-acquired pneumonia. Home medications on admission: Lisinopril 10 mg oral once daily, Atorvastatin 20 mg oral nightly. Starting Ceftriaxone 1 g intravenously once daily for pneumonia treatment.",
+    "Discharge summary: Completed IV antibiotic course; transitioning to Amoxicillin-clavulanate 875 mg oral twice daily for 5 more days to complete treatment. Lisinopril increased to 20 mg oral once daily given elevated blood pressures noted during admission. Continue Atorvastatin 20 mg oral nightly."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Lisinopril",
+        "dosage": "10 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Atorvastatin",
+        "dosage": "20 mg",
+        "route": "oral",
+        "frequency": "nightly",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Ceftriaxone",
+        "dosage": "1 g",
+        "route": "intravenously",
+        "frequency": "once daily",
+        "status": "starting",
+        "notes": "for pneumonia treatment",
+        "source_note": 1
+      },
+      {
+        "name": "Amoxicillin-clavulanate",
+        "dosage": "875 mg",
+        "route": "oral",
+        "frequency": "twice daily",
+        "status": "transitioning",
+        "notes": "for 5 more days to complete treatment",
+        "source_note": 2
+      },
+      {
+        "name": "Lisinopril",
+        "dosage": "20 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": "increased from 10 mg due to elevated blood pressures during admission",
+        "source_note": 2
+      },
+      {
+        "name": "Atorvastatin",
+        "dosage": "20 mg",
+        "route": "oral",
+        "frequency": "nightly",
+        "status": "continue",
+        "notes": null,
+        "source_note": 2
+      }
+    ],
+    "possible_inconsistencies": [
+      "Lisinopril dose was increased from 10 mg to 20 mg during the hospitalization.",
+      "Ceftriaxone (started on admission) was discontinued and replaced with oral amoxicillin-clavulanate at discharge."
+    ],
+    "summary": "During this hospitalization for pneumonia, IV ceftriaxone was started and later transitioned to oral amoxicillin-clavulanate to complete the course, and lisinopril was increased from 10 mg to 20 mg for elevated blood pressures."
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "case_id": "BENCH-003",
+  "tags": [
+    "narrative_text",
+    "active_medication"
+  ],
+  "difficulty": "easy",
+  "description": "A single medication mentioned inside an ordinary prose sentence.",
+  "input_notes": [
+    "The patient reports doing well on Sertraline 50 mg by mouth each morning for anxiety, which she continues to take without any side effects."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Sertraline",
+        "dosage": "50 mg",
+        "route": "by mouth",
+        "frequency": "each morning",
+        "status": "continues to take",
+        "notes": null,
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Patient continues sertraline 50 mg by mouth each morning for anxiety, tolerating it well."
+  }
+}

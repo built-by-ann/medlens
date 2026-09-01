@@ -1,0 +1,16 @@
+{
+  "case_id": "BENCH-019",
+  "tags": [
+    "mentioned_not_active"
+  ],
+  "difficulty": "medium",
+  "description": "A medication named only in an allergy list, not as something the patient takes.",
+  "input_notes": [
+    "Allergies: No known drug allergies except penicillin, which caused a rash in childhood. Patient denies any other medication allergies."
+  ],
+  "expected": {
+    "medications": [],
+    "possible_inconsistencies": [],
+    "summary": "Patient has a documented penicillin allergy (rash) and no other known drug allergies; no current medications are mentioned."
+  }
+}

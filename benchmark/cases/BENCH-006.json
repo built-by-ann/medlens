@@ -1,0 +1,59 @@
+{
+  "case_id": "BENCH-006",
+  "tags": [
+    "multi_document",
+    "dose_change",
+    "conflicting_across_documents",
+    "reconciliation_relevant"
+  ],
+  "difficulty": "medium",
+  "description": "A recent visit documents a dose increase; a home medication list on file hasn't caught up.",
+  "input_notes": [
+    "Cardiology follow-up: Hypertension inadequately controlled. Amlodipine increased to 10 mg oral once daily, up from the previous 5 mg dose. Continue Atorvastatin 20 mg oral nightly.",
+    "Home Medication List (on file, last updated 2 months ago): Amlodipine 5 mg oral once daily. Atorvastatin 20 mg oral nightly."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Amlodipine",
+        "dosage": "10 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": "increased from 5 mg",
+        "source_note": 1
+      },
+      {
+        "name": "Atorvastatin",
+        "dosage": "20 mg",
+        "route": "oral",
+        "frequency": "nightly",
+        "status": "continue",
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Amlodipine",
+        "dosage": "5 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": null,
+        "source_note": 2
+      },
+      {
+        "name": "Atorvastatin",
+        "dosage": "20 mg",
+        "route": "oral",
+        "frequency": "nightly",
+        "status": null,
+        "notes": null,
+        "source_note": 2
+      }
+    ],
+    "possible_inconsistencies": [
+      "Amlodipine dose differs between the cardiology note (10 mg) and the home medication list (5 mg)."
+    ],
+    "summary": "Two medications, amlodipine and atorvastatin, are documented; amlodipine's dose differs between the two sources (10 mg vs. 5 mg), while atorvastatin is consistent."
+  }
+}
