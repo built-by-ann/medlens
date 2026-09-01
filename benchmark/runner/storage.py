@@ -7,12 +7,11 @@ pair, flushed immediately after every write).
 from __future__ import annotations
 
 import json
-import os
 import secrets
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+from benchmark.atomic_write import atomic_write_json
 from benchmark.runner.models import PredictionResult, RunManifest
 
 DEFAULT_RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
@@ -45,23 +44,11 @@ def prepare_output_dir(output_dir: Path) -> Path:
 
 
 def write_manifest(output_dir: Path, manifest: RunManifest) -> None:
-    """Atomically replaces manifest.json - written to a temporary file in
-    the same directory, then moved into place with os.replace(), so a
-    reader (or a crash between the write and the rename) never observes a
-    half-written file. Called once at the start of a run
-    (status="running") and again at the end ("complete"/"interrupted") -
-    see cli.py.
+    """Atomically replaces manifest.json (see atomic_write_json). Called
+    once at the start of a run (status="running") and again at the end
+    ("complete"/"interrupted") - see cli.py.
     """
-    path = output_dir / "manifest.json"
-    fd, tmp_path = tempfile.mkstemp(dir=output_dir, prefix=".manifest-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(manifest.to_dict(), f, indent=2, sort_keys=True)
-            f.write("\n")
-        os.replace(tmp_path, path)
-    except BaseException:
-        Path(tmp_path).unlink(missing_ok=True)
-        raise
+    atomic_write_json(output_dir / "manifest.json", manifest.to_dict())
 
 
 class PredictionWriter:
