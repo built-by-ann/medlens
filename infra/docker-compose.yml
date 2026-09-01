@@ -35,14 +35,16 @@ services:
       # any image - just a container restart.
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       # Which AIProvider get_ai_summary_service() constructs (app/ai/
-      # service.py) - "gemini" (the default) or "openbiollm". Settings'
-      # own startup validation fails the container immediately, with a
-      # clear error, if this is set to anything else.
+      # service.py) - "gemini" (the default), "openbiollm", or "medgemma".
+      # Settings' own startup validation fails the container immediately,
+      # with a clear error, if this is set to anything else.
       AI_PROVIDER: ${AI_PROVIDER:-gemini}
-      # Only required when AI_PROVIDER=openbiollm - see
-      # docs/deployment.md and docs/ai.md.
+      # Only required when AI_PROVIDER=openbiollm or AI_PROVIDER=medgemma
+      # (both call Hugging Face's Inference Providers mechanism, and share
+      # this one token) - see docs/deployment.md and docs/ai.md.
       HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY:-}
       OPENBIOLLM_MODEL: ${OPENBIOLLM_MODEL:-aaditya/Llama3-OpenBioLLM-8B}
+      MEDGEMMA_MODEL: ${MEDGEMMA_MODEL:-google/medgemma-27b-text-it}
       # development (the default) auto-allows any localhost/127.0.0.1
       # origin for CORS (see app/main.py's configure_cors) - relevant only
       # to `npm run dev`'s Vite dev server, which talks to this container

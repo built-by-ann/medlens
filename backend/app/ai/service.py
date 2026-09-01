@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from app.ai.prompts import build_summary_prompt
 from app.ai.providers.base import AIProvider, AIProviderError
 from app.ai.providers.gemini_provider import GeminiProvider
+from app.ai.providers.medgemma_provider import MedGemmaProvider
 from app.ai.providers.openbiollm_provider import OpenBioLLMProvider
 from app.ai.schemas import ClinicalSummary
 from app.core.config import Settings, settings
@@ -86,6 +87,14 @@ def build_ai_summary_service(app_settings: Settings) -> AISummaryService:
         provider: AIProvider = OpenBioLLMProvider(
             api_key=app_settings.huggingface_api_key,
             model=app_settings.openbiollm_model,
+        )
+    elif app_settings.ai_provider == "medgemma":
+        # Reuses huggingface_api_key - both providers call the same
+        # Hugging Face Inference Providers mechanism (see
+        # medgemma_provider.py), just a different checkpoint/task.
+        provider = MedGemmaProvider(
+            api_key=app_settings.huggingface_api_key,
+            model=app_settings.medgemma_model,
         )
     elif app_settings.ai_provider == "gemini":
         provider = GeminiProvider(

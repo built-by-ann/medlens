@@ -140,7 +140,7 @@ FastAPI · Python 3.12 · SQLAlchemy · Alembic · Pydantic · JWT authenticatio
 PostgreSQL
 
 **AI**
-Google Gemini (default) and OpenBioLLM (`aaditya/Llama3-OpenBioLLM-8B`, via Hugging Face's hosted Inference Providers), selectable behind a provider-abstraction layer - MedGemma and multi-model benchmarking planned
+Google Gemini (default), OpenBioLLM (`aaditya/Llama3-OpenBioLLM-8B`), and MedGemma (`google/medgemma-27b-text-it`) - the latter two via Hugging Face's hosted Inference Providers - selectable behind a provider-abstraction layer; multi-model benchmarking planned
 
 **Infrastructure**
 Docker · Docker Compose · nginx (reverse proxy, TLS termination) · Let's Encrypt / Certbot · AWS EC2 · AWS S3 (optional storage backend) · GitHub Actions
@@ -240,7 +240,7 @@ MedLens is live at [medlenshealth.com](http://medlenshealth.com) (also linked at
 
 ## Future Improvements
 
-- MedGemma as an additional provider, and multi-model benchmarking/evaluation against the synthetic benchmark dataset (OpenBioLLM is implemented as a selectable provider; it has not yet been benchmarked)
+- Multi-model benchmarking/evaluation against the synthetic benchmark dataset (OpenBioLLM and MedGemma are both implemented as selectable providers; neither has been benchmarked yet)
 - Production monitoring and alerting (e.g. CloudWatch, Sentry, performance dashboards)
 - A custom domain actually resolving to the production instance (HTTPS and the reverse proxy are already implemented)
 - Automated, CI-triggered deployment

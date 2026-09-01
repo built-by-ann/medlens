@@ -105,6 +105,18 @@ def test_health_check_reports_openbiollm_as_the_ai_provider_when_configured(clie
     }
 
 
+def test_health_check_reports_medgemma_as_the_ai_provider_when_configured(client, monkeypatch):
+    monkeypatch.setattr(settings, "ai_provider", "medgemma")
+    monkeypatch.setattr(settings, "medgemma_model", "google/medgemma-27b-text-it")
+
+    response = client.get("/health")
+
+    assert response.json()["ai"] == {
+        "provider": "medgemma",
+        "model": "google/medgemma-27b-text-it",
+    }
+
+
 def test_health_check_does_not_require_a_gemini_api_key(client, monkeypatch):
     # No AIProvider is ever instantiated (only GeminiProvider.name, a
     # class attribute) - reporting the AI provider/model must not depend

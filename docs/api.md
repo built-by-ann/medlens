@@ -177,7 +177,7 @@ Field notes:
 - `version` - `Settings.app_version` (`APP_VERSION` environment variable, defaults to `"1.0.0"`). A plain configured string, not derived from git or the Docker image tag.
 - `environment` - `Settings.app_env` (`APP_ENV`), the same value that gates CORS behavior elsewhere (see `POST /auth/register` and friends).
 - `storage.backend` - `Settings.storage_backend` (`STORAGE_BACKEND`), `"local"` or `"s3"` - see `docs/deployment.md`'s File Storage (S3) section. Never `"s3"` because a request to S3 actually succeeded; it's the *configured* backend, reported without contacting it.
-- `ai.provider` / `ai.model` - reflect `Settings.ai_provider` (`AI_PROVIDER`, `"gemini"` or `"openbiollm"`): `"gemini"` / `Settings.gemini_model`, or `"openbiollm"` / `Settings.openbiollm_model`. Reporting either requires no credential and makes no request to Gemini or Hugging Face - unlike using AI features themselves, which fail with a `503` and a different message when the active provider's credential is missing (see that endpoint above).
+- `ai.provider` / `ai.model` - reflect `Settings.ai_provider` (`AI_PROVIDER`, `"gemini"`, `"openbiollm"`, or `"medgemma"`): `"gemini"` / `Settings.gemini_model`, `"openbiollm"` / `Settings.openbiollm_model`, or `"medgemma"` / `Settings.medgemma_model`. Reporting any of the three requires no credential and makes no request to Gemini or Hugging Face - unlike using AI features themselves, which fail with a `503` and a different message when the active provider's credential is missing (see that endpoint above).
 - `timestamp` - UTC, formatted like `2026-08-04T02:15:30Z`.
 
 ---
