@@ -58,8 +58,8 @@ This roadmap tracks MedLens's development milestones across five sprints, from b
 - Synthetic benchmark dataset - completed
 - OpenBioLLM integration - completed (selectable via `AI_PROVIDER=openbiollm`)
 - MedGemma integration - completed (selectable via `AI_PROVIDER=medgemma`)
-- Evaluation runner - completed (`python -m benchmark.runner`; records structured predictions/results per provider, computes no quality metric yet - see `benchmark/README.md`)
-- Evaluation metrics (precision/recall/F1, etc.) - planned
+- Evaluation runner - completed (`python -m benchmark.runner`; records structured predictions/results per provider)
+- Evaluation metrics - completed (`python -m benchmark.metrics`; medication-detection precision/recall/F1, attribute accuracy, reliability, and latency per provider, computes no ranking yet - see `benchmark/README.md`)
 - Multi-model comparison report - planned
 
 ---
