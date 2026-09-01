@@ -25,6 +25,28 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"
 
+    # Which AIProvider implementation get_ai_summary_service()
+    # (app/ai/service.py) constructs - "gemini" (the default, so an
+    # existing deployment with no AI_PROVIDER set keeps working unchanged)
+    # or "openbiollm". See the model_validator below for the startup check
+    # that keeps this from being anything else - the same "fail at
+    # startup, not on first use" treatment storage_backend already gets.
+    ai_provider: str = "gemini"
+
+    # Only used when ai_provider == "openbiollm" - a Hugging Face user
+    # access token (fine-grained, scoped to "Make calls to Inference
+    # Providers") authenticating every call to OpenBioLLMProvider. Not
+    # required while ai_provider == "gemini" (the default), so an existing
+    # deployment needs no new configuration at all.
+    huggingface_api_key: str | None = None
+    # Which OpenBioLLM checkpoint to call, and the one Hugging Face
+    # currently reports as actually served (via the featherless-ai
+    # Inference Provider - see openbiollm_provider.py). A plain
+    # environment variable, matching gemini_model's own reasoning: if this
+    # exact checkpoint is ever retired or moved to a different provider,
+    # recovering shouldn't require a code change.
+    openbiollm_model: str = "aaditya/Llama3-OpenBioLLM-8B"
+
     # Issue #58: which StorageService implementation
     # app/storage/service.py builds - "local" (the default, zero-config)
     # or "s3". See the model_validator below for what "s3" additionally
@@ -85,6 +107,29 @@ class Settings(BaseSettings):
                     "STORAGE_BACKEND=s3 requires the following environment "
                     f"variable(s) to be set: {', '.join(missing)}"
                 )
+
+        return self
+
+    @model_validator(mode="after")
+    def _validate_ai_provider_configuration(self) -> "Settings":
+        """Fails at startup, not on the first analysis request, if
+        AI_PROVIDER is set to anything get_ai_summary_service() wouldn't
+        recognize - the same principle _validate_s3_configuration already
+        applies to storage_backend, kept as its own validator since the
+        two concerns are unrelated.
+
+        Deliberately does not require huggingface_api_key even when
+        ai_provider == "openbiollm": OpenBioLLMProvider already fails with
+        a clear AIProviderError on first use if it's missing (mirroring
+        how gemini_api_key is optional at the application level too - see
+        docs/ai.md's Configuration section), so a developer can select
+        openbiollm without a token yet and see every other feature work
+        normally, the same tradeoff already made for Gemini.
+        """
+        if self.ai_provider not in ("gemini", "openbiollm"):
+            raise ValueError(
+                f"AI_PROVIDER must be 'gemini' or 'openbiollm', got: {self.ai_provider!r}"
+            )
 
         return self
 
