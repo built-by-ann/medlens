@@ -1,41 +1,145 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" width="720" height="360" font-family="sans-serif">
-<rect x="0" y="0" width="720" height="360" fill="white"/>
-<text x="360.0" y="24" text-anchor="middle" font-size="16" font-weight="bold">Reliability</text>
-<line x1="56" y1="296.0" x2="696" y2="296.0" stroke="#94a3b8" stroke-width="1"/>
-<rect x="56" y="32" width="10" height="10" fill="#2563eb"/>
-<text x="70" y="41" font-size="11">Provider call success</text>
-<rect x="254" y="32" width="10" height="10" fill="#dc2626"/>
-<text x="268" y="41" font-size="11">JSON validity</text>
-<rect x="388" y="32" width="10" height="10" fill="#059669"/>
-<text x="402" y="41" font-size="11">Schema validity</text>
-<rect x="538" y="32" width="10" height="10" fill="#d97706"/>
-<text x="552" y="41" font-size="11">Evaluable case rate</text>
-<rect x="66.2" y="48.0" width="40.6" height="248.0" fill="#2563eb"/>
-<text x="86.5" y="44.0" text-anchor="middle" font-size="10">100%</text>
-<rect x="117.0" y="48.0" width="40.6" height="248.0" fill="#dc2626"/>
-<text x="137.3" y="44.0" text-anchor="middle" font-size="10">100%</text>
-<rect x="167.7" y="48.0" width="40.6" height="248.0" fill="#059669"/>
-<text x="188.1" y="44.0" text-anchor="middle" font-size="10">100%</text>
-<rect x="218.5" y="48.0" width="40.6" height="248.0" fill="#d97706"/>
-<text x="238.9" y="44.0" text-anchor="middle" font-size="10">100%</text>
-<text x="162.7" y="314.0" text-anchor="middle" font-size="11">gemini</text>
-<rect x="279.5" y="48.0" width="40.6" height="248.0" fill="#2563eb"/>
-<text x="299.8" y="44.0" text-anchor="middle" font-size="10">100%</text>
-<rect x="330.3" y="296.0" width="40.6" height="0.0" fill="#dc2626"/>
-<text x="350.6" y="292.0" text-anchor="middle" font-size="10">0%</text>
-<rect x="381.1" y="296.0" width="40.6" height="0.0" fill="#059669"/>
-<text x="401.4" y="292.0" text-anchor="middle" font-size="10">0%</text>
-<rect x="431.9" y="296.0" width="40.6" height="0.0" fill="#d97706"/>
-<text x="452.2" y="292.0" text-anchor="middle" font-size="10">0%</text>
-<text x="376.0" y="314.0" text-anchor="middle" font-size="11">openbiollm</text>
-<rect x="492.8" y="48.0" width="40.6" height="248.0" fill="#2563eb"/>
-<text x="513.1" y="44.0" text-anchor="middle" font-size="10">100%</text>
-<rect x="543.6" y="48.0" width="40.6" height="248.0" fill="#dc2626"/>
-<text x="563.9" y="44.0" text-anchor="middle" font-size="10">100%</text>
-<rect x="594.4" y="56.3" width="40.6" height="239.7" fill="#059669"/>
-<text x="614.7" y="52.3" text-anchor="middle" font-size="10">97%</text>
-<rect x="645.2" y="56.3" width="40.6" height="239.7" fill="#d97706"/>
-<text x="665.5" y="52.3" text-anchor="middle" font-size="10">97%</text>
-<text x="589.3" y="314.0" text-anchor="middle" font-size="11">medgemma</text>
-<text x="360.0" y="352" text-anchor="middle" font-size="10" fill="#64748b">JSON/schema validity rates are computed over successful calls only (see benchmark/README.md).</text>
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="581.743516pt" height="261.2235pt" viewBox="0 0 581.743516 261.2235" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-09-01T19:05:29.909554</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.1, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 261.2235 
+L 581.743516 261.2235 
+L 581.743516 0 
+L 0 0 
+z
+" style="fill: #fafaf7"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 75.483516 230.816 
+L 565.903516 230.816 
+L 565.903516 15.84 
+L 75.483516 15.84 
+z
+" style="fill: #fafaf7"/>
+   </g>
+   <g clip-path="url(#p1d7a05888a)">
+    <image xlink:href="data:image/png;base64,
+iVBORw0KGgoAAAANSUhEUgAAAqkAAAD9CAYAAACfpu4PAAAFE0lEQVR4nO3YwQnCUBBAwUSMbaSPnFOrHdiHHcWrx4Af8sCZApZlT4+d120/JgB+9lgWVwQY5DZqEAAAjCJSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOTcr14Azni/ng4FAH/EJxUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBHpAIAkCNSAQDIEakAAOSIVAAAckQqAAA5IhUAgByRCgBAjkgFACBnXrf9uHoJAAD45pMKAECOSAUAIEekAgCQI1IBAMgRqQAA5IhUAAByRCoAADkiFQCAHJEKAECOSAUAIEekAgCQI1IBAMgRqQAA5IhUAAByRCoAADkiFQCAHJEKAECOSAUAIEekAgCQI1IBAMgRqQAA5IhUAAByRCoAADkiFQCAHJEKAECOSAUAIEekAgCQI1IBAMgRqQAA5IhUAAByRCoAADkiFQCAHJEKAECOSAUAIEekAgCQI1IBAMgRqQAA5IhUAAByRCoAADkiFQCAHJEKAECOSAUAIEekAgCQI1IBAMgRqQAA5IhUAAByRCoAADkiFQCAHJEKAECOSAUAIEekAgCQI1IBAMgRqQAA5IhUAAByRCoAADkiFQCAHJEKAECOSAUAIEekAgCQI1IBAMgRqQAA5IhUAAByRCoAADkiFQCAHJEKAECOSAUAIEekAgCQI1IBAMgRqQAA5IhUAAByRCoAADkiFQCAHJEKAECOSAUAIEekAgCQI1IBAMgRqQAA5IhUAAByRCoAADkiFQCAHJEKAECOSAUAIEekAgCQI1IBAJhqPuQEB27BW16yAAAAAElFTkSuQmCC" id="image50a1619a09" transform="scale(1 -1) translate(0 -182.16)" x="75.6" y="-48.8235" width="490.32" height="182.16"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1"/>
+     <g id="text_1">
+      <text style="font-size: 9.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b6b65" x="136.786016" y="243.36" transform="rotate(-0 136.786016 243.36)">Call success</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_2"/>
+     <g id="text_2">
+      <text style="font-size: 9.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b6b65" x="259.391016" y="243.36" transform="rotate(-0 259.391016 243.36)">JSON validity</text>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_3"/>
+     <g id="text_3">
+      <text style="font-size: 9.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b6b65" x="381.996016" y="243.36" transform="rotate(-0 381.996016 243.36)">Schema validity</text>
+     </g>
+    </g>
+    <g id="xtick_4">
+     <g id="line2d_4"/>
+     <g id="text_4">
+      <text style="font-size: 9.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b6b65" x="504.601016" y="243.36" transform="rotate(-0 504.601016 243.36)">Evaluable cases</text>
+     </g>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_5"/>
+     <g id="text_5">
+      <text style="font-size: 9.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: end; fill: #2b2b28" x="71.983516" y="83.946451" transform="rotate(-0 71.983516 83.946451)">Gemini</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_6"/>
+     <g id="text_6">
+      <text style="font-size: 9.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: end; fill: #2b2b28" x="71.983516" y="144.50307" transform="rotate(-0 71.983516 144.50307)">OpenBioLLM</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_7"/>
+     <g id="text_7">
+      <text style="font-size: 9.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: end; fill: #2b2b28" x="71.983516" y="205.05969" transform="rotate(-0 71.983516 205.05969)">MedGemma</text>
+     </g>
+    </g>
+   </g>
+   <g id="text_8">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #fafaf7" x="136.786016" y="83.214451" transform="rotate(-0 136.786016 83.214451)">100%</text>
+   </g>
+   <g id="text_9">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #fafaf7" x="259.391016" y="83.214451" transform="rotate(-0 259.391016 83.214451)">100%</text>
+   </g>
+   <g id="text_10">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #fafaf7" x="381.996016" y="83.214451" transform="rotate(-0 381.996016 83.214451)">100%</text>
+   </g>
+   <g id="text_11">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #fafaf7" x="504.601016" y="83.214451" transform="rotate(-0 504.601016 83.214451)">100%</text>
+   </g>
+   <g id="text_12">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #fafaf7" x="136.786016" y="143.77107" transform="rotate(-0 136.786016 143.77107)">100%</text>
+   </g>
+   <g id="text_13">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2b28" x="259.391016" y="143.77107" transform="rotate(-0 259.391016 143.77107)">0%</text>
+   </g>
+   <g id="text_14">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2b28" x="381.996016" y="143.77107" transform="rotate(-0 381.996016 143.77107)">0%</text>
+   </g>
+   <g id="text_15">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2b28" x="504.601016" y="143.77107" transform="rotate(-0 504.601016 143.77107)">0%</text>
+   </g>
+   <g id="text_16">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #fafaf7" x="136.786016" y="204.32769" transform="rotate(-0 136.786016 204.32769)">100%</text>
+   </g>
+   <g id="text_17">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #fafaf7" x="259.391016" y="204.32769" transform="rotate(-0 259.391016 204.32769)">100%</text>
+   </g>
+   <g id="text_18">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #fafaf7" x="381.996016" y="204.32769" transform="rotate(-0 381.996016 204.32769)">97%</text>
+   </g>
+   <g id="text_19">
+    <text style="font-weight: 500; font-size: 10px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #fafaf7" x="504.601016" y="204.32769" transform="rotate(-0 504.601016 204.32769)">97%</text>
+   </g>
+   <g id="text_20">
+    <text style="font-style: italic; font-size: 8.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b6b65" x="136.786016" y="43.958185" transform="rotate(-0 136.786016 43.958185)">% of attempted</text>
+   </g>
+   <g id="text_21">
+    <text style="font-style: italic; font-size: 8.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b6b65" x="259.391016" y="43.958185" transform="rotate(-0 259.391016 43.958185)">% of successful calls</text>
+   </g>
+   <g id="text_22">
+    <text style="font-style: italic; font-size: 8.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b6b65" x="381.996016" y="43.958185" transform="rotate(-0 381.996016 43.958185)">% of valid JSON</text>
+   </g>
+   <g id="text_23">
+    <text style="font-style: italic; font-size: 8.5px; font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'Liberation Sans', 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6b6b65" x="504.601016" y="43.958185" transform="rotate(-0 504.601016 43.958185)">% of attempted</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p1d7a05888a">
+   <rect x="75.483516" y="15.84" width="490.42" height="214.976"/>
+  </clipPath>
+ </defs>
 </svg>
