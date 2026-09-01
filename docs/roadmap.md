@@ -56,11 +56,12 @@ This roadmap tracks MedLens's development milestones across five sprints, from b
 ## Sprint 5: Model Evaluation (In Progress)
 
 - Synthetic benchmark dataset: completed
-- OpenBioLLM integration: completed (selectable via `AI_PROVIDER=openbiollm`; switched from Hugging Face's hosted Inference Providers to local Ollama inference before scoring, after the hosted path proved operationally unreliable during pre-evaluation smoke testing - see `docs/ai.md`)
+- OpenBioLLM integration: completed (selectable via `AI_PROVIDER=openbiollm`; switched from Hugging Face's hosted Inference Providers to local Ollama inference before scoring, after the hosted path proved operationally unreliable during pre-evaluation smoke testing; see `docs/ai.md`)
 - MedGemma integration: completed (selectable via `AI_PROVIDER=medgemma`; same local-Ollama switch as OpenBioLLM, and moved from a 27B to a locally-runnable 4B checkpoint at the same time)
 - Evaluation runner: completed (`python -m benchmark.runner`; records structured predictions/results per provider)
-- Evaluation metrics: completed (`python -m benchmark.metrics`; medication-detection precision/recall/F1, attribute accuracy, reliability, and latency per provider, computes no ranking yet; see `benchmark/README.md`)
-- Multi-model comparison report: planned
+- Evaluation metrics: completed (`python -m benchmark.metrics`; medication-detection precision/recall/F1, attribute accuracy, reliability, and latency per provider, computes no ranking; see `benchmark/README.md`)
+- Multi-model comparison report: completed (`python -m benchmark.report`; a reviewed, promoted comparison across Gemini/OpenBioLLM/MedGemma lives in `docs/model-comparison-report.md`)
+- Model evaluation documentation: completed (`docs/model-evaluation.md` documents the full evaluation methodology; see also `docs/model-comparison-report.md` for results)
 
 ---
 

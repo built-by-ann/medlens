@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" width="720" height="360" font-family="sans-serif">
+<rect x="0" y="0" width="720" height="360" fill="white"/>
+<text x="360.0" y="24" text-anchor="middle" font-size="16" font-weight="bold">Latency (API vs. local; not hardware-comparable)</text>
+<line x1="56" y1="296.0" x2="696" y2="296.0" stroke="#94a3b8" stroke-width="1"/>
+<rect x="56" y="32" width="10" height="10" fill="#2563eb"/>
+<text x="70" y="41" font-size="11">Median (ms)</text>
+<rect x="174" y="32" width="10" height="10" fill="#dc2626"/>
+<text x="188" y="41" font-size="11">p95 (ms)</text>
+<rect x="75.4" y="288.2" width="77.6" height="7.8" fill="#2563eb"/>
+<text x="114.2" y="284.2" text-anchor="middle" font-size="10">3414</text>
+<rect x="172.4" y="268.6" width="77.6" height="27.4" fill="#dc2626"/>
+<text x="211.2" y="264.6" text-anchor="middle" font-size="10">12013</text>
+<text x="162.7" y="314.0" text-anchor="middle" font-size="11">gemini</text>
+<rect x="288.7" y="266.0" width="77.6" height="30.0" fill="#2563eb"/>
+<text x="327.5" y="262.0" text-anchor="middle" font-size="10">13136</text>
+<rect x="385.7" y="80.3" width="77.6" height="215.7" fill="#dc2626"/>
+<text x="424.5" y="76.3" text-anchor="middle" font-size="10">94478</text>
+<text x="376.0" y="314.0" text-anchor="middle" font-size="11">openbiollm</text>
+<rect x="502.1" y="220.6" width="77.6" height="75.4" fill="#2563eb"/>
+<text x="540.8" y="216.6" text-anchor="middle" font-size="10">33038</text>
+<rect x="599.0" y="173.8" width="77.6" height="122.2" fill="#dc2626"/>
+<text x="637.8" y="169.8" text-anchor="middle" font-size="10">53526</text>
+<text x="589.3" y="314.0" text-anchor="middle" font-size="11">medgemma</text>
+<text x="360.0" y="352" text-anchor="middle" font-size="10" fill="#64748b">Local providers ran on the evaluation machine's own hardware; Gemini's latency is a hosted API call. These are not a controlled, apples-to-apples comparison.</text>
+</svg>
