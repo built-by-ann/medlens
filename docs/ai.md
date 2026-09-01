@@ -145,6 +145,8 @@ def get_ai_summary_service() -> AISummaryService:
 
 **Why this abstraction exists** (Decision 15, `docs/design-decisions.md`): the project intends to evaluate more than one provider over time (see README's roadmap). Three providers are implemented today - Gemini (the default), OpenBioLLM, and MedGemma; general provider benchmarking remains planned. Behind this interface, adding one is a new class implementing one method and translating its own SDK's exceptions into `AIProviderError` - nothing in `AISummaryService`, the prompt template, or the API route needs to change. See Extending the AI Layer, below, for the concrete steps.
 
+The interface pays off a second way, independently of the running application: `benchmark/runner/` (Issue #89, see `benchmark/README.md`) constructs `GeminiProvider`/`OpenBioLLMProvider`/`MedGemmaProvider` directly - not through `build_ai_summary_service()`/`get_ai_summary_service()` - so it can run several providers in one process, which `AI_PROVIDER`'s single-active-provider design isn't suited for. It reuses `build_summary_prompt()` and `ClinicalSummary` completely unmodified, and records structured predictions for later scoring (#90/#91); it computes no quality metric itself.
+
 ---
 
 ## Prompt Management

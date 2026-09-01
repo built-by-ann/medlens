@@ -222,3 +222,10 @@ __marimo__/
 # Claude
 CLAUDE.md
 .DS_Store
+
+# MedLens evaluation runner output (Issue #89) - real run artifacts
+# (provider responses, latencies, reproducibility metadata) are never
+# committed, even though every benchmark note is synthetic; the dataset
+# and runner code under benchmark/ are tracked, this directory of
+# generated results is not. See benchmark/README.md.
+benchmark/results/

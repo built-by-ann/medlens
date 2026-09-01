@@ -240,7 +240,7 @@ MedLens is live at [medlenshealth.com](http://medlenshealth.com) (also linked at
 
 ## Future Improvements
 
-- Multi-model benchmarking/evaluation against the synthetic benchmark dataset (OpenBioLLM and MedGemma are both implemented as selectable providers; neither has been benchmarked yet)
+- Evaluation metrics (precision/recall/F1, etc.) and a multi-model comparison report against the synthetic benchmark dataset (a runner that executes the dataset against Gemini/OpenBioLLM/MedGemma and records structured predictions already exists - `python -m benchmark.runner`, see `benchmark/README.md` - but nothing scores or ranks the results yet)
 - Production monitoring and alerting (e.g. CloudWatch, Sentry, performance dashboards)
 - A custom domain actually resolving to the production instance (HTTPS and the reverse proxy are already implemented)
 - Automated, CI-triggered deployment
