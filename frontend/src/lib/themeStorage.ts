@@ -2,8 +2,8 @@ const PALETTE_STORAGE_KEY = 'medlens.theme.palette'
 const MODE_STORAGE_KEY = 'medlens.theme.mode'
 
 // A palette is the color family; a mode is which of its three renderings is
-// active. Every palette supports all three modes (see src/styles/themes.css)
-// - 'default' is the application's own original look, the rest are drawn
+// active. Every palette supports all three modes (see src/styles/themes.css);
+// 'default' is the application's own original look, the rest are drawn
 // from the provided inspiration palettes (see docs/frontend.md's Theme
 // Architecture section for the full color derivation of each).
 export const PALETTE_NAMES = [
@@ -21,14 +21,14 @@ export const PALETTE_NAMES = [
 export type PaletteName = (typeof PALETTE_NAMES)[number]
 
 // 'system' is a stored preference meaning "resolve light/dark from the OS
-// setting" - it never resolves to 'high-contrast', since there is no
+// setting"; it never resolves to 'high-contrast', since there is no
 // light/dark-style OS signal for that; it's always an explicit choice.
 export const MODE_NAMES = ['light', 'dark', 'high-contrast'] as const
 
 export type Mode = (typeof MODE_NAMES)[number]
 export type ModePreference = Mode | 'system'
 
-// The actual value written to `data-theme` on <html> - see themes.css.
+// The actual value written to `data-theme` on <html>; see themes.css.
 export type ThemeName = `${PaletteName}-${Mode}`
 
 const VALID_PALETTES = new Set<string>(PALETTE_NAMES)

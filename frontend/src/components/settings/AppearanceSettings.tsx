@@ -4,7 +4,7 @@ import { useTheme } from '@/hooks/useTheme'
 import { MODE_OPTIONS, PALETTE_OPTIONS } from '@/contexts/ThemeContext'
 import type { Mode, PaletteName } from '@/lib/themeStorage'
 
-// Static preview swatches for the palette picker below - one per (palette,
+// Static preview swatches for the palette picker below, one per (palette,
 // mode) combination, so a card always shows what selecting it would
 // actually look like in whichever mode is currently active. These
 // intentionally duplicate real values from src/styles/themes.css rather

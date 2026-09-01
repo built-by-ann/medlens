@@ -7,7 +7,7 @@ interface UseAnalysisPollingResult {
   analysis: AnalysisDetail | null
   error: string | null
   // Re-runs the poll from scratch. A failure here means the status check
-  // itself couldn't be confirmed (e.g. a transient network error) - the
+  // itself couldn't be confirmed (e.g. a transient network error); the
   // analysis this is polling for may already exist and be fine, so this
   // only restarts polling rather than creating anything new (contrast
   // AnalysisProcessingPage's own retry, which calls submit() again).

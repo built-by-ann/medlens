@@ -19,7 +19,7 @@ interface PatientFormProps {
 
 /**
  * Shared by NewPatientPage and EditPatientPage. Unlike MedicationForm, it
- * never clears itself after a successful submit - both callers navigate
+ * never clears itself after a successful submit; both callers navigate
  * away entirely (to the new/edited patient's overview) on success, so
  * there's no "submit again" case to reset for.
  */

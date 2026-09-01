@@ -93,7 +93,7 @@ describe('SignupPage', () => {
       await user.type(screen.getByLabelText('Username'), 'ab')
 
       expect(await screen.findByText(/between 3 and 30 characters/)).toBeInTheDocument()
-      // Never submitted - this is purely a live-typing check.
+      // Never submitted; this is purely a live-typing check.
       expect(mockedRegisterUser).not.toHaveBeenCalled()
     })
 

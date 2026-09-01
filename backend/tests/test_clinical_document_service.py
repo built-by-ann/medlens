@@ -46,7 +46,7 @@ def _create_patient(db, user, **overrides):
 
 class _AlwaysFailsOnDelete(StorageService):
     """A StorageService that uploads/downloads normally but always fails
-    to delete - used to prove delete_clinical_document treats a storage
+    to delete; used to prove delete_clinical_document treats a storage
     failure as non-fatal (Issue #58's "handle partial failures safely")
     rather than letting it prevent the database row from being deleted.
     """
@@ -92,7 +92,7 @@ def test_create_from_file_uploads_to_storage_and_persists_metadata(db, tmp_path)
 
 
 def test_create_from_file_generates_a_different_key_for_each_upload(db, tmp_path):
-    # "never overwrite an existing object" - proven here by uploading the
+    # "never overwrite an existing object": proven here by uploading the
     # exact same filename twice and confirming both objects survive
     # independently, rather than the second silently replacing the first.
     user = _create_user(db)
@@ -164,7 +164,7 @@ def test_create_from_file_cleans_up_the_uploaded_object_when_the_db_commit_fails
         )
 
     # Proves the upload genuinely happened (commit failed after it, not
-    # before) - a version of this test that never actually uploaded
+    # before); a version of this test that never actually uploaded
     # anything would trivially pass the ObjectNotFoundError check below
     # too, without proving cleanup did anything at all.
     assert len(uploaded_keys) == 1
@@ -277,7 +277,7 @@ def test_delete_succeeds_even_when_no_storage_object_exists(db, tmp_path):
 def test_delete_removes_the_database_row_even_when_storage_deletion_fails(db):
     # The core "handle partial failures safely" guarantee: a storage-side
     # failure during delete must never leave the document still visible
-    # through the API while its file is stuck undeletable in storage - the
+    # through the API while its file is stuck undeletable in storage; the
     # database row (what the user actually sees as "gone") is removed
     # regardless.
     user = _create_user(db)

@@ -189,7 +189,7 @@ describe('DashboardPage', () => {
     mockedListPatients.mockResolvedValue([])
     renderDashboard()
 
-    // Both columns' cards start below a heading in every state - keeps the
+    // Both columns' cards start below a heading in every state; keeps the
     // two side-by-side cards the same height instead of one sitting flush
     // with the top of the grid row.
     expect(await screen.findByRole('heading', { name: 'Recent patients' })).toBeInTheDocument()
@@ -205,7 +205,7 @@ describe('DashboardPage', () => {
       '/patients/new',
     )
     // No search box when there is nothing to search, but Quick Actions
-    // (including "+ New patient") stays visible - it's meant to be reachable
+    // (including "+ New patient") stays visible; it's meant to be reachable
     // near the top of the Dashboard regardless of whether any patients exist.
     expect(screen.queryByLabelText('Search patients')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '+ New patient' })).toBeInTheDocument()
@@ -239,7 +239,7 @@ describe('DashboardPage', () => {
     renderDashboard()
 
     // The heading itself renders on the very first paint, regardless of
-    // loading state (see DashboardPage.tsx) - it's not a reliable "patients
+    // loading state (see DashboardPage.tsx); it's not a reliable "patients
     // have loaded" signal on its own, so the actual list items are what's
     // awaited here.
     expect(await screen.findAllByRole('listitem')).toHaveLength(3)
@@ -251,7 +251,7 @@ describe('DashboardPage', () => {
     renderDashboard()
 
     // findByLabelText, not getByLabelText: the search box only renders once
-    // patients have actually loaded (patients.length > 0) - the "Recent
+    // patients have actually loaded (patients.length > 0); the "Recent
     // patients" heading above it renders immediately regardless of loading
     // state, so waiting on the heading alone doesn't guarantee the search
     // box exists yet.

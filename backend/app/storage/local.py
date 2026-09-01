@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class LocalStorageService(StorageService):
-    """Stores objects as plain files under a local directory - the default
+    """Stores objects as plain files under a local directory, the default
     backend (Settings.storage_backend == "local"), so the application, its
     tests, and CI all work with zero AWS configuration. `key` is used
     directly as a path relative to `base_dir`; a key containing "/" (the
@@ -19,7 +19,7 @@ class LocalStorageService(StorageService):
 
     Content type isn't a first-class concept in a plain filesystem, so it's
     written to a small sidecar `<key>.meta.json` file next to the content
-    and read back on download() - the equivalent of what S3 stores as
+    and read back on download(), the equivalent of what S3 stores as
     object metadata for free.
     """
 

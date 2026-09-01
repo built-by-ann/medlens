@@ -1,7 +1,7 @@
 """Entry point for `python -m benchmark.runner` (Issue #89).
 
 benchmark/ is a top-level directory, a sibling of backend/ (see
-benchmark/README.md) - the production application under backend/app is
+benchmark/README.md); the production application under backend/app is
 not on sys.path merely by running this from the repository root the way
 `python -m benchmark.runner` does. This mirrors backend/tests/
 test_benchmark_dataset.py's own explicit sys.path.insert() for crossing

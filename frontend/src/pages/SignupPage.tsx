@@ -98,7 +98,7 @@ export function SignupPage() {
 
         // A duplicate email or username is specifically about that one
         // field, so it is shown inline like any other field error rather
-        // than as a generic banner - distinguished by the backend's own
+        // than as a generic banner; distinguished by the backend's own
         // message text, since both failures share the same 409 status.
         // Every other failure (unexpected validation issues, network
         // errors) is shown as a single form-level message instead, since it
@@ -115,11 +115,11 @@ export function SignupPage() {
   })
 
   // Validates on every keystroke, not just on submit (unlike every other
-  // field here) - format mistakes are cheap to catch immediately, and a
+  // field here); format mistakes are cheap to catch immediately, and a
   // username has more ways to be malformed (length, character set) than
   // this form's other fields. Clearing the error is just as immediate:
   // setFieldError('username', '') is falsy, so Input renders no error at
-  // all - see Input's own `{error && ...}` check.
+  // all; see Input's own `{error && ...}` check.
   function handleUsernameChange(event: ChangeEvent<HTMLInputElement>) {
     updateField('username')(event)
 

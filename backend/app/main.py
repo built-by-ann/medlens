@@ -21,7 +21,7 @@ from app.core.logging_config import (
 )
 
 # Configured before anything else below runs (including FastAPI(...) itself)
-# so even the earliest startup issue is logged consistently - see
+# so even the earliest startup issue is logged consistently; see
 # app/core/logging_config.py.
 configure_logging(settings.app_env, settings.log_level)
 
@@ -60,16 +60,16 @@ def configure_cors(app: FastAPI, app_env: str) -> None:
 
     Retained for exactly one case (Issue #190): `npm run dev`'s Vite dev
     server runs outside Docker and talks to this backend directly and
-    cross-origin (see docs/deployment.md's Local Development section) -
+    cross-origin (see docs/deployment.md's Local Development section);
     that's the only real cross-origin request this application ever
-    receives. Every other path - the Docker Compose / production frontend
-    image, and any real deployment - now reaches this backend exclusively
+    receives. Every other path, the Docker Compose / production frontend
+    image, and any real deployment, now reaches this backend exclusively
     through the frontend container's own nginx reverse proxy
     (frontend/nginx.conf), which is same-origin from the browser's point
     of view and never triggers CORS at all. There is deliberately no
     allow_origins list for a deployed frontend origin anymore (Issue #57
-    originally added CORS_ALLOWED_ORIGINS for exactly that, since removed -
-    see docs/design-decisions.md, Decision 23) - nothing outside local dev
+    originally added CORS_ALLOWED_ORIGINS for exactly that, since removed;
+    see docs/design-decisions.md, Decision 23); nothing outside local dev
     needs one, so allow_origins is always empty; only the regex below,
     itself already restricted to non-production, ever allows anything.
     """
@@ -85,13 +85,13 @@ def configure_cors(app: FastAPI, app_env: str) -> None:
 
 configure_cors(app, settings.app_env)
 # Request-scoped logging context (request_id/method/path/client_ip) and the
-# one-line-per-request summary log - registered after CORS so a preflight
+# one-line-per-request summary log, registered after CORS so a preflight
 # OPTIONS request is still handled (and logged) the same as any other
 # request; middleware order here doesn't otherwise interact with CORS at
 # all. See app/core/logging_config.py.
 configure_request_logging(app)
 # Unhandled-exception logging (full traceback, server-side only) + a
-# generic 500 response - see app/core/logging_config.py for why this never
+# generic 500 response; see app/core/logging_config.py for why this never
 # affects any existing `raise HTTPException(...)` throughout the app.
 configure_exception_handling(app)
 

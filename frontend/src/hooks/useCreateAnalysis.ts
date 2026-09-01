@@ -7,7 +7,7 @@ export interface QueuedFile {
   id: number
   file: File
   documentType: string
-  // Unset by default - the document is titled from the filename on upload
+  // Unset by default; the document is titled from the filename on upload
   // (deriveTitleFromFileName). Only set once a provider edits it, e.g. to
   // resolve a same-name collision with a document already on file.
   title?: string
@@ -25,8 +25,8 @@ export interface SubmitInput {
   notes: QueuedNote[]
   // Ids of clinical documents the patient already has on file, selected for
   // reuse rather than uploaded in this submission (Issue #145). These never
-  // go through the upload/cache logic below - they're already real
-  // ClinicalDocument rows - and are simply included in the same
+  // go through the upload/cache logic below; they're already real
+  // ClinicalDocument rows, and are simply included in the same
   // createAnalysisFromDocuments call alongside anything newly uploaded.
   existingDocumentIds?: number[]
 }
@@ -42,7 +42,7 @@ interface UseCreateAnalysisResult {
   failedItemLabel: string | null
   submit: (input: SubmitInput) => Promise<number>
   // Uploads files/notes as real ClinicalDocuments without creating an
-  // analysis from them - the "just save" path (Issue #158 follow-up).
+  // analysis from them; the "just save" path (Issue #158 follow-up).
   // Returns the resulting document ids.
   saveDocuments: (input: SaveInput) => Promise<number[]>
   invalidateItem: (key: string) => void
@@ -59,9 +59,9 @@ export function noteItemKey(id: number): string {
 /**
  * Uploads every selected file and pasted note as a ClinicalDocument, then
  * either creates an analysis from all of them (submit, together with any
- * already-existing documents passed via existingDocumentIds - Issue #145,
+ * already-existing documents passed via existingDocumentIds; Issue #145,
  * selected from a patient's prior uploads rather than uploaded again here),
- * or stops after uploading (saveDocuments - Issue #158 follow-up, for
+ * or stops after uploading (saveDocuments; Issue #158 follow-up, for
  * providers who want documents on file without analyzing them yet).
  *
  * Each item's resulting document id is cached as soon as it succeeds,
@@ -77,7 +77,7 @@ export function noteItemKey(id: number): string {
  * automatically once an attempt fully succeeds, since a later attempt
  * reusing the same queue is a new one.
  *
- * Scoped to a single patientId - every uploaded document and the resulting
+ * Scoped to a single patientId; every uploaded document and the resulting
  * analysis belong to this patient, never a global document/analysis pool.
  */
 export function useCreateAnalysis(patientId: number): UseCreateAnalysisResult {

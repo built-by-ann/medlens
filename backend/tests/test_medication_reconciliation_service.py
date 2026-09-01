@@ -549,7 +549,7 @@ def test_reconcile_ai_extracted_medications_attaches_mention_to_its_actual_sourc
 
 def test_reconcile_ai_extracted_medications_attributes_each_medication_to_its_own_document(db):
     # Two distinct medications, each mentioned in a different one of the two
-    # selected documents - the true-provenance case Issue #148's placeholder
+    # selected documents; the true-provenance case Issue #148's placeholder
     # could never represent correctly.
     user = _create_user(db, email="provenancemulti@example.com")
     patient = _create_patient(db, user)
@@ -632,7 +632,7 @@ def test_reconcile_ai_extracted_medications_falls_back_to_lowest_id_document_whe
     )
     lowest_id_document = min(document_a, document_b, key=lambda document: document.id)
 
-    # There are only 2 selected documents - "Note 99" does not exist.
+    # There are only 2 selected documents; "Note 99" does not exist.
     reconcile_ai_extracted_medications(db, analysis, [_ai_medication(source_note=99)])
 
     mention = db.query(MedicationMention).filter_by(medication_name="Lisinopril").one()
@@ -664,7 +664,7 @@ def test_reconcile_ai_extracted_medications_still_runs_reconciliation_against_co
     assert counts["medium"] == 1
 
     # create_medication_discrepancies deliberately doesn't commit (a real
-    # caller commits once everything for the analysis is staged - see
+    # caller commits once everything for the analysis is staged; see
     # persist_analysis_result); this test stands in for that caller.
     db.commit()
 

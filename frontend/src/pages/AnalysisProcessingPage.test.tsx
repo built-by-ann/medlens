@@ -263,7 +263,7 @@ describe('AnalysisProcessingPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Try again' }))
 
-    // Re-checks the analysis's status - does not submit a new analysis,
+    // Re-checks the analysis's status; does not submit a new analysis,
     // since the original submission already succeeded and only confirming
     // its status failed.
     expect(retryPolling).toHaveBeenCalledTimes(1)

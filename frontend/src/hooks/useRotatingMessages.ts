@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 /**
  * Cycles through a fixed list of messages on a timer, wrapping back to the
- * start. Purely cosmetic - callers use this to keep a waiting UI feeling
+ * start. Purely cosmetic; callers use this to keep a waiting UI feeling
  * alive when there is no real incremental progress to report.
  */
 export function useRotatingMessages(messages: readonly string[], intervalMs: number): string {

@@ -1,12 +1,12 @@
 """Tests for the evaluation metrics scorer (benchmark/metrics/, Issue
 #90). No test here makes a real network call or constructs an
-AIProvider - fixtures are hand-built BenchmarkCase/PredictionResult
+AIProvider; fixtures are hand-built BenchmarkCase/PredictionResult
 instances (the same dataclasses #86/#89 already define), never anything
 loaded from the real benchmark/cases/ dataset, so these tests are
 independent of its actual current content.
 
 benchmark/ is a top-level directory, a sibling of backend/ (see
-benchmark/README.md) - not part of the `app` package under test
+benchmark/README.md), not part of the `app` package under test
 everywhere else in this suite. sys.path is extended here the same way
 test_benchmark_dataset.py/test_evaluation_runner.py already do.
 """
@@ -204,7 +204,7 @@ def test_duplicate_names_resolved_by_dosage_route_frequency():
 
 def test_duplicate_names_with_identical_dosage_route_frequency_are_ambiguous():
     # Mirrors BENCH-029's real lisinopril duplicate: two expected entries
-    # with every field null except source_note - genuinely undecidable by
+    # with every field null except source_note, genuinely undecidable by
     # any permitted signal.
     expected = [
         _med("Lisinopril", source_note=2),
@@ -262,7 +262,7 @@ def test_source_note_mismatch_does_not_alter_pairing():
 
 def test_status_mismatch_does_not_alter_pairing():
     # Mirrors BENCH-006's real atorvastatin duplicate: dosage/route/
-    # frequency identical, only status differs - status must not be used
+    # frequency identical, only status differs; status must not be used
     # to resolve the tie, so this remains ambiguous rather than being
     # "resolved" by status agreement.
     expected = [
@@ -310,7 +310,7 @@ def test_normalize_text_collapses_whitespace_and_casefolds():
     assert normalize_text("  10  mg ") == "10 mg"
     assert normalize_text("PO") == "po"
     assert normalize_text(None) is None
-    # Deliberately distinct after normalization - no semantic aliasing.
+    # Deliberately distinct after normalization: no semantic aliasing.
     assert normalize_text("PO") != normalize_text("oral")
     assert normalize_text("10 mg") != normalize_text("10mg")
 
@@ -523,7 +523,7 @@ def test_failed_case_with_expected_medications_contributes_all_as_false_negative
 
 def test_failed_case_with_zero_expected_medications_is_still_vacuously_perfect_end_to_end():
     # A documented, deliberate interaction: reliability metrics (not
-    # medication F1) are what actually reveal this failure - see
+    # medication F1) are what actually reveal this failure; see
     # score_reliability and benchmark/README.md.
     cases_by_id = {"C1": _case("C1", medications=[])}
     predictions = [_prediction("C1", schema_valid=False, json_valid=False)]
@@ -725,7 +725,7 @@ def _write_run(tmp_path, cases, predictions_by_provider, status="complete", prov
 
 class _DictAsResult:
     """Adapter so PredictionWriter.write() (which calls .to_dict()) can
-    write an already-built plain dict - avoids re-threading every test's
+    write an already-built plain dict; avoids re-threading every test's
     fixture through PredictionResult reconstruction.
     """
 

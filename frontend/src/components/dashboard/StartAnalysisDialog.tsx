@@ -12,12 +12,12 @@ interface StartAnalysisDialogProps {
 
 /**
  * The Dashboard's "New Analysis" quick action prompts for a patient before
- * it can go anywhere (Issue #157) - this is that prompt. Built on the same
+ * it can go anywhere (Issue #157); this is that prompt. Built on the same
  * native <dialog> pattern as ArchivePatientDialog/DeleteAnalysisDialog, but
  * unlike those, there's no single "target" object that can double as the
  * open/closed flag here (the content is a searchable list, not one confirm
  * message), so `isOpen` is explicit. Selecting a patient (a single click,
- * no separate confirm step) is itself the confirmation - the caller is
+ * no separate confirm step) is itself the confirmation; the caller is
  * expected to navigate straight into CreateAnalysisPage for that patient.
  */
 export function StartAnalysisDialog({

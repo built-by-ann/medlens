@@ -15,7 +15,7 @@ interface PatientBreadcrumbProps {
 /**
  * Consistent "Patients / {name} / ..." trail for every page nested under a
  * patient, so a provider always knows which patient they're viewing and can
- * get back in one click - never a dead end. The last crumb is always the
+ * get back in one click; never a dead end. The last crumb is always the
  * current page: rendered as plain text with aria-current="page", never a
  * link to itself.
  */

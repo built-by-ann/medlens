@@ -265,7 +265,7 @@ def test_summarize_rejects_unexpected_top_level_structure():
 def test_summarize_logs_validation_failure_without_leaking_the_raw_response(caplog):
     # A wrong-typed dosage field carrying what looks like real clinical
     # content (Pydantic's ValidationError.errors() echoes the offending
-    # input value back) - this is exactly the shape of data that must
+    # input value back); this is exactly the shape of data that must
     # never reach a log line (Issue #59's "never log ... clinical document
     # text" requirement), since the raw AI response can itself contain
     # fragments of the clinical notes it was built from.

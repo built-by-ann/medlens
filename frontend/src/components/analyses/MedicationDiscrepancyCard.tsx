@@ -22,7 +22,7 @@ function formatResolvedAt(resolvedAt: string): string {
 // is never communicated by color alone. Uses the same fixed *-badge tokens
 // as DiscrepancySeverityBadge (not the theme-varying danger/warning used
 // for plain text elsewhere) so the stripe is the exact same color as the
-// pill it echoes, in every theme - see docs/frontend.md.
+// pill it echoes, in every theme; see docs/frontend.md.
 const SEVERITY_BORDER_STYLES: Record<MedicationDiscrepancy['severity'], string> = {
   high: 'border-l-4 border-l-danger-badge',
   medium: 'border-l-4 border-l-warning-badge',
@@ -34,7 +34,7 @@ interface MedicationDiscrepancyCardProps {
   // Omitted entirely (rather than passed as a no-op) by callers that only
   // ever render already-resolved discrepancies (none exist yet, but this
   // keeps the card usable read-only without a caller having to invent a
-  // handler) - resolution actions simply don't render without it.
+  // handler); resolution actions simply don't render without it.
   onResolveAction?: (target: {
     discrepancyId: number
     medicationName: string

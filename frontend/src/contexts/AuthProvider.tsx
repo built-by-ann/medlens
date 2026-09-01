@@ -40,7 +40,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // StrictMode double-invokes this effect in dev, firing two concurrent
     // getCurrentUser() calls. Without this guard, a stale call's rejection
     // (e.g. a transient blip) would clear the token even after the other,
-    // newer call already succeeded and restored the session - leaving
+    // newer call already succeeded and restored the session, leaving
     // `user` set (so the UI looks logged in) while apiClient's token is
     // null (so every subsequent request 401s with no Authorization header
     // at all). ignore makes only the effect run's own outcome apply.

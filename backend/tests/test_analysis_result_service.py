@@ -122,7 +122,7 @@ def _clinical_summary(**overrides):
 def test_persist_analysis_result_succeeds(db):
     # This patient has no Medication rows at all (see _create_pending_analysis),
     # so the AI-extracted Lisinopril mention is necessarily "missing from the
-    # medication list" - Issue #148's reconciliation integration means this
+    # medication list"; Issue #148's reconciliation integration means this
     # is no longer a hardcoded zero.
     analysis = _create_pending_analysis(db, "persistsuccess@example.com")
 
@@ -278,7 +278,7 @@ def test_persist_analysis_result_rolls_back_when_completion_fails(db, monkeypatc
     )
     # Issue #148: reconciliation's own writes (the bridged MedicationMention
     # and any MedicationDiscrepancy it produced) ride in the same
-    # transaction, so they roll back too - no partially persisted
+    # transaction, so they roll back too; no partially persisted
     # discrepancies are left behind.
     assert db.query(MedicationMention).count() == 0
     assert (
@@ -393,7 +393,7 @@ def test_persist_analysis_result_does_not_duplicate_discrepancies_for_repeated_m
 def test_persist_analysis_result_attributes_each_medication_to_its_true_source_document(db):
     # Issue #152: a genuinely multi-document analysis, where two different
     # medications are each mentioned in a different one of the two selected
-    # documents - the case the earlier lowest-id placeholder could never
+    # documents; the case the earlier lowest-id placeholder could never
     # represent correctly (both would have landed on document_a regardless).
     user = _create_user(db, "trueprovenance@example.com")
     patient = _create_patient(db, user)

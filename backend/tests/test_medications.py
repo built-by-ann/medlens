@@ -222,7 +222,7 @@ def test_get_medication_returns_404_for_other_users_patient(client):
 
 def test_get_medication_returns_404_when_accessed_through_a_different_patient(client):
     # Cross-patient access: both patients are owned by the same user, but
-    # the medication belongs to patient_a, not patient_b - the medication
+    # the medication belongs to patient_a, not patient_b; the medication
     # id alone must not be enough to reach it through the wrong patient.
     token = _register_and_login(client, "crosspatient@example.com")
     patient_a = _create_patient(client, token, first_name="A").json()

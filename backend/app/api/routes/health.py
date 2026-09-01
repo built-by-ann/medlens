@@ -24,12 +24,12 @@ def health_check() -> JSONResponse:
     the only I/O is the one `SELECT 1` below, to a database this process
     already holds a connection pool for. Storage backend and AI
     provider/model are reported from settings already loaded into memory
-    and a plain class attribute - never by constructing a StorageService
+    and a plain class attribute, never by constructing a StorageService
     (which would mean a real S3 call for the "s3" backend) or an AI
     provider client (which would mean contacting Gemini or Hugging Face),
     both explicitly ruled out by this endpoint's own requirements.
 
-    Mirrors settings.ai_provider (validated at startup - see Settings'
+    Mirrors settings.ai_provider (validated at startup; see Settings'
     own model_validator) rather than hardcoding GeminiProvider: reporting
     "gemini" here while AI_PROVIDER=openbiollm is actually configured
     would make this endpoint actively misleading, not just incomplete.

@@ -60,7 +60,7 @@ def _create_patient(db, user):
 
 def _create_analysis(db, user):
     # MedicationDiscrepancy's own tests don't exercise patient scoping at
-    # all (that's covered in test_analysis.py/test_medications.py) - a
+    # all (that's covered in test_analysis.py/test_medications.py); a
     # fresh patient per fixture call is only here to satisfy patient_id's
     # NOT NULL constraint, not to model any particular ownership scenario.
     patient = _create_patient(db, user)
@@ -381,7 +381,7 @@ def _create_analysis_with_patient(db, user):
 
 def _create_medication_for_patient(db, patient):
     # Unlike _create_medication above, this ties the medication to a given
-    # patient rather than creating its own - resolve_discrepancy scopes its
+    # patient rather than creating its own; resolve_discrepancy scopes its
     # medication lookups by patient_id (via update_medication), so a
     # medication created for the wrong patient would silently fail to
     # update rather than raise, which is exactly the bug this helper avoids
@@ -746,7 +746,7 @@ def test_resolve_discrepancy_rejects_resolving_twice(db):
 
 
 def test_resolve_discrepancy_preserves_original_finding_fields(db):
-    # "Do not lose historical discrepancies after reconciliation" - the
+    # "Do not lose historical discrepancies after reconciliation": the
     # fields the reconciliation engine originally computed must survive
     # resolution unchanged, only new resolution-specific fields are added.
     user = _create_user(db, email="preservehistory@example.com")

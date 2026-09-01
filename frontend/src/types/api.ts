@@ -36,7 +36,7 @@ export interface AnalysisSummary {
   low_severity_findings: number
   // Unlike the four counts above (fixed at analysis completion), this is
   // recomputed on every request from the discrepancies' current
-  // resolution_status - it drops as a provider resolves/dismisses findings.
+  // resolution_status; it drops as a provider resolves/dismisses findings.
   open_findings: number
   provider: string | null
   model_name: string | null
@@ -51,8 +51,8 @@ export interface PatientSummary {
 }
 
 // The Dashboard's Recent Analyses feed (Issue #157) is the one place an
-// analysis is shown outside a single patient's own pages, so - unlike
-// AnalysisSummary - the patient it belongs to isn't already established by
+// analysis is shown outside a single patient's own pages, so, unlike
+// AnalysisSummary, the patient it belongs to isn't already established by
 // the URL and has to be identified inline.
 export interface RecentAnalysis extends AnalysisSummary {
   patient: PatientSummary
@@ -96,13 +96,13 @@ export type DiscrepancySeverity = 'low' | 'medium' | 'high'
 
 export type ResolutionStatus = 'open' | 'reviewed' | 'resolved' | 'dismissed'
 
-// What a provider actually did to resolve a discrepancy - distinct from
+// What a provider actually did to resolve a discrepancy, distinct from
 // ResolutionStatus (the coarser open/resolved/dismissed state that
 // results). Which actions are valid depends on the discrepancy's
-// DiscrepancyType - see discrepancyResolutionActions.ts.
+// DiscrepancyType; see discrepancyResolutionActions.ts.
 export type ResolutionAction = 'add_medication' | 'update_medication' | 'dismiss'
 
-// Who resolved a discrepancy - a minimal, purpose-built view of the
+// Who resolved a discrepancy, a minimal, purpose-built view of the
 // resolving user for this one nested use, not a general-purpose user type.
 export interface ResolvedBy {
   id: number
@@ -114,7 +114,7 @@ export interface ResolvedBy {
 // POST .../discrepancies/{id}/resolve request body. Every medication field
 // is optional at the type level since which ones are required depends on
 // `action` (add_medication needs all five; update_medication needs at
-// least one; dismiss needs none) - see discrepancyResolutionActions.ts,
+// least one; dismiss needs none); see discrepancyResolutionActions.ts,
 // which is what actually builds one of these per action/type combination.
 export interface DiscrepancyResolutionPayload {
   action: ResolutionAction
@@ -132,7 +132,7 @@ export interface ClinicalDocumentSummary {
   document_type: string
 }
 
-// MedicationMention has no API exposure of its own - this only exists
+// MedicationMention has no API exposure of its own; this only exists
 // nested inside a MedicationDiscrepancy as supporting evidence (Issue #46).
 export interface MedicationMentionEvidence {
   id: number
@@ -172,7 +172,7 @@ export interface MedicationDiscrepancy {
 }
 
 // The AI's raw, unstructured per-medication observation from the summary
-// pass - distinct from Medication (the reconciliation engine's structured
+// pass, distinct from Medication (the reconciliation engine's structured
 // record) and from MedicationDiscrepancy (a reconciliation finding).
 export interface AnalysisMedicationMention {
   id: number

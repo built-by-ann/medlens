@@ -24,7 +24,7 @@ def create_patient(db: Session, user_id: int, patient_in: PatientCreate) -> Pati
 
 
 def list_patients(db: Session, user_id: int) -> list[Patient]:
-    # Archived patients are excluded from the default list - archiving is a
+    # Archived patients are excluded from the default list; archiving is a
     # soft delete, and an archived chart shouldn't clutter the provider's
     # normal patient list. get_patient() below has no such filter, since an
     # archived patient's own detail view should still be reachable directly.

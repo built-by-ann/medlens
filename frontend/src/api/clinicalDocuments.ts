@@ -30,7 +30,7 @@ export function documentTypeLabel(value: string): string {
 // Matches the backend's own validation exactly (app/api/routes/
 // clinical_documents.py): each upload endpoint accepts a file if its
 // extension OR its content type matches, whichever is present. A CSV here
-// (Issue #164) is just another document format alongside .txt/.pdf - it's
+// (Issue #164) is just another document format alongside .txt/.pdf; it's
 // stored and analyzed as plain evidence text, never parsed into structured
 // rows or imported into the patient's medication list the way
 // MedicationCsvUpload/api/medications.ts's importMedications does.
@@ -61,7 +61,7 @@ export function deriveTitleFromFileName(fileName: string): string {
 }
 
 // The single source of truth for "what title will this queued file get on
-// upload" - a provider-edited title if they've set one, otherwise the
+// upload": a provider-edited title if they've set one, otherwise the
 // filename-derived default. Shared with findDuplicateExistingTitle
 // (utils/queuedFiles.ts) so the same-name warning always reflects exactly
 // what's about to be saved, not just the original filename.

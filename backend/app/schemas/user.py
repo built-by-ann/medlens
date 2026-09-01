@@ -7,7 +7,7 @@ MIN_PASSWORD_LENGTH = 8
 
 USERNAME_MIN_LENGTH = 3
 USERNAME_MAX_LENGTH = 30
-# a-z, A-Z, 0-9, underscore, period only - deliberately no hyphen or other
+# a-z, A-Z, 0-9, underscore, period only, deliberately no hyphen or other
 # punctuation, since the issue's own rules list exactly these characters.
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.]+$")
 
@@ -15,7 +15,7 @@ USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.]+$")
 def validate_username_format(value: str) -> str:
     """Shared by UserCreate and UserUpdate (see below) so registration and
     profile updates can never enforce different rules for the same field.
-    Only format is checked here - uniqueness requires a database lookup, so
+    Only format is checked here; uniqueness requires a database lookup, so
     it's enforced separately in app/services/user_service.py, the same
     split already used for email (EmailStr checks format here; email
     uniqueness is a service-layer check raising EmailAlreadyRegisteredError).
@@ -56,7 +56,7 @@ class UserUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # All optional and independently settable, so a caller can update just
-    # one field without resending the others - unlike UserCreate, there's no
+    # one field without resending the others; unlike UserCreate, there's no
     # password field here (see app/api/routes/users.py: profile editing is
     # deliberately separate from credential changes, which aren't in scope
     # for this endpoint).

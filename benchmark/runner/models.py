@@ -1,16 +1,16 @@
 """Structured result types for the evaluation runner (Issue #89).
 
 Two shapes: PredictionResult (one per attempted (case, provider) pair,
-written as one line of predictions.jsonl - see storage.py) and
+written as one line of predictions.jsonl; see storage.py) and
 RunManifest (one per run, written as manifest.json). Both are plain
-dataclasses with an explicit to_dict() rather than Pydantic models -
+dataclasses with an explicit to_dict() rather than Pydantic models;
 nothing here is ever parsed back into a validated shape the way
 ClinicalSummary is; these are pure output structures, not something an
 input is ever checked against, so a dataclass is enough.
 
 Also defines benchmark_fingerprint() (what dataset state a run was
 executed against) and prompt_hash() (the identical-prompt reproducibility
-guarantee - see execution.py for where both are actually used).
+guarantee; see execution.py for where both are actually used).
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def benchmark_fingerprint(cases: list[BenchmarkCase]) -> str:
 
 def prompt_hash(prompt: str) -> str:
     """A sha256 hash of the exact prompt string sent to every provider for
-    one benchmark case - see execution.py's run_evaluation loop, which
+    one benchmark case; see execution.py's run_evaluation loop, which
     calls build_summary_prompt() exactly once per case and reuses both
     the string and this hash across every selected provider.
     """
@@ -62,10 +62,10 @@ class ParsingResult:
 
 @dataclass
 class PredictionResult:
-    """One attempted (benchmark case, provider) pair - one line of
+    """One attempted (benchmark case, provider) pair, one line of
     predictions.jsonl. provider_response is the exact string
     AIProvider.generate_summary() returned, before any evaluation-
-    framework parsing or validation - see docs/ai.md and benchmark/
+    framework parsing or validation; see docs/ai.md and benchmark/
     README.md for why this is *not* the same thing as "the literal
     unprocessed SDK/model output" for OpenBioLLM/MedGemma (both perform
     intentional syntactic cleanup inside generate_summary() itself,
@@ -96,10 +96,10 @@ class PredictionResult:
 class RunManifest:
     """Run-level metadata, written once at the start of a run
     (status="running") and once more at the end (status="complete" or
-    "interrupted") - see storage.py's write_manifest() and cli.py's
+    "interrupted"); see storage.py's write_manifest() and cli.py's
     lifecycle around it. A manifest left at status="running" on disk with
     no update means the process crashed before finishing; this is
-    deliberately not distinguished from a truly hung run - see
+    deliberately not distinguished from a truly hung run; see
     benchmark/README.md's Reproducibility section.
     """
 

@@ -74,7 +74,7 @@ def test_settings_accepts_s3_when_fully_configured(monkeypatch):
 def test_settings_accepts_s3_without_explicit_credentials(monkeypatch):
     # The production-recommended configuration (an IAM role attached to
     # the EC2 instance, this feature's own "use IAM credentials"
-    # requirement) supplies no static access key at all - Settings must
+    # requirement) supplies no static access key at all; Settings must
     # not require one.
     _base_env(monkeypatch)
     monkeypatch.setenv("STORAGE_BACKEND", "s3")
@@ -144,7 +144,7 @@ def test_settings_accepts_openbiollm_as_ai_provider(monkeypatch):
 def test_settings_accepts_openbiollm_without_a_huggingface_api_key(monkeypatch):
     # Mirrors gemini_api_key's own optionality: selecting a provider with
     # no credential configured yet must not block the application from
-    # starting - only the first actual analysis request should fail, with
+    # starting; only the first actual analysis request should fail, with
     # a clear AIProviderError, exactly like Gemini's missing-key case.
     _base_env(monkeypatch)
     monkeypatch.setenv("AI_PROVIDER", "openbiollm")
@@ -181,7 +181,7 @@ def test_settings_accepts_medgemma_as_ai_provider(monkeypatch):
 def test_settings_accepts_medgemma_without_a_huggingface_api_key(monkeypatch):
     # Mirrors openbiollm's own optionality (see above): selecting a
     # provider with no credential configured yet must not block the
-    # application from starting - only the first actual analysis request
+    # application from starting; only the first actual analysis request
     # should fail, with a clear AIProviderError.
     _base_env(monkeypatch)
     monkeypatch.setenv("AI_PROVIDER", "medgemma")

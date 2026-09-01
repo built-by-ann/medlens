@@ -1,7 +1,7 @@
 """Structural validation for the synthetic extraction benchmark dataset
 (GitHub issue #86, benchmark/cases/*.json).
 
-This does not run any AI provider and does not score anything - it only
+This does not run any AI provider and does not score anything; it only
 catches malformed benchmark entries or ground-truth records (invalid
 JSON, a missing/mistyped field, a source_note out of range, an
 `expected` shape the real ClinicalSummary/Medication schema would
@@ -9,7 +9,7 @@ reject). Model execution and evaluation metrics are out of scope here
 and land in a future issue's own test suite instead.
 
 benchmark/ is a top-level directory, a sibling of backend/ (see
-benchmark/README.md for why) - not part of the `app` package under test
+benchmark/README.md for why), not part of the `app` package under test
 everywhere else in this suite. sys.path is extended here, rather than
 adding a conftest.py fixture other tests would also pick up, since this
 is the one test file that needs it.
@@ -37,7 +37,7 @@ def cases() -> list[BenchmarkCase]:
 
 
 def test_benchmark_has_a_meaningful_number_of_cases(cases):
-    # A floor, not an exact count - see benchmark/README.md for the
+    # A floor, not an exact count; see benchmark/README.md for the
     # design goal of "carefully designed cases over volume." This guards
     # against someone accidentally deleting most of the dataset, not
     # against the dataset growing over time.
@@ -99,7 +99,7 @@ def test_status_when_present_is_a_literal_substring_of_its_source_note(cases):
     # Deterministic, mechanical guard against exactly the drift this
     # dataset was audited for: the production prompt (app/ai/prompts.py)
     # instructs "record ... status exactly as that specific note states
-    # them" - never a canonical vocabulary word substituted for the
+    # them", never a canonical vocabulary word substituted for the
     # note's own wording, and never inferred from a heading with no
     # per-item status language. This does not parse clinical meaning out
     # of prose (that would be brittle); it only checks that whatever
@@ -128,7 +128,7 @@ def test_expected_output_matches_the_real_clinical_summary_schema(cases):
     for case in cases:
         # Raises pydantic.ValidationError (failing this test with a clear
         # message) if a case's ground truth doesn't match the real,
-        # production extraction contract - including extra="forbid", so
+        # production extraction contract, including extra="forbid", so
         # a typo'd or invented field is caught here, not discovered by
         # #89's future runner.
         ClinicalSummary.model_validate(case.expected)
@@ -139,7 +139,7 @@ def test_medications_with_the_same_name_in_different_notes_use_distinct_source_n
     # extracts the same medication name from two different notes, the
     # whole point is usually that they came from different source_notes
     # (that's what makes it a multi-document/conflicting-info case at
-    # all) - two identical (name, source_note) pairs would mean a
+    # all); two identical (name, source_note) pairs would mean a
     # medication was accidentally duplicated within the same note.
     for case in cases:
         seen: set[tuple[str, int | None]] = set()

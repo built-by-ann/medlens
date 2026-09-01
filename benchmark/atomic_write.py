@@ -1,7 +1,7 @@
 """Shared atomic JSON file writing for benchmark/ tooling.
 
 Extracted out of runner/storage.py (Issue #89) when metrics/io.py (Issue
-#90) needed the exact same behavior, rather than duplicating it - the
+#90) needed the exact same behavior, rather than duplicating it; the
 same reasoning app/ai/providers/text_cleanup.py was extracted for.
 Behavior is unchanged from runner/storage.py's original inline version:
 written to a temporary file in the destination's own directory, then

@@ -57,12 +57,12 @@ def ordered_clinical_documents(analysis: Analysis) -> list[ClinicalDocument]:
     """A deterministic order for `analysis.clinical_documents`.
 
     It's a plain many-to-many relationship (see analysis_clinical_documents
-    in docs/data-model.md) with no inherent ordering guarantee - the rows
+    in docs/data-model.md) with no inherent ordering guarantee; the rows
     SQLAlchemy returns aren't reliably insertion order or id order. This
     matters as of Issue #152: the AI prompt numbers each document it is
     given ("Note 1", "Note 2", ...; see app/ai/prompts.py), and the AI's
     response reports which numbered note a given medication came from, so
-    that numbering has to be reproducible - the same order used to build
+    that numbering has to be reproducible: the same order used to build
     the prompt (app/api/routes/analyses.py) must be the same order used
     afterward to map a reported note number back to a real document id
     (medication_reconciliation_service.py). Sorting by id ascending is that
@@ -153,7 +153,7 @@ def list_recent_analyses_for_user(db: Session, user_id: int, limit: int) -> list
     # analysis is shown across every patient a user owns rather than one
     # patient's own pages. Joins to Patient purely to scope by user_id and
     # exclude archived patients (the same exclusion list_patients already
-    # applies) - selectinload still eager-loads the patient relationship so
+    # applies); selectinload still eager-loads the patient relationship so
     # the route can read analysis.patient.first_name/last_name with no
     # further query.
     return (

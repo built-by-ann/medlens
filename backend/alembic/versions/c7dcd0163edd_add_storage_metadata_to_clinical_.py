@@ -23,8 +23,8 @@ def upgrade() -> None:
 
     Purely additive: all three columns are nullable, so every existing
     ClinicalDocument row (created before original files were ever stored
-    anywhere - see Issue #58) is valid as-is with all three left null. No
-    backfill is possible or attempted - the original file bytes for a
+    anywhere; see Issue #58) is valid as-is with all three left null. No
+    backfill is possible or attempted: the original file bytes for a
     pre-existing document were never persisted anywhere (disk or
     database), only its extracted raw_text, so there is nothing to
     retroactively store in S3/local storage for rows that predate this
@@ -41,7 +41,7 @@ def downgrade() -> None:
     """Downgrade schema.
 
     Drops the three storage-metadata columns. Any object these rows
-    pointed to remains in S3/local storage - this migration only touches
+    pointed to remains in S3/local storage; this migration only touches
     Postgres, and deliberately does not attempt to delete storage objects
     as a side effect of a schema downgrade (a destructive, non-DDL action
     with no clean rollback of its own, out of place in a migration).

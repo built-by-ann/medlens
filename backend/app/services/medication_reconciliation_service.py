@@ -337,12 +337,12 @@ def reconcile_medications(
     """Builds discrepancy findings and persists them against the given
     analysis, returning severity counts.
 
-    Does not create, commit, or complete the analysis itself - callers own
+    Does not create, commit, or complete the analysis itself; callers own
     that lifecycle (see run_medication_reconciliation below, and Issue
     #148's reconcile_ai_extracted_medications, which both call this).
     create_medication_discrepancies does not commit, so this function's
     writes only take effect once the caller's own commit runs (Analysis
-    completion, or a rollback on failure) - see docs/architecture.md.
+    completion, or a rollback on failure); see docs/architecture.md.
     """
     findings = build_discrepancy_findings(medications, mentions, check_unsupported_entries)
 
@@ -358,16 +358,16 @@ def _resolve_source_document_id(
 ) -> int:
     """Maps an AI-reported "source_note" (1-indexed, matching the "Note N"
     labels app/ai/prompts.py's build_summary_prompt assigns) back to the
-    real document at that position in `ordered_documents` - the exact same
+    real document at that position in `ordered_documents`, the exact same
     order that was used to build the prompt in the first place (see
     ordered_clinical_documents, analysis_service.py).
 
-    Falls back to `fallback_document_id` (the lowest-id selected document -
+    Falls back to `fallback_document_id` (the lowest-id selected document,
     the same placeholder Issue #148 always used) only when the AI omitted
     source_note entirely, or reported a number outside the actual range of
-    selected documents - both malformed-response cases that the prompt
+    selected documents, both malformed-response cases that the prompt
     instructs against but that `Medication.source_note` deliberately allows
-    (it's optional, not required - see app/ai/schemas.py) rather than
+    (it's optional, not required; see app/ai/schemas.py) rather than
     failing the whole analysis over one mis-attributed medication.
     """
     if source_note is None:
@@ -389,10 +389,10 @@ def reconcile_ai_extracted_medications(
     reconciliation (Issue #148).
 
     That flow extracts medications directly from clinical note text via an
-    AI provider, without ever persisting a MedicationMention row - it only
+    AI provider, without ever persisting a MedicationMention row; it only
     ever produced AnalysisMedicationMention rows, an AI-authored observation
     with no link back to a specific document (see
-    app/services/analysis_result_service.py) - so there was nothing here
+    app/services/analysis_result_service.py), so there was nothing here
     for reconciliation to compare against. This function closes that gap by
     persisting each AI-extracted medication as a real MedicationMention, so
     the exact same reconciliation engine used by run_medication_reconciliation
@@ -404,19 +404,19 @@ def reconcile_ai_extracted_medications(
     medication actually came from (`Medication.source_note`). Each mention
     is attached to that real document via _resolve_source_document_id,
     falling back to the lowest-id selected document only for the rare
-    malformed response that omits or misreports the note number - not, as
+    malformed response that omits or misreports the note number, not, as
     before, unconditionally for every mention regardless of source. A
     medication mentioned in more than one selected document is expected to
     appear as more than one entry in `ai_medications` (one per note it was
     found in, per the prompt's own instructions) and so becomes more than
     one MedicationMention, one correctly attached to each real source
-    document - build_discrepancy_findings already groups mentions of the
+    document; build_discrepancy_findings already groups mentions of the
     same medication name together regardless of how many there are or which
     document each came from, so this needed no change there.
 
     Historical analyses created before this issue still have their
     MedicationMention rows attached to whichever document happened to have
-    the lowest id among those selected, not necessarily their true source -
+    the lowest id among those selected, not necessarily their true source;
     this function cannot retroactively correct data it didn't write, and no
     migration re-derives it (the original note text isn't stored per
     mention, so which document a historical mention "really" came from
@@ -483,7 +483,7 @@ def run_medication_reconciliation(
         documents = analysis.clinical_documents
         document_ids = [document.id for document in documents]
 
-        # Scoped to this patient specifically - not the wider set of every
+        # Scoped to this patient specifically, not the wider set of every
         # medication the provider (User) has ever entered across all of
         # their patients. This is the one place reconciliation reads
         # Medication directly rather than through medication_service, so

@@ -7,7 +7,7 @@ interface FileDropzoneProps {
   // Id of the element (typically a `role="alert"` paragraph the caller
   // renders alongside this dropzone) describing a current file-selection
   // error, so assistive tech reading this control also reads why the last
-  // selection failed - not just a floating paragraph elsewhere on the page.
+  // selection failed, not just a floating paragraph elsewhere on the page.
   errorId?: string
 }
 

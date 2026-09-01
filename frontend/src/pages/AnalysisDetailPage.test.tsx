@@ -667,7 +667,7 @@ describe('AnalysisDetailPage', () => {
         'Discrepancy has already been resolved',
       )
       expect(screen.getByRole('dialog')).toBeInTheDocument()
-      // Still open - the action buttons are still there to retry.
+      // Still open; the action buttons are still there to retry.
       expect(screen.getByRole('button', { name: /^Dismiss/ })).toBeInTheDocument()
     })
 
@@ -734,7 +734,7 @@ describe('AnalysisDetailPage', () => {
           screen.queryByRole('button', { name: 'Dismiss: Lisinopril' }),
         ).not.toBeInTheDocument(),
       )
-      // Metformin's dose_conflict was never touched - still open, still actionable.
+      // Metformin's dose_conflict was never touched; still open, still actionable.
       expect(
         screen.getByRole('button', { name: /Update Medication: Metformin/ }),
       ).toBeInTheDocument()

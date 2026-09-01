@@ -18,7 +18,7 @@ from app.core.logging_config import (
 @pytest.fixture(autouse=True)
 def _restore_root_logger():
     """configure_logging() (tested directly below) mutates the process-wide
-    root logger - app/main.py already calls it once at import time with the
+    root logger; app/main.py already calls it once at import time with the
     real Settings, and every other test file's log-based assertions
     (caplog, etc.) depend on that configuration staying intact. Without
     this, whichever configure_logging(...) call this file's tests happen
@@ -77,7 +77,7 @@ def test_json_formatter_timestamp_is_utc_iso8601_with_z_suffix():
 
     payload = json.loads(JSONFormatter().format(record))
 
-    # e.g. "2026-08-05T02:15:30.123Z" - no "+00:00", no naive/local offset.
+    # e.g. "2026-08-05T02:15:30.123Z"; no "+00:00", no naive/local offset.
     assert payload["timestamp"].endswith("Z")
     assert "+" not in payload["timestamp"]
 
@@ -111,7 +111,7 @@ def test_json_formatter_omits_a_field_not_in_the_allowlist():
     # The core safety property this issue's "never log passwords/tokens/..."
     # requirement rests on: even if a call site passed something sensitive
     # via extra= under an unexpected key, it simply never reaches the
-    # formatted output unless that key is also added to ALLOWED_FIELDS - a
+    # formatted output unless that key is also added to ALLOWED_FIELDS, a
     # deliberate, reviewable step (see app/core/logging_config.py).
     record = _make_record(extra={"event": "test_event", "password": "hunter2"})
 
@@ -226,7 +226,7 @@ def test_request_context_filter_never_overrides_an_explicitly_set_field():
 
 def test_set_request_user_id_sets_it_on_request_state():
     # A plain object with a `.state` attribute stands in for a real
-    # fastapi.Request here - set_request_user_id only ever touches
+    # fastapi.Request here; set_request_user_id only ever touches
     # request.state, deliberately *not* the _request_context ContextVar
     # (see its docstring in app/core/logging_config.py for why a
     # ContextVar can't carry user_id reliably across a sync dependency

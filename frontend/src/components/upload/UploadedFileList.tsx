@@ -10,12 +10,12 @@ interface UploadedFileListProps {
   onRemove: (id: number) => void
   onDocumentTypeChange: (id: number, documentType: string) => void
   // Unset until a provider edits it, e.g. to resolve a same-name collision
-  // (see existingDocumentTitles below) - the document is titled from the
+  // (see existingDocumentTitles below); the document is titled from the
   // filename on upload otherwise.
   onTitleChange: (id: number, title: string) => void
   // Titles of documents the patient already has on file. Set only by
   // CreateAnalysisPage, which already has this list loaded to render
-  // Existing Documents - UploadPage doesn't fetch it, so this stays unset
+  // Existing Documents; UploadPage doesn't fetch it, so this stays unset
   // there and no warning renders. Purely a heads-up (same filename as
   // something already saved): the file stays queued either way, nothing is
   // blocked.

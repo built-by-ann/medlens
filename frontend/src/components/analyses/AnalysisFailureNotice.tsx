@@ -12,7 +12,7 @@ interface AnalysisFailureNoticeProps {
  * tech the same way. Previously each place duplicated this as a plain
  * paragraph with no shared label, and one of the two had no `role` at all.
  * Distinct from FormError: this isn't a failed *action* (submitting a form,
- * deleting something) - it's a fact about a persisted record, so it always
+ * deleting something); it's a fact about a persisted record, so it always
  * carries its own "Analysis failed" label rather than relying on context.
  */
 export function AnalysisFailureNotice({ message, className }: AnalysisFailureNoticeProps) {

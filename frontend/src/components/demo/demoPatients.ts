@@ -1,7 +1,7 @@
-// Synthetic demo datasets under public/demo/ - see each patient's own
+// Synthetic demo datasets under public/demo/; see each patient's own
 // README.txt (included in its ZIP) for the full recommended upload order
 // and what the case demonstrates. Static data, not an API concern, so it
-// lives here rather than in src/api/ - nothing here calls the backend.
+// lives here rather than in src/api/: nothing here calls the backend.
 
 export interface DemoPatient {
   slug: string

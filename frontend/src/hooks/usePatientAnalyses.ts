@@ -14,7 +14,7 @@ interface UsePatientAnalysesResult {
 /**
  * Fetches one patient's analysis history. Re-fetches whenever patientId
  * changes, so navigating from one patient's analyses to another's doesn't
- * show stale data. Scoped to a single patientId - there is no cross-patient
+ * show stale data. Scoped to a single patientId; there is no cross-patient
  * or global analysis list anywhere in this hook.
  */
 export function usePatientAnalyses(patientId: number, limit = 10): UsePatientAnalysesResult {

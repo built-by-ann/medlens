@@ -99,10 +99,10 @@ class GeminiProvider(AIProvider):
         detail = self._error_detail(error, reason)
 
         # detail is folded into the message text, not a separate structured
-        # field - the allowlist in app/core/logging_config.py is deliberately
+        # field: the allowlist in app/core/logging_config.py is deliberately
         # narrow, and detail is a free-form (if already-vetted-safe)
         # description rather than a value worth filtering/aggregating on the
-        # way error_type is. Server-side only - never included in the
+        # way error_type is. Server-side only; never included in the
         # AIProviderError message raised above, which is what reaches the
         # frontend (see _safe_error_message, app/api/routes/analyses.py).
         # detail describes the API's own response to the request (e.g.

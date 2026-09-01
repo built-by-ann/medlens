@@ -1,5 +1,5 @@
 """Reading a completed #89 run and writing metrics.json for it (Issue
-#90). Read-only with respect to manifest.json/predictions.jsonl - this
+#90). Read-only with respect to manifest.json/predictions.jsonl; this
 module never calls an AIProvider and never reruns anything; it only
 validates and scores what #89 already produced. Every check here is
 fail-loud by default: scoring through an integrity problem silently
