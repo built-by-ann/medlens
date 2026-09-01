@@ -27,7 +27,7 @@ The frontend suite is the more conventional shape: predominantly small, isolated
 - Every backend API route: success paths, validation failures, authentication/authorization enforcement, and ownership isolation (one user's data is never visible to another).
 - Backend business logic in isolation from HTTP: medication normalization, medication reconciliation, AI response validation, analysis persistence.
 - Database-level behavior that only a real database can prove: foreign key constraints, `ON DELETE` cascade/set-null behavior (Decision 10, Decision 11), uniqueness constraints.
-- Integration points with external services, via a deliberate mock at the SDK boundary: the Gemini SDK client, S3 (via `moto`), never a live network call in the test suite.
+- Integration points with external services, via a deliberate mock at the SDK/HTTP boundary: the Gemini SDK client, OpenBioLLM's/MedGemma's local Ollama HTTP calls (`urllib.request.urlopen`), S3 (via `moto`), never a live network call, and never a running Ollama server, in the test suite.
 - Structured logging: that specific fields appear on specific log events, and, just as important, that sensitive fields (passwords, tokens, prompts, document content) never do.
 - Frontend hooks, components, pages, and the route table, each rendered for real and asserted against with React Testing Library's user-facing queries (`getByRole`, `getByLabelText`) rather than implementation details.
 - Frontend form validation logic, in isolation from any component that uses it.

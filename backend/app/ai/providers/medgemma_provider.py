@@ -1,156 +1,134 @@
+import json
 import logging
 import time
-
-from huggingface_hub import InferenceClient
-from huggingface_hub.errors import HfHubHTTPError, InferenceTimeoutError, ValidationError
+import urllib.error
+import urllib.request
 
 from app.ai.providers.base import AIProvider, AIProviderError
 from app.ai.providers.text_cleanup import extract_json_object, strip_code_fences
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "google/medgemma-27b-text-it"
+# The 4B-parameter MedGemma checkpoint, served locally through Ollama,
+# rather than the 27B checkpoint this provider previously called via
+# Hugging Face's hosted Inference Providers. Chosen because it runs
+# locally on consumer hardware (unlike the 27B checkpoint, which no
+# Inference Provider serves at a size practical for local use either).
+#
+# Verified directly: `ollama show
+# hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M --modelfile` reports a
+# correct, embedded Gemma-style chat template
+# (`<start_of_turn>user ... <end_of_turn>\n<start_of_turn>model`), so this
+# GGUF is used as-is - no custom Modelfile is needed, unlike OpenBioLLM
+# (see openbiollm_provider.py).
+DEFAULT_MODEL = "hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M"
+DEFAULT_BASE_URL = "http://localhost:11434"
+# Local CPU/Metal-bound inference on consumer hardware is far slower than
+# either hosted provider's response time; 120s is a practical starting
+# point for a 4B Q4_K_M model on a single-request, non-streaming call,
+# not a measured worst case. Revisit if real benchmark runs show it's too
+# tight.
+DEFAULT_TIMEOUT_S = 120.0
 
-# The one Hugging Face Inference Provider currently serving this exact
-# checkpoint, verified directly against Hugging Face's own API while
-# implementing this issue:
-#
-#   GET https://huggingface.co/api/models/google/medgemma-27b-text-it
-#       ?expand[]=inferenceProviderMapping
-#   -> {"featherless-ai": {"status": "live", "task": "conversational", ...}}
-#
-# It's the only MedGemma checkpoint with any live Inference Provider at
-# all: both 4B checkpoints (the original and 1.5) are multimodal and
-# currently have no provider serving them ("This model isn't deployed by
-# any Inference Provider", per their own model pages), which is why this
-# text-only 27B checkpoint is the one integrated here rather than a 4B
-# variant, despite being larger. See docs/ai.md for the full reasoning.
-#
-# Pinned explicitly rather than provider="auto", for the same
-# reproducibility reason OpenBioLLMProvider pins its own provider (see
-# openbiollm_provider.py): "auto" could silently resolve to a different
-# backend if Hugging Face's provider landscape changes, which would be a
-# real problem for #89's benchmark reproducibility.
-INFERENCE_PROVIDER = "featherless-ai"
+# Ollama's own runtime name for this integration shape - reported verbatim
+# in benchmark reproducibility metadata (see
+# benchmark/runner/providers.py's inference_backend_for) so a local run is
+# never mistaken for, or silently labeled as, Hugging Face-hosted
+# inference.
+INFERENCE_BACKEND = "ollama"
 
-# Unlike OpenBioLLM (task "text-generation", called via text_generation()),
-# this checkpoint's only live provider mapping is task "conversational" -
-# it's served through Hugging Face's chat-completion mechanism, not plain
-# text completion. AIProvider.generate_summary(prompt: str) -> str does
-# not change: this provider internally wraps the single prompt string
-# build_summary_prompt() (app/ai/prompts.py) already produces into one
-# user-turn message before calling chat_completion(), the same way
-# GeminiProvider wraps it as contents=prompt and OpenBioLLMProvider wraps
-# it as inputs=prompt. build_summary_prompt() itself is unchanged.
-DEFAULT_TIMEOUT_S = 30.0
-
-# Generation parameters for MedGemmaProvider, chosen for structured
-# extraction rather than open-ended conversation. Kept as constants here
-# (not Settings/.env), mirroring OpenBioLLMProvider.GENERATION_PARAMS -
-# these describe how this one provider is called, not deployment
-# configuration.
+# Deterministic generation settings, kept as a provider constant (not
+# Settings/.env) since these describe how this one provider is called, not
+# deployment configuration - the same reasoning this provider's previous,
+# Hugging Face-hosted GENERATION_PARAMS already followed.
 #
-# #89's evaluation framework should record these exact values alongside
-# any benchmark results run against this provider, since changing them
-# would change what's actually being measured.
-GENERATION_PARAMS = {
-    # temperature=0 is the closest thing to deterministic, greedy
-    # decoding the chat-completion API exposes (there is no do_sample
-    # equivalent for this task type, unlike OpenBioLLM's
-    # text_generation()). top_p is deliberately left unset: it only
-    # affects sampling, which a temperature of 0 already eliminates.
-    "temperature": 0,
-    # Large enough to hold a full ClinicalSummary JSON response (a
-    # medications list, possible_inconsistencies, and a summary) for a
-    # multi-document, multi-medication analysis without truncating
-    # mid-object. Not tuned empirically; a conservative upper bound,
-    # matching OpenBioLLMProvider's own max_new_tokens.
-    "max_tokens": 1024,
-}
+# Deliberately no `format: "json"` constrained-generation option, even
+# though Ollama supports one: #90's benchmark needs to measure this
+# model's own, unassisted ability to produce the requested JSON shape,
+# not a runtime-enforced grammar - see docs/ai.md's Structured Output
+# section, which already documented this exact reasoning for MedGemma
+# before this migration.
+GENERATION_PARAMS = {"temperature": 0, "seed": 0, "num_predict": 1024}
 
 
 class MedGemmaProvider(AIProvider):
-    """MedGemma (google/medgemma-27b-text-it), called through Hugging
-    Face's hosted Inference Providers, no local model weights, and no
-    torch/transformers/accelerate in this application at all. See the
-    module comments above for the exact provider, task, and generation
-    configuration, verified while implementing this issue.
+    """MedGemma, served locally through Ollama's HTTP API - no Hugging
+    Face Inference Providers, no hosted credential of any kind.
 
-    Deliberately does not use response_format/schema-constrained
-    generation: #89's benchmark needs to measure this model's actual,
-    unassisted ability to produce the requested JSON shape, the same
-    reasoning already applied to OpenBioLLMProvider. Output cleanup is
-    therefore strictly syntactic (see app/ai/providers/text_cleanup.py);
-    never a hidden repair layer.
-
-    Requires the Hugging Face account behind HUGGINGFACE_API_KEY to have
-    accepted Google's "Health AI Developer Foundations" license terms for
-    this gated model; MedLens itself performs no license-acceptance
-    logic of its own (see docs/ai.md's setup prerequisites).
+    Calls Ollama's `/api/chat` endpoint, which applies the target model's
+    own chat template automatically (verified correct for this GGUF; see
+    DEFAULT_MODEL's comment above).
     """
 
     name = "medgemma"
 
     def __init__(
         self,
-        api_key: str | None,
         model: str = DEFAULT_MODEL,
+        base_url: str = DEFAULT_BASE_URL,
         timeout_s: float = DEFAULT_TIMEOUT_S,
     ):
         self.model = model
-        self._api_key = api_key
+        self.base_url = base_url
         self._timeout_s = timeout_s
-        self._client: InferenceClient | None = None
-
-    def _get_client(self) -> InferenceClient:
-        # The key is checked here, not in __init__, so constructing this
-        # provider (for dependency injection) always succeeds; mirrors
-        # GeminiProvider._get_client and OpenBioLLMProvider._get_client
-        # exactly, for the same reason: the missing-credential case
-        # should surface as an AIProviderError only when a summary is
-        # actually requested.
-        if not self._api_key:
-            raise AIProviderError("Hugging Face API key is not configured")
-
-        if self._client is None:
-            self._client = InferenceClient(
-                provider=INFERENCE_PROVIDER,
-                token=self._api_key,
-                timeout=self._timeout_s,
-            )
-
-        return self._client
 
     def generate_summary(self, prompt: str) -> str:
         started_at = time.monotonic()
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "options": GENERATION_PARAMS,
+        }
+        request = urllib.request.Request(
+            f"{self.base_url}/api/chat",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
 
         try:
-            client = self._get_client()
-            response = client.chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                model=self.model,
-                **GENERATION_PARAMS,
-            )
+            with urllib.request.urlopen(request, timeout=self._timeout_s) as response:
+                body = json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            server_detail = self._read_error_body(error)
+            if error.code == 404:
+                self._log_failure(started_at, error, reason=server_detail or "model not found")
+                raise AIProviderError(
+                    f"Ollama model '{self.model}' is not installed. Run: ollama pull {self.model}"
+                ) from error
+            self._log_failure(started_at, error, reason=server_detail or f"HTTP {error.code}")
+            raise AIProviderError(f"MedGemma request failed: HTTP {error.code}") from error
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                self._log_failure(started_at, error, reason="timeout")
+                raise AIProviderError(
+                    f"MedGemma request timed out after {self._timeout_s}s"
+                ) from error
+            self._log_failure(started_at, error, reason="connection failed")
+            raise AIProviderError(
+                f"Could not connect to Ollama at {self.base_url}. Is the Ollama server running?"
+            ) from error
+        except TimeoutError as error:
+            self._log_failure(started_at, error, reason="timeout")
+            raise AIProviderError(f"MedGemma request timed out after {self._timeout_s}s") from error
         except AIProviderError:
             raise
-        except (InferenceTimeoutError, HfHubHTTPError, ValidationError) as error:
-            self._log_failure(started_at, error)
-            raise AIProviderError(f"MedGemma request failed: {type(error).__name__}") from error
         except Exception as error:
             self._log_failure(started_at, error)
             raise AIProviderError(
                 f"Unexpected error calling MedGemma: {type(error).__name__}"
             ) from error
 
-        raw_text = self._extract_message_content(response)
+        raw_text = (body.get("message") or {}).get("content")
 
         if not raw_text:
             self._log_failure(started_at, None, reason="empty response")
             raise AIProviderError("MedGemma returned an empty or invalid response")
 
-        # Strictly syntactic cleanup only; see text_cleanup.py's own
-        # docstrings. Never repairs, never touches field content.
-        # AISummaryService._parse_response is still the only thing that
+        # Strictly syntactic cleanup only - see text_cleanup.py. Never
+        # repairs malformed JSON, never infers missing fields, never
+        # touches field content; AISummaryService is the only thing that
         # validates the result against ClinicalSummary.
         cleaned_text = extract_json_object(strip_code_fences(raw_text))
 
@@ -164,25 +142,19 @@ class MedGemmaProvider(AIProvider):
                 "duration_ms": round(duration_ms, 1),
             },
         )
-
         return cleaned_text
 
     @staticmethod
-    def _extract_message_content(response: object) -> str | None:
-        """Pulls the assistant's message text out of a ChatCompletionOutput.
-
-        A missing/empty choices list, or a message with no content, is
-        treated the same way GeminiProvider/OpenBioLLMProvider already
-        treat an empty raw response, as "no usable content" (raised by
-        the caller as an AIProviderError), never a crash or a guess at
-        what the model meant to say.
+    def _read_error_body(error: urllib.error.HTTPError) -> str | None:
+        """Ollama's own error responses are a small JSON object,
+        {"error": "..."}. Surfaced only in the server-side log detail via
+        _log_failure, never in the AIProviderError message raised to the
+        caller.
         """
-        choices = getattr(response, "choices", None)
-        if not choices:
+        try:
+            return json.loads(error.read()).get("error")
+        except Exception:
             return None
-
-        message = getattr(choices[0], "message", None)
-        return getattr(message, "content", None)
 
     def _log_failure(
         self, started_at: float, error: Exception | None, reason: str | None = None
@@ -190,15 +162,6 @@ class MedGemmaProvider(AIProvider):
         duration_ms = (time.monotonic() - started_at) * 1000
         error_type = type(error).__name__ if error is not None else (reason or "unknown")
         detail = self._error_detail(error, reason)
-
-        # Same split as GeminiProvider._log_failure/OpenBioLLMProvider.
-        # _log_failure: detail is server-side log only, never included in
-        # the AIProviderError message raised above (which is what
-        # _safe_error_message, app/api/routes/analyses.py, lets reach the
-        # frontend). The Hugging Face token is sent as a request header,
-        # never in a URL or exception message, and neither the prompt nor
-        # any clinical text is ever passed to this method or logged
-        # anywhere.
         logger.warning(
             "AI request failed: %s",
             detail,
@@ -213,7 +176,8 @@ class MedGemmaProvider(AIProvider):
 
     @staticmethod
     def _error_detail(error: Exception | None, reason: str | None) -> str:
+        if reason is not None:
+            return reason
         if error is None:
-            return reason or "unknown"
-
+            return "unknown"
         return str(error)

@@ -877,7 +877,7 @@ def test_missing_provider_predictions_refused(tmp_path, monkeypatch):
             "gemini": {"model": "m", "inference_backend": None, "generation_params": {}},
             "openbiollm": {
                 "model": "m",
-                "inference_backend": "featherless-ai",
+                "inference_backend": "ollama",
                 "generation_params": {},
             },
         },

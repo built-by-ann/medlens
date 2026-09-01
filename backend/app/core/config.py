@@ -34,28 +34,26 @@ class Settings(BaseSettings):
     # already gets.
     ai_provider: str = "gemini"
 
-    # Used by both openbiollm and medgemma (both call Hugging Face's
-    # Inference Providers mechanism; see openbiollm_provider.py and
-    # medgemma_provider.py): a Hugging Face user access token
-    # (fine-grained, scoped to "Make calls to Inference Providers")
-    # authenticating every call to either provider. Not required while
-    # ai_provider == "gemini" (the default), so an existing deployment
-    # needs no new configuration at all.
-    huggingface_api_key: str | None = None
-    # Which OpenBioLLM checkpoint to call, and the one Hugging Face
-    # currently reports as actually served (via the featherless-ai
-    # Inference Provider; see openbiollm_provider.py). A plain
-    # environment variable, matching gemini_model's own reasoning: if this
-    # exact checkpoint is ever retired or moved to a different provider,
-    # recovering shouldn't require a code change.
-    openbiollm_model: str = "aaditya/Llama3-OpenBioLLM-8B"
-    # Which MedGemma checkpoint to call, and the only one Hugging Face
-    # currently serves through any Inference Provider (via featherless-ai;
-    # see medgemma_provider.py's own comments for why this exact
-    # checkpoint, and not one of the 4B variants, was chosen). Gated under
-    # Google's "Health AI Developer Foundations" license; see docs/ai.md
-    # for the manual account-level prerequisite this requires.
-    medgemma_model: str = "google/medgemma-27b-text-it"
+    # Used by both openbiollm and medgemma: both are served locally by an
+    # Ollama daemon (see openbiollm_provider.py and medgemma_provider.py),
+    # no API key of any kind. This is a plain connection detail, not a
+    # secret - kept as a Settings field (rather than a provider constant)
+    # since, unlike a generation parameter, it genuinely varies by
+    # deployment (e.g. a container reaching Ollama on the host via
+    # "http://host.docker.internal:11434"; see infra/docker-compose.yml).
+    ollama_base_url: str = "http://localhost:11434"
+    # Which local Ollama model to call for OpenBioLLM. Not the raw
+    # `hf.co/aaditya/OpenBioLLM-Llama3-8B-GGUF:Q4_K_M` import - that GGUF
+    # embeds no usable chat template of its own, so this instead names a
+    # local model built from infra/ollama/openbiollm-llama3-instruct
+    # .Modelfile, which attaches the correct Meta Llama 3 Instruct
+    # template to the same, unmodified weights. See that Modelfile's own
+    # comments and openbiollm_provider.py for the full explanation.
+    openbiollm_model: str = "openbiollm-llama3-instruct"
+    # Which local Ollama model to call for MedGemma. This exact GGUF
+    # embeds a correct Gemma-style chat template already, so it's used
+    # directly with no Modelfile of its own - see medgemma_provider.py.
+    medgemma_model: str = "hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M"
 
     # Issue #58: which StorageService implementation
     # app/storage/service.py builds: "local" (the default, zero-config)
@@ -83,6 +81,15 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        # pydantic-settings' own default is "forbid", not plain pydantic's
+        # BaseModel default of "ignore" - discovered the hard way while
+        # removing huggingface_api_key below: a real .env file still
+        # setting HUGGINGFACE_API_KEY (now unrecognized) made Settings()
+        # raise at import time, breaking the whole application, not just
+        # AI features. "ignore" makes a stale/unrecognized variable in an
+        # existing .env inert instead of a hard startup failure - the
+        # same tradeoff that already let this exact scenario happen once.
+        extra="ignore",
     )
 
     @model_validator(mode="after")
@@ -128,14 +135,13 @@ class Settings(BaseSettings):
         applies to storage_backend, kept as its own validator since the
         two concerns are unrelated.
 
-        Deliberately does not require huggingface_api_key even when
-        ai_provider is "openbiollm" or "medgemma": both providers already
-        fail with a clear AIProviderError on first use if it's missing
-        (mirroring how gemini_api_key is optional at the application
-        level too; see docs/ai.md's Configuration section), so a
-        developer can select either without a token yet and see every
-        other feature work normally, the same tradeoff already made for
-        Gemini.
+        Neither openbiollm nor medgemma require any credential at all -
+        both are served by a local Ollama daemon, not a hosted API. If
+        Ollama isn't running, or the named model isn't pulled, either
+        provider fails with a clear AIProviderError on first use (see
+        docs/ai.md's Configuration section) rather than at startup, the
+        same "fail on first use, not at import time" tradeoff
+        gemini_api_key already makes.
         """
         if self.ai_provider not in ("gemini", "openbiollm", "medgemma"):
             raise ValueError(

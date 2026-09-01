@@ -32,6 +32,7 @@ from benchmark.runner.providers import (
     build_provider,
     generation_params_for,
     inference_backend_for,
+    runtime_version_for,
 )
 from benchmark.runner.storage import (
     DEFAULT_RESULTS_DIR,
@@ -43,8 +44,8 @@ from benchmark.runner.storage import (
 
 # The same file/location app/core/config.py's Settings reads
 # (SettingsConfigDict(env_file=".env")), reused here so a developer's
-# existing GEMINI_API_KEY/HUGGINGFACE_API_KEY "just work" without a
-# second copy; see _load_env() below.
+# existing GEMINI_API_KEY/OPENBIOLLM_MODEL/MEDGEMMA_MODEL/OLLAMA_BASE_URL
+# "just work" without a second copy; see _load_env() below.
 _BACKEND_ENV_PATH = Path(__file__).resolve().parent.parent.parent / "backend" / ".env"
 
 
@@ -191,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
                 "model": provider.model,
                 "inference_backend": inference_backend_for(provider),
                 "generation_params": generation_params_for(provider),
+                "runtime_version": runtime_version_for(provider),
             }
             for name, provider in providers.items()
         },

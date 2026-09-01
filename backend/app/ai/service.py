@@ -85,16 +85,16 @@ def build_ai_summary_service(app_settings: Settings) -> AISummaryService:
     """
     if app_settings.ai_provider == "openbiollm":
         provider: AIProvider = OpenBioLLMProvider(
-            api_key=app_settings.huggingface_api_key,
             model=app_settings.openbiollm_model,
+            base_url=app_settings.ollama_base_url,
         )
     elif app_settings.ai_provider == "medgemma":
-        # Reuses huggingface_api_key: both providers call the same
-        # Hugging Face Inference Providers mechanism (see
-        # medgemma_provider.py), just a different checkpoint/task.
+        # Reuses ollama_base_url: both providers are served by the same
+        # local Ollama daemon (see medgemma_provider.py), just a
+        # different model tag.
         provider = MedGemmaProvider(
-            api_key=app_settings.huggingface_api_key,
             model=app_settings.medgemma_model,
+            base_url=app_settings.ollama_base_url,
         )
     elif app_settings.ai_provider == "gemini":
         provider = GeminiProvider(

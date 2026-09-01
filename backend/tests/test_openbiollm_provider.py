@@ -1,196 +1,232 @@
+import io
+import json
 import logging
+import urllib.error
 
 import pytest
-from huggingface_hub.errors import HfHubHTTPError, InferenceTimeoutError, ValidationError
 
 from app.ai.providers.base import AIProviderError
 from app.ai.providers.openbiollm_provider import OpenBioLLMProvider
 
 
-class FakeInferenceClient:
-    def __init__(self, response=None, error=None):
-        self._response = response
-        self._error = error
-        self.calls = []
-        self.init_kwargs = None
-
-    def text_generation(self, prompt, model=None, **kwargs):
-        self.calls.append({"prompt": prompt, "model": model, "kwargs": kwargs})
-
-        if self._error is not None:
-            raise self._error
-
-        return self._response
-
-
-def _fake_client_factory(fake_client, captured_init_kwargs):
-    def _construct(**kwargs):
-        captured_init_kwargs.update(kwargs)
-        return fake_client
-
-    return _construct
-
-
-class _FakeHttpResponse:
-    """The minimal shape HfHubHTTPError.__init__ actually reads, a plain
-    hand-written fake (this codebase avoids a mocking library, see
-    docs/testing.md), not a real HTTP response.
+class _FakeHTTPResponse:
+    """The minimal shape urlopen()'s caller reads: a context manager whose
+    .read() returns the response body bytes. A plain hand-written fake
+    (this codebase avoids a mocking library, see docs/testing.md), not a
+    real HTTP response.
     """
 
-    def __init__(self):
-        self.headers = {}
-        self.request = None
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
 
 
-def test_default_model_is_openbiollm_8b():
-    provider = OpenBioLLMProvider(api_key="fake-key")
+def _fake_urlopen(response_body=None, error=None, calls=None):
+    """Replaces urllib.request.urlopen for the duration of one test.
+    `calls`, if given, collects the raw Request object from every call so
+    a test can inspect exactly what was sent (URL, headers, body).
+    """
 
-    assert provider.model == "aaditya/Llama3-OpenBioLLM-8B"
+    def _urlopen(request, timeout=None):
+        if calls is not None:
+            calls.append(request)
+        if error is not None:
+            raise error
+        return _FakeHTTPResponse(json.dumps(response_body).encode("utf-8"))
+
+    return _urlopen
 
 
-def test_generate_summary_raises_when_api_key_missing():
-    provider = OpenBioLLMProvider(api_key=None)
+def _http_error(code: int, body: dict | bytes = b"{}") -> urllib.error.HTTPError:
+    fp = io.BytesIO(body if isinstance(body, bytes) else json.dumps(body).encode("utf-8"))
+    return urllib.error.HTTPError(
+        url="http://localhost:11434/api/chat", code=code, msg="error", hdrs=None, fp=fp
+    )
 
-    with pytest.raises(AIProviderError):
-        provider.generate_summary("some prompt")
+
+def _sent_payload(request) -> dict:
+    return json.loads(request.data)
 
 
-def test_generate_summary_does_not_construct_client_when_key_missing(monkeypatch):
-    def _unexpected_client(**kwargs):
-        raise AssertionError("InferenceClient should not be constructed without an api key")
+def test_default_model_is_the_local_llama3_instruct_templated_model():
+    provider = OpenBioLLMProvider()
 
-    monkeypatch.setattr("app.ai.providers.openbiollm_provider.InferenceClient", _unexpected_client)
+    assert provider.model == "openbiollm-llama3-instruct"
 
-    provider = OpenBioLLMProvider(api_key=None)
 
-    with pytest.raises(AIProviderError):
-        provider.generate_summary("some prompt")
+def test_default_base_url_is_localhost_ollama():
+    provider = OpenBioLLMProvider()
+
+    assert provider.base_url == "http://localhost:11434"
 
 
 def test_generate_summary_returns_text_on_success(monkeypatch):
-    fake_client = FakeInferenceClient(response='{"medications": []}')
-    init_kwargs = {}
+    calls = []
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, init_kwargs),
+        "urllib.request.urlopen",
+        _fake_urlopen(
+            response_body={"message": {"role": "assistant", "content": '{"medications": []}'}},
+            calls=calls,
+        ),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key", model="openbiollm-test")
+    provider = OpenBioLLMProvider(model="openbiollm-test")
     result = provider.generate_summary("some prompt")
 
     assert result == '{"medications": []}'
-    assert len(fake_client.calls) == 1
-    assert fake_client.calls[0]["prompt"] == "some prompt"
+    assert len(calls) == 1
 
 
-def test_generate_summary_passes_the_configured_model(monkeypatch):
-    fake_client = FakeInferenceClient(response="{}")
+def test_generate_summary_sends_the_prompt_as_a_single_user_message(monkeypatch):
+    calls = []
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": "{}"}}, calls=calls),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key", model="aaditya/Llama3-OpenBioLLM-8B")
-    provider.generate_summary("some prompt")
+    provider = OpenBioLLMProvider()
+    provider.generate_summary("extract medications from this note")
 
-    assert fake_client.calls[0]["model"] == "aaditya/Llama3-OpenBioLLM-8B"
+    payload = _sent_payload(calls[0])
+    assert payload["messages"] == [
+        {"role": "user", "content": "extract medications from this note"}
+    ]
 
 
-def test_client_is_constructed_with_the_pinned_featherless_ai_provider(monkeypatch):
-    # Reproducibility requirement: provider="featherless-ai" is pinned
-    # explicitly, never "auto"; see openbiollm_provider.py's own comment
-    # for why. This test fails if that pin is ever accidentally removed.
-    fake_client = FakeInferenceClient(response="{}")
-    init_kwargs = {}
+def test_generate_summary_calls_the_configured_model_via_the_chat_endpoint(monkeypatch):
+    calls = []
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, init_kwargs),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": "{}"}}, calls=calls),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider(
+        model="openbiollm-llama3-instruct", base_url="http://localhost:11434"
+    )
     provider.generate_summary("some prompt")
 
-    assert init_kwargs["provider"] == "featherless-ai"
-    assert init_kwargs["token"] == "fake-key"
+    request = calls[0]
+    # /api/chat, not /api/generate: this is what applies the target
+    # model's own chat template automatically. See the module docstring
+    # for why this matters specifically for OpenBioLLM.
+    assert request.full_url == "http://localhost:11434/api/chat"
+    payload = _sent_payload(request)
+    assert payload["model"] == "openbiollm-llama3-instruct"
+    assert payload["stream"] is False
 
 
 def test_generate_summary_uses_deterministic_generation_parameters(monkeypatch):
-    fake_client = FakeInferenceClient(response="{}")
+    calls = []
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": "{}"}}, calls=calls),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
     provider.generate_summary("some prompt")
 
-    kwargs = fake_client.calls[0]["kwargs"]
-    assert kwargs["do_sample"] is False
-    assert kwargs["return_full_text"] is False
-    assert kwargs["max_new_tokens"] > 0
+    options = _sent_payload(calls[0])["options"]
+    assert options["temperature"] == 0
+    assert options["seed"] == 0
+    assert options["num_predict"] > 0
 
 
-def test_generate_summary_wraps_timeout_error(monkeypatch):
-    fake_client = FakeInferenceClient(error=InferenceTimeoutError("timed out"))
+def test_generate_summary_never_requests_json_constrained_generation(monkeypatch):
+    # #90's benchmark measures this model's own, unassisted ability to
+    # produce the requested JSON shape; Ollama's `format: "json"` option
+    # must never be sent, deliberately, or that's no longer being
+    # measured. See the module's own GENERATION_PARAMS comment.
+    calls = []
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": "{}"}}, calls=calls),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
+    provider.generate_summary("some prompt")
 
-    with pytest.raises(AIProviderError):
+    assert "format" not in _sent_payload(calls[0])
+
+
+def test_generate_summary_raises_a_clear_error_when_ollama_is_unreachable(monkeypatch):
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        _fake_urlopen(error=urllib.error.URLError(ConnectionRefusedError("refused"))),
+    )
+
+    provider = OpenBioLLMProvider(base_url="http://localhost:11434")
+
+    with pytest.raises(AIProviderError, match="Could not connect to Ollama"):
         provider.generate_summary("some prompt")
 
 
-def test_generate_summary_wraps_validation_error(monkeypatch):
-    fake_client = FakeInferenceClient(error=ValidationError("invalid generation parameters"))
-    monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+def test_generate_summary_raises_a_clear_error_when_the_model_is_not_installed(monkeypatch):
+    error = _http_error(
+        404, {"error": "model 'openbiollm-llama3-instruct' not found, try pulling it first"}
     )
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen(error=error))
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider(model="openbiollm-llama3-instruct")
 
-    with pytest.raises(AIProviderError):
+    with pytest.raises(AIProviderError, match="is not installed"):
         provider.generate_summary("some prompt")
 
 
-def test_generate_summary_wraps_http_error(monkeypatch):
-    error = HfHubHTTPError("503 Server Error", response=_FakeHttpResponse())
-    fake_client = FakeInferenceClient(error=error)
+def test_generate_summary_wraps_a_bare_timeout(monkeypatch):
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen(error=TimeoutError("timed out")))
+
+    provider = OpenBioLLMProvider()
+
+    with pytest.raises(AIProviderError, match="timed out"):
+        provider.generate_summary("some prompt")
+
+
+def test_generate_summary_wraps_a_urlerror_carrying_a_timeout(monkeypatch):
+    # The connection-phase equivalent of a bare TimeoutError; both must be
+    # recognized as a timeout, not a generic connection failure.
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(error=urllib.error.URLError(TimeoutError("timed out"))),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
 
-    with pytest.raises(AIProviderError):
+    with pytest.raises(AIProviderError, match="timed out"):
+        provider.generate_summary("some prompt")
+
+
+def test_generate_summary_wraps_an_unexpected_http_error(monkeypatch):
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen(error=_http_error(500)))
+
+    provider = OpenBioLLMProvider()
+
+    with pytest.raises(AIProviderError, match="HTTP 500"):
         provider.generate_summary("some prompt")
 
 
 def test_generate_summary_wraps_unexpected_exception(monkeypatch):
-    fake_client = FakeInferenceClient(error=RuntimeError("connection reset"))
-    monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
-    )
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen(error=RuntimeError("boom")))
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
 
     with pytest.raises(AIProviderError):
         provider.generate_summary("some prompt")
 
 
 def test_generate_summary_logs_failure_detail_server_side_only(monkeypatch, caplog):
-    fake_client = FakeInferenceClient(error=RuntimeError("connection reset"))
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen", _fake_urlopen(error=RuntimeError("connection reset"))
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
 
     with caplog.at_level(logging.WARNING), pytest.raises(AIProviderError) as exc_info:
         provider.generate_summary("some prompt")
@@ -207,26 +243,33 @@ def test_generate_summary_logs_failure_detail_server_side_only(monkeypatch, capl
 
 
 def test_generate_summary_raises_on_empty_response(monkeypatch):
-    fake_client = FakeInferenceClient(response="")
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": ""}}),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
+
+    with pytest.raises(AIProviderError):
+        provider.generate_summary("some prompt")
+
+
+def test_generate_summary_raises_on_missing_message_key(monkeypatch):
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen(response_body={}))
+
+    provider = OpenBioLLMProvider()
 
     with pytest.raises(AIProviderError):
         provider.generate_summary("some prompt")
 
 
 def test_generate_summary_logs_duration_ms_on_success(monkeypatch, caplog):
-    fake_client = FakeInferenceClient(response="{}")
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": "{}"}}),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
 
     with caplog.at_level(logging.INFO):
         provider.generate_summary("some prompt")
@@ -249,13 +292,12 @@ def test_generate_summary_logs_duration_ms_on_success(monkeypatch, caplog):
 
 def test_strips_markdown_json_code_fence(monkeypatch):
     fenced = '```json\n{"medications": [], "possible_inconsistencies": [], "summary": "ok"}\n```'
-    fake_client = FakeInferenceClient(response=fenced)
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": fenced}}),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
     result = provider.generate_summary("some prompt")
 
     assert result == '{"medications": [], "possible_inconsistencies": [], "summary": "ok"}'
@@ -263,13 +305,12 @@ def test_strips_markdown_json_code_fence(monkeypatch):
 
 def test_strips_bare_code_fence_without_json_language_tag(monkeypatch):
     fenced = '```\n{"medications": []}\n```'
-    fake_client = FakeInferenceClient(response=fenced)
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": fenced}}),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
     result = provider.generate_summary("some prompt")
 
     assert result == '{"medications": []}'
@@ -281,13 +322,12 @@ def test_strips_surrounding_prose_around_the_json_object(monkeypatch):
         '{"medications": [], "possible_inconsistencies": [], "summary": "ok"}\n'
         "Let me know if you need anything else."
     )
-    fake_client = FakeInferenceClient(response=wrapped)
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": wrapped}}),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
     result = provider.generate_summary("some prompt")
 
     assert result == '{"medications": [], "possible_inconsistencies": [], "summary": "ok"}'
@@ -295,13 +335,12 @@ def test_strips_surrounding_prose_around_the_json_object(monkeypatch):
 
 def test_strips_prose_and_fence_together(monkeypatch):
     wrapped = 'Sure, here\'s the JSON:\n```json\n{"medications": []}\n```\nHope that helps!'
-    fake_client = FakeInferenceClient(response=wrapped)
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": wrapped}}),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
     result = provider.generate_summary("some prompt")
 
     assert result == '{"medications": []}'
@@ -312,18 +351,15 @@ def test_does_not_repair_malformed_json_inside_a_fence(monkeypatch):
     # or fix this; only AISummaryService's real validation should ever
     # reject it.
     broken = '```json\n{"medications": [}\n```'
-    fake_client = FakeInferenceClient(response=broken)
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": broken}}),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
     result = provider.generate_summary("some prompt")
 
     assert result == '{"medications": [}'
-
-    import json
 
     with pytest.raises(json.JSONDecodeError):
         json.loads(result)
@@ -331,13 +367,12 @@ def test_does_not_repair_malformed_json_inside_a_fence(monkeypatch):
 
 def test_does_not_repair_malformed_json_with_missing_closing_brace(monkeypatch):
     broken = 'Here is the result:\n{"medications": [], "summary": "ok"'
-    fake_client = FakeInferenceClient(response=broken)
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": broken}}),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
     result = provider.generate_summary("some prompt")
 
     # No closing brace exists anywhere in the raw text, so the boundary-
@@ -347,8 +382,6 @@ def test_does_not_repair_malformed_json_with_missing_closing_brace(monkeypatch):
     # stripped in this case; this is the deliberately conservative,
     # never-guess behavior, not a bug.
     assert result == broken
-
-    import json
 
     with pytest.raises(json.JSONDecodeError):
         json.loads(result)
@@ -365,13 +398,12 @@ def test_does_not_alter_field_content_inside_the_json_object(monkeypatch):
         '"possible_inconsistencies": [], "summary": "Patient takes Lisinopril."}'
     )
     fenced = f"```json\n{payload}\n```"
-    fake_client = FakeInferenceClient(response=fenced)
     monkeypatch.setattr(
-        "app.ai.providers.openbiollm_provider.InferenceClient",
-        _fake_client_factory(fake_client, {}),
+        "urllib.request.urlopen",
+        _fake_urlopen(response_body={"message": {"content": fenced}}),
     )
 
-    provider = OpenBioLLMProvider(api_key="fake-key")
+    provider = OpenBioLLMProvider()
     result = provider.generate_summary("some prompt")
 
     assert result == payload

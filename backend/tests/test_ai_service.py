@@ -334,25 +334,25 @@ def test_build_ai_summary_service_selects_openbiollm():
     service = build_ai_summary_service(
         _settings(
             ai_provider="openbiollm",
-            huggingface_api_key="hf-fake-key",
-            openbiollm_model="aaditya/Llama3-OpenBioLLM-8B",
+            openbiollm_model="openbiollm-llama3-instruct",
+            ollama_base_url="http://localhost:11434",
         )
     )
 
     assert isinstance(service._provider, OpenBioLLMProvider)
-    assert service._provider.model == "aaditya/Llama3-OpenBioLLM-8B"
-    assert service._provider._api_key == "hf-fake-key"
+    assert service._provider.model == "openbiollm-llama3-instruct"
+    assert service._provider.base_url == "http://localhost:11434"
 
 
 def test_build_ai_summary_service_selects_medgemma():
     service = build_ai_summary_service(
         _settings(
             ai_provider="medgemma",
-            huggingface_api_key="hf-fake-key",
-            medgemma_model="google/medgemma-27b-text-it",
+            medgemma_model="hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M",
+            ollama_base_url="http://localhost:11434",
         )
     )
 
     assert isinstance(service._provider, MedGemmaProvider)
-    assert service._provider.model == "google/medgemma-27b-text-it"
-    assert service._provider._api_key == "hf-fake-key"
+    assert service._provider.model == "hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M"
+    assert service._provider.base_url == "http://localhost:11434"
