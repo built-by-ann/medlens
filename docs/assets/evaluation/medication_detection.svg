@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" width="720" height="360" font-family="sans-serif">
+<rect x="0" y="0" width="720" height="360" fill="white"/>
+<text x="360.0" y="24" text-anchor="middle" font-size="16" font-weight="bold">Medication Detection (end-to-end, micro)</text>
+<line x1="56" y1="296.0" x2="696" y2="296.0" stroke="#94a3b8" stroke-width="1"/>
+<rect x="56" y="32" width="10" height="10" fill="#2563eb"/>
+<text x="70" y="41" font-size="11">Precision</text>
+<rect x="158" y="32" width="10" height="10" fill="#dc2626"/>
+<text x="172" y="41" font-size="11">Recall</text>
+<rect x="236" y="32" width="10" height="10" fill="#059669"/>
+<text x="250" y="41" font-size="11">F1</text>
+<rect x="69.3" y="72.1" width="53.3" height="223.9" fill="#2563eb"/>
+<text x="96.0" y="68.1" text-anchor="middle" font-size="10">90%</text>
+<rect x="136.0" y="55.4" width="53.3" height="240.6" fill="#dc2626"/>
+<text x="162.7" y="51.4" text-anchor="middle" font-size="10">97%</text>
+<rect x="202.7" y="64.1" width="53.3" height="231.9" fill="#059669"/>
+<text x="229.3" y="60.1" text-anchor="middle" font-size="10">94%</text>
+<text x="162.7" y="314.0" text-anchor="middle" font-size="11">gemini</text>
+<rect x="282.7" y="296.0" width="53.3" height="0.0" fill="#2563eb"/>
+<text x="309.3" y="292.0" text-anchor="middle" font-size="10">N/A</text>
+<rect x="349.3" y="296.0" width="53.3" height="0.0" fill="#dc2626"/>
+<text x="376.0" y="292.0" text-anchor="middle" font-size="10">0%</text>
+<rect x="416.0" y="296.0" width="53.3" height="0.0" fill="#059669"/>
+<text x="442.7" y="292.0" text-anchor="middle" font-size="10">0%</text>
+<text x="376.0" y="314.0" text-anchor="middle" font-size="11">openbiollm</text>
+<rect x="496.0" y="80.0" width="53.3" height="216.0" fill="#2563eb"/>
+<text x="522.7" y="76.0" text-anchor="middle" font-size="10">87%</text>
+<rect x="562.7" y="96.1" width="53.3" height="199.9" fill="#dc2626"/>
+<text x="589.3" y="92.1" text-anchor="middle" font-size="10">81%</text>
+<rect x="629.3" y="88.4" width="53.3" height="207.6" fill="#059669"/>
+<text x="656.0" y="84.4" text-anchor="middle" font-size="10">84%</text>
+<text x="589.3" y="314.0" text-anchor="middle" font-size="11">medgemma</text>
+<text x="360.0" y="352" text-anchor="middle" font-size="10" fill="#64748b">Every attempted case counts; an unparseable response scores as an empty prediction.</text>
+</svg>

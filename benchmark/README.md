@@ -319,6 +319,8 @@ Any override actually used is recorded in `metrics.json`'s own `overrides`/`part
 
 ## Generating a comparison report (Issue #91)
 
+See `docs/model-evaluation.md` for the evaluation methodology this report presents results under (dataset, providers, protocol, metric definitions, limitations); this section only documents the report-generation tool's own mechanics.
+
 `benchmark/report/` builds a human-readable, multi-provider comparison report from one or more **already-scored** run directories (each must already have a `metrics.json`; run `python -m benchmark.metrics <run_dir>` first). It never calls an AIProvider, never reruns anything, and never recomputes a #90 metric; it only reads and presents what #89/#90 already wrote.
 
 Each provider is cited from its own source run, which is exactly what makes it possible to build one report from, e.g., a clean Gemini-only run plus a separate run where Gemini's own calls happened to be affected by an unrelated account issue. Only OpenBioLLM/MedGemma's records from that second run are ever read:
@@ -348,8 +350,8 @@ python -m benchmark.report \
 **Output location and promotion**: `--output` writes `report.md` + `figures/*.svg` into a working directory (by convention, `benchmark/report/output/`, gitignored, for the same reason as `benchmark/results/`: the qualitative section quotes raw model text that hasn't been reviewed yet). A specific, reviewed report is promoted into the repository **manually, deliberately, never automatically**:
 
 1. Generate and read `report.md` yourself; check the qualitative excerpts and the OpenBioLLM/zero-evaluable notes in particular.
-2. Copy the reviewed `report.md` to `docs/model-evaluation.md`, and `figures/*.svg` to `docs/assets/evaluation/`.
-3. In the copied file, change every `figures/` image path to `assets/evaluation/` (the only change promotion requires, since `docs/model-evaluation.md` and `docs/assets/evaluation/` are siblings, the same way `report.md` and its own `figures/` are siblings in the working output).
+2. Copy the reviewed `report.md` to `docs/model-comparison-report.md`, and `figures/*.svg` to `docs/assets/evaluation/`.
+3. In the copied file, change every `figures/` image path to `assets/evaluation/` (the only change promotion requires, since `docs/model-comparison-report.md` and `docs/assets/evaluation/` are siblings, the same way `report.md` and its own `figures/` are siblings in the working output). `docs/model-comparison-report.md` holds only the promoted results, never the methodology; see `docs/model-evaluation.md` for that.
 
 ---
 
