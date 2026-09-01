@@ -8,13 +8,13 @@ A version-controlled, hand-written benchmark of synthetic clinical documents and
 
 ## What this is (and isn't)
 
-This directory contains the **dataset and ground truth** (`cases/`, `loader.py`), a **runner** that executes it (`runner/`, Issue #89), and a **scorer** that grades what the runner produced (`metrics/`, Issue #90):
+This directory contains the **dataset and ground truth** (`cases/`, `loader.py`), a **runner** that executes it (`runner/`, Issue #89), a **scorer** that grades what the runner produced (`metrics/`, Issue #90), and a **report generator** that builds a human-readable, multi-provider comparison from already-scored runs (`report/`, Issue #91):
 
 - 30 hand-written cases, each a set of one or more clinical note texts plus the medication data that should be extracted from them.
 - `loader.py`, a small utility to load and structurally validate the cases.
 - `runner/`, a developer CLI (`python -m benchmark.runner`) that sends each case's notes through the real MedLens prompt/provider path and records what came back. See "Running an evaluation," below.
 - `metrics/`, a developer CLI (`python -m benchmark.metrics`) that scores an already-completed run: medication-detection precision/recall/F1, attribute accuracy, reliability, and latency. See "Scoring an evaluation run," below.
-- Nothing that ranks providers or generates a human-facing report; that is #91's work.
+- `report/`, a developer CLI (`python -m benchmark.report`) that builds a human-readable comparison report (with reproducible SVG figures) from one or more already-scored runs, one provider per cited run; computes no ranking or composite score of its own. See "Generating a comparison report," below.
 
 | Issue | Scope |
 |---|---|
@@ -314,6 +314,42 @@ Fail-loud by default, because scoring through an integrity problem would make th
 | `metrics.json` already exists | refuse | `--force` |
 
 Any override actually used is recorded in `metrics.json`'s own `overrides`/`partial`/`fingerprint_mismatch` fields, never silently.
+
+---
+
+## Generating a comparison report (Issue #91)
+
+`benchmark/report/` builds a human-readable, multi-provider comparison report from one or more **already-scored** run directories (each must already have a `metrics.json`; run `python -m benchmark.metrics <run_dir>` first). It never calls an AIProvider, never reruns anything, and never recomputes a #90 metric; it only reads and presents what #89/#90 already wrote.
+
+Each provider is cited from its own source run, which is exactly what makes it possible to build one report from, e.g., a clean Gemini-only run plus a separate run where Gemini's own calls happened to be affected by an unrelated account issue. Only OpenBioLLM/MedGemma's records from that second run are ever read:
+
+```bash
+# From the repository root, with the backend virtualenv active:
+python -m benchmark.report \
+  --provider gemini=<run-id-a> \
+  --provider openbiollm=<run-id-b> \
+  --provider medgemma=<run-id-b> \
+  --output benchmark/report/output/<a-name-for-this-report>
+```
+
+**Comparability validation**, before anything is rendered (fail-loud, no override flag: a report built across incomparable runs would be scientifically misleading in a way no flag should paper over):
+
+| Check | Failure mode |
+|---|---|
+| Every cited run has `manifest.json` and `metrics.json` | refuse, names the missing file |
+| Every cited provider was actually selected/scored in its run | refuse |
+| `benchmark_fingerprint` identical across every cited run | refuse, since the runs measured different dataset states |
+| Every cited run covers the same set of case ids | refuse, since a partial run was mixed with a full one |
+| Per-case `prompt_hash` identical for every case shared across cited runs | refuse, since the literal prompt differed |
+| `git_commit` identical across cited runs | **warning only**, surfaced in the report's own Provenance section |
+
+**Report contents**: provenance (which run supplied each provider, its exact model/backend/generation params); reliability (a grouped bar chart, not a funnel, so a provider with 100% call success but 0% structured-output validity is immediately visible as one full bar next to three empty ones); medication detection (end-to-end always shown; `conditional_on_valid_output`/attribute tables shown only for a provider with at least one evaluable case, since a provider with zero is marked "not applicable" and never rendered as a misleading 0%); difficulty/tag breakdowns; latency (explicitly labeled API vs. local, not hardware-comparable); a qualitative section on `possible_inconsistencies`/`summary` (the two `ClinicalSummary` fields #90 deliberately never scores, presented as descriptive output behavior only, never as an accuracy/recall/quality claim, since no ground truth exists for either); and a dedicated Limitations section. See `benchmark/report/render.py` for the exact section order.
+
+**Output location and promotion**: `--output` writes `report.md` + `figures/*.svg` into a working directory (by convention, `benchmark/report/output/`, gitignored, for the same reason as `benchmark/results/`: the qualitative section quotes raw model text that hasn't been reviewed yet). A specific, reviewed report is promoted into the repository **manually, deliberately, never automatically**:
+
+1. Generate and read `report.md` yourself; check the qualitative excerpts and the OpenBioLLM/zero-evaluable notes in particular.
+2. Copy the reviewed `report.md` to `docs/model-evaluation.md`, and `figures/*.svg` to `docs/assets/evaluation/`.
+3. In the copied file, change every `figures/` image path to `assets/evaluation/` (the only change promotion requires, since `docs/model-evaluation.md` and `docs/assets/evaluation/` are siblings, the same way `report.md` and its own `figures/` are siblings in the working output).
 
 ---
 

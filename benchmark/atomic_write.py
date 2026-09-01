@@ -18,13 +18,20 @@ from pathlib import Path
 from typing import Any
 
 
-def atomic_write_json(path: Path, data: Any) -> None:
+def atomic_write_text(path: Path, content: str) -> None:
+    """Same crash-safety guarantee as atomic_write_json, for a plain text
+    file (report.md, a .svg figure) rather than a JSON document. Added
+    for benchmark/report/ (Issue #91), which writes both.
+    """
     fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
-            json.dump(data, f, indent=2, sort_keys=True)
-            f.write("\n")
+            f.write(content)
         os.replace(tmp_path, path)
     except BaseException:
         Path(tmp_path).unlink(missing_ok=True)
         raise
+
+
+def atomic_write_json(path: Path, data: Any) -> None:
+    atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True) + "\n")
