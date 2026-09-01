@@ -18,9 +18,11 @@ that needs it.
 
 import json
 import sys
+import urllib.error
 from pathlib import Path
 
 import pytest
+from google.genai import errors as genai_errors
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
@@ -89,16 +91,6 @@ class FakeProvider(AIProvider):
         if self._error is not None:
             raise self._error
         return self._response
-
-
-class _FakeHttpResponse:
-    """The minimal shape HfHubHTTPError.__init__ actually reads; see
-    test_openbiollm_provider.py's identical fake.
-    """
-
-    def __init__(self):
-        self.headers = {}
-        self.request = None
 
 
 def _run_one(case, provider, provider_name="fake"):
@@ -260,10 +252,8 @@ def test_provider_failure_classified_empty_response():
 
 
 def test_provider_failure_classified_timeout():
-    from huggingface_hub.errors import InferenceTimeoutError
-
-    error = AIProviderError("Fake request failed: InferenceTimeoutError")
-    error.__cause__ = InferenceTimeoutError("timed out")
+    error = AIProviderError("Fake request timed out after 120.0s")
+    error.__cause__ = TimeoutError("timed out")
     provider = FakeProvider(error=error)
 
     result = _run_one(_case(), provider)
@@ -271,11 +261,45 @@ def test_provider_failure_classified_timeout():
     assert result.parsing.error_category == "timeout"
 
 
-def test_provider_failure_classified_provider_error():
-    from huggingface_hub.errors import HfHubHTTPError
+def test_provider_failure_classified_timeout_when_urlerror_wraps_one():
+    # The connection-phase equivalent of a bare TimeoutError (see
+    # openbiollm_provider.py/medgemma_provider.py's own handling) - both
+    # must classify as "timeout", not "connection_error".
+    error = AIProviderError("Fake request timed out after 120.0s")
+    error.__cause__ = urllib.error.URLError(TimeoutError("timed out"))
+    provider = FakeProvider(error=error)
 
-    error = AIProviderError("Fake request failed: HfHubHTTPError")
-    error.__cause__ = HfHubHTTPError("503 Server Error", response=_FakeHttpResponse())
+    result = _run_one(_case(), provider)
+
+    assert result.parsing.error_category == "timeout"
+
+
+def test_provider_failure_classified_connection_error():
+    error = AIProviderError("Could not connect to Ollama at http://localhost:11434")
+    error.__cause__ = urllib.error.URLError(ConnectionRefusedError("refused"))
+    provider = FakeProvider(error=error)
+
+    result = _run_one(_case(), provider)
+
+    assert result.parsing.error_category == "connection_error"
+
+
+def test_provider_failure_classified_model_not_found():
+    http_error = urllib.error.HTTPError(
+        url="http://localhost:11434/api/chat", code=404, msg="Not Found", hdrs=None, fp=None
+    )
+    error = AIProviderError("Ollama model 'x' is not installed. Run: ollama pull x")
+    error.__cause__ = http_error
+    provider = FakeProvider(error=error)
+
+    result = _run_one(_case(), provider)
+
+    assert result.parsing.error_category == "model_not_found"
+
+
+def test_provider_failure_classified_provider_error():
+    error = AIProviderError("Fake request failed: ClientError")
+    error.__cause__ = genai_errors.ClientError(503, {"message": "unavailable"}, None)
     provider = FakeProvider(error=error)
 
     result = _run_one(_case(), provider)
@@ -318,13 +342,74 @@ def test_inference_backend_and_generation_params_for_real_providers():
     assert inference_backend_for(gemini) is None
     assert generation_params_for(gemini) == {}
 
-    openbiollm = OpenBioLLMProvider(api_key="unused")
-    assert inference_backend_for(openbiollm) == "featherless-ai"
-    assert generation_params_for(openbiollm)["do_sample"] is False
+    openbiollm = OpenBioLLMProvider()
+    assert inference_backend_for(openbiollm) == "ollama"
+    assert generation_params_for(openbiollm)["seed"] == 0
 
-    medgemma = MedGemmaProvider(api_key="unused")
-    assert inference_backend_for(medgemma) == "featherless-ai"
+    medgemma = MedGemmaProvider()
+    assert inference_backend_for(medgemma) == "ollama"
     assert generation_params_for(medgemma)["temperature"] == 0
+
+
+def test_runtime_version_for_returns_none_for_gemini():
+    from benchmark.runner.providers import runtime_version_for
+
+    from app.ai.providers.gemini_provider import GeminiProvider
+
+    assert runtime_version_for(GeminiProvider(api_key="unused")) is None
+
+
+def test_runtime_version_for_degrades_to_none_when_ollama_is_unreachable(monkeypatch):
+    # No real Ollama server runs in CI (see docs/testing.md); an
+    # unreachable server must degrade to None here, not raise - a run's
+    # actual cases still surface a loud, per-case connection_error if
+    # Ollama genuinely isn't reachable (see execution.py). Mocked, like
+    # every other provider test in this suite, rather than making a real
+    # connection attempt to an unused port.
+    from benchmark.runner import providers as providers_module
+    from benchmark.runner.providers import runtime_version_for
+
+    from app.ai.providers.openbiollm_provider import OpenBioLLMProvider
+
+    def _fake_urlopen(url, timeout=None):
+        raise urllib.error.URLError(ConnectionRefusedError("refused"))
+
+    monkeypatch.setattr(providers_module.urllib.request, "urlopen", _fake_urlopen)
+
+    provider = OpenBioLLMProvider(base_url="http://localhost:11434")
+
+    assert runtime_version_for(provider) is None
+
+
+def test_runtime_version_for_reads_the_ollama_version_endpoint(monkeypatch):
+    from benchmark.runner import providers as providers_module
+    from benchmark.runner.providers import runtime_version_for
+
+    from app.ai.providers.openbiollm_provider import OpenBioLLMProvider
+
+    requested_urls = []
+
+    class _FakeResponse:
+        def read(self):
+            return json.dumps({"version": "0.33.2"}).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+    def _fake_urlopen(url, timeout=None):
+        requested_urls.append(url)
+        return _FakeResponse()
+
+    monkeypatch.setattr(providers_module.urllib.request, "urlopen", _fake_urlopen)
+
+    provider = OpenBioLLMProvider(base_url="http://localhost:11434")
+    version = runtime_version_for(provider)
+
+    assert version == "0.33.2"
+    assert requested_urls == ["http://localhost:11434/api/version"]
 
 
 def test_build_provider_reads_credential_from_env(monkeypatch):
@@ -338,7 +423,27 @@ def test_build_provider_reads_credential_from_env(monkeypatch):
 def test_build_provider_uses_the_providers_own_default_model():
     provider = build_provider("openbiollm")
 
-    assert provider.model == "aaditya/Llama3-OpenBioLLM-8B"
+    assert provider.model == "openbiollm-llama3-instruct"
+
+
+def test_build_provider_reads_openbiollm_config_from_env(monkeypatch):
+    monkeypatch.setenv("OPENBIOLLM_MODEL", "custom-openbiollm-tag")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://example-host:11434")
+
+    provider = build_provider("openbiollm")
+
+    assert provider.model == "custom-openbiollm-tag"
+    assert provider.base_url == "http://example-host:11434"
+
+
+def test_build_provider_reads_medgemma_config_from_env(monkeypatch):
+    monkeypatch.setenv("MEDGEMMA_MODEL", "custom-medgemma-tag")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://example-host:11434")
+
+    provider = build_provider("medgemma")
+
+    assert provider.model == "custom-medgemma-tag"
+    assert provider.base_url == "http://example-host:11434"
 
 
 def test_build_provider_rejects_unknown_name():
@@ -556,8 +661,10 @@ def test_benchmark_fingerprint_is_independent_of_case_order():
 
 
 def test_no_configured_secret_appears_in_any_written_artifact(tmp_path, monkeypatch):
+    # Gemini is the only provider left with a credential concept at all;
+    # openbiollm/medgemma are served by a local Ollama daemon and take no
+    # secret of any kind (see benchmark/runner/providers.py).
     monkeypatch.setenv("GEMINI_API_KEY", "sk-super-secret-value")
-    monkeypatch.setenv("HUGGINGFACE_API_KEY", "hf-super-secret-value")
     monkeypatch.setattr(cli, "load_cases", lambda: [_case("BENCH-A")])
     monkeypatch.setattr(cli, "build_provider", lambda name: FakeProvider(name=name))
     monkeypatch.setattr(cli, "_git_metadata", lambda: (None, None))
@@ -569,9 +676,8 @@ def test_no_configured_secret_appears_in_any_written_artifact(tmp_path, monkeypa
     manifest_text = (output_dir / "manifest.json").read_text()
     predictions_text = (output_dir / "predictions.jsonl").read_text()
 
-    for secret in ("sk-super-secret-value", "hf-super-secret-value"):
-        assert secret not in manifest_text
-        assert secret not in predictions_text
+    assert "sk-super-secret-value" not in manifest_text
+    assert "sk-super-secret-value" not in predictions_text
 
 
 # --- env loading --------------------------------------------------------------

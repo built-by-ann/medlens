@@ -132,27 +132,43 @@ def test_settings_defaults_to_gemini_with_no_ai_provider_configured(monkeypatch)
 def test_settings_accepts_openbiollm_as_ai_provider(monkeypatch):
     _base_env(monkeypatch)
     monkeypatch.setenv("AI_PROVIDER", "openbiollm")
-    monkeypatch.setenv("HUGGINGFACE_API_KEY", "hf-fake-key")
 
     settings = Settings(_env_file=None)
 
     assert settings.ai_provider == "openbiollm"
-    assert settings.huggingface_api_key == "hf-fake-key"
-    assert settings.openbiollm_model == "aaditya/Llama3-OpenBioLLM-8B"
+    assert settings.openbiollm_model == "openbiollm-llama3-instruct"
 
 
-def test_settings_accepts_openbiollm_without_a_huggingface_api_key(monkeypatch):
-    # Mirrors gemini_api_key's own optionality: selecting a provider with
-    # no credential configured yet must not block the application from
-    # starting; only the first actual analysis request should fail, with
-    # a clear AIProviderError, exactly like Gemini's missing-key case.
+def test_settings_accepts_openbiollm_with_no_credential_of_any_kind(monkeypatch):
+    # Unlike Gemini, openbiollm requires no credential at all - it's
+    # served by a local Ollama daemon, not a hosted API. Selecting it
+    # must not block the application from starting even with nothing
+    # else configured; only the first actual analysis request fails, with
+    # a clear AIProviderError, if Ollama isn't reachable.
     _base_env(monkeypatch)
     monkeypatch.setenv("AI_PROVIDER", "openbiollm")
-    monkeypatch.delenv("HUGGINGFACE_API_KEY", raising=False)
 
     settings = Settings(_env_file=None)
 
-    assert settings.huggingface_api_key is None
+    assert settings.ai_provider == "openbiollm"
+
+
+def test_settings_default_ollama_base_url_is_localhost(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ollama_base_url == "http://localhost:11434"
+
+
+def test_settings_accepts_a_configured_ollama_base_url(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ollama_base_url == "http://host.docker.internal:11434"
 
 
 def test_settings_rejects_an_unsupported_ai_provider(monkeypatch):
@@ -169,24 +185,21 @@ def test_settings_rejects_an_unsupported_ai_provider(monkeypatch):
 def test_settings_accepts_medgemma_as_ai_provider(monkeypatch):
     _base_env(monkeypatch)
     monkeypatch.setenv("AI_PROVIDER", "medgemma")
-    monkeypatch.setenv("HUGGINGFACE_API_KEY", "hf-fake-key")
 
     settings = Settings(_env_file=None)
 
     assert settings.ai_provider == "medgemma"
-    assert settings.huggingface_api_key == "hf-fake-key"
-    assert settings.medgemma_model == "google/medgemma-27b-text-it"
+    assert settings.medgemma_model == "hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M"
 
 
-def test_settings_accepts_medgemma_without_a_huggingface_api_key(monkeypatch):
+def test_settings_accepts_medgemma_with_no_credential_of_any_kind(monkeypatch):
     # Mirrors openbiollm's own optionality (see above): selecting a
-    # provider with no credential configured yet must not block the
+    # provider with nothing else configured must not block the
     # application from starting; only the first actual analysis request
-    # should fail, with a clear AIProviderError.
+    # fails, with a clear AIProviderError, if Ollama isn't reachable.
     _base_env(monkeypatch)
     monkeypatch.setenv("AI_PROVIDER", "medgemma")
-    monkeypatch.delenv("HUGGINGFACE_API_KEY", raising=False)
 
     settings = Settings(_env_file=None)
 
-    assert settings.huggingface_api_key is None
+    assert settings.ai_provider == "medgemma"

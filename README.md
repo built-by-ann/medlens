@@ -140,7 +140,7 @@ FastAPI · Python 3.12 · SQLAlchemy · Alembic · Pydantic · JWT authenticatio
 PostgreSQL
 
 **AI**
-Google Gemini (default), OpenBioLLM (`aaditya/Llama3-OpenBioLLM-8B`), and MedGemma (`google/medgemma-27b-text-it`), the latter two via Hugging Face's hosted Inference Providers, all selectable behind a provider-abstraction layer; multi-model benchmarking planned
+Google Gemini (default), OpenBioLLM (`aaditya/Llama3-OpenBioLLM-8B`), and MedGemma (`google/medgemma-4b-it`), the latter two served locally via Ollama, all selectable behind a provider-abstraction layer; multi-model benchmarking planned
 
 **Infrastructure**
 Docker · Docker Compose · nginx (reverse proxy, TLS termination) · Let's Encrypt / Certbot · AWS EC2 · AWS S3 (optional storage backend) · GitHub Actions

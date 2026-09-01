@@ -22,11 +22,10 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.error
 from datetime import UTC, datetime
 
 from google.genai import errors as genai_errors
-from huggingface_hub.errors import HfHubHTTPError, InferenceTimeoutError
-from huggingface_hub.errors import ValidationError as HfGenerationValidationError
 from pydantic import ValidationError as PydanticValidationError
 
 from app.ai.providers.base import AIProvider, AIProviderError
@@ -49,7 +48,7 @@ from benchmark.runner.providers import generation_params_for, inference_backend_
 # pydantic's own unrelated ValidationError).
 _MISSING_CREDENTIAL_SUFFIX = "is not configured"
 _EMPTY_RESPONSE_SUFFIX = "empty or invalid response"
-_PROVIDER_ERROR_CAUSES = (HfHubHTTPError, HfGenerationValidationError, genai_errors.APIError)
+_PROVIDER_ERROR_CAUSES = (genai_errors.APIError,)
 
 
 def utc_now_iso() -> str:
@@ -63,12 +62,16 @@ def _classify_provider_error(error: AIProviderError) -> str:
     exception distinct from a generic Exception for a network timeout;
     only genai_errors.APIError is caught specifically in
     gemini_provider.py, so a Gemini timeout classifies as
-    unexpected_error, not timeout, unlike OpenBioLLM/MedGemma's
-    InferenceTimeoutError (both call the same huggingface_hub
-    InferenceClient). This reflects a real, pre-existing difference
-    between the provider implementations, documented here and in
-    benchmark/README.md rather than papered over or "fixed" by modifying
-    GeminiProvider as part of this issue.
+    unexpected_error, not timeout, unlike OpenBioLLM/MedGemma, which raise
+    a bare TimeoutError (or a urllib.error.URLError wrapping one) that
+    this function recognizes explicitly. This reflects a real,
+    pre-existing difference between the provider implementations,
+    documented here and in benchmark/README.md rather than papered over
+    or "fixed" by modifying GeminiProvider as part of this issue.
+
+    urllib.error.HTTPError is checked before urllib.error.URLError
+    because it's a subclass of it; checking URLError first would shadow
+    every HTTPError case (including model_not_found's 404).
     """
     if error.__cause__ is None:
         message = str(error)
@@ -78,9 +81,15 @@ def _classify_provider_error(error: AIProviderError) -> str:
             return "empty_response"
         return "unexpected_error"
 
-    if isinstance(error.__cause__, InferenceTimeoutError):
+    cause = error.__cause__
+
+    if isinstance(cause, TimeoutError):
         return "timeout"
-    if isinstance(error.__cause__, _PROVIDER_ERROR_CAUSES):
+    if isinstance(cause, urllib.error.HTTPError):
+        return "model_not_found" if cause.code == 404 else "provider_error"
+    if isinstance(cause, urllib.error.URLError):
+        return "timeout" if isinstance(cause.reason, TimeoutError) else "connection_error"
+    if isinstance(cause, _PROVIDER_ERROR_CAUSES):
         return "provider_error"
     return "unexpected_error"
 

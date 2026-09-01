@@ -95,25 +95,27 @@ def test_health_check_reports_gemini_as_the_ai_provider(client):
 
 def test_health_check_reports_openbiollm_as_the_ai_provider_when_configured(client, monkeypatch):
     monkeypatch.setattr(settings, "ai_provider", "openbiollm")
-    monkeypatch.setattr(settings, "openbiollm_model", "aaditya/Llama3-OpenBioLLM-8B")
+    monkeypatch.setattr(settings, "openbiollm_model", "openbiollm-llama3-instruct")
 
     response = client.get("/health")
 
     assert response.json()["ai"] == {
         "provider": "openbiollm",
-        "model": "aaditya/Llama3-OpenBioLLM-8B",
+        "model": "openbiollm-llama3-instruct",
     }
 
 
 def test_health_check_reports_medgemma_as_the_ai_provider_when_configured(client, monkeypatch):
     monkeypatch.setattr(settings, "ai_provider", "medgemma")
-    monkeypatch.setattr(settings, "medgemma_model", "google/medgemma-27b-text-it")
+    monkeypatch.setattr(
+        settings, "medgemma_model", "hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M"
+    )
 
     response = client.get("/health")
 
     assert response.json()["ai"] == {
         "provider": "medgemma",
-        "model": "google/medgemma-27b-text-it",
+        "model": "hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M",
     }
 
 
