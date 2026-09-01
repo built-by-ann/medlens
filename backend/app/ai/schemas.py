@@ -12,7 +12,7 @@ class Medication(BaseModel):
     notes: str | None = None
     # 1-indexed position of the "Note N" (see app/ai/prompts.py's numbering)
     # this medication was actually found in, for true per-document
-    # provenance (Issue #152) - replaces the earlier placeholder that
+    # provenance (Issue #152); replaces the earlier placeholder that
     # attached every extracted medication to the same document regardless
     # of where it was mentioned. Optional, not required: a response that
     # omits it is still accepted (older prompt behavior, or a provider that

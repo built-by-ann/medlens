@@ -96,7 +96,7 @@ function getFileInput(): HTMLInputElement {
 }
 
 // The separate "N documents selected" line was removed as a redundant
-// duplicate of this heading's own count - the heading itself is now the
+// duplicate of this heading's own count; the heading itself is now the
 // live-updating source of truth every selection-count assertion checks.
 function selectedDocumentsHeading(count: number): string {
   return `Selected Documents (${count})`
@@ -478,7 +478,7 @@ describe('CreateAnalysisPage', () => {
     await user.upload(getFileInput(), [textFile, csvFile])
 
     // Confirmed right in Upload Additional Documents, the same as any other
-    // file - there's no separate "CSV upload" mode or UI.
+    // file; there's no separate "CSV upload" mode or UI.
     const uploadSection = screen.getByRole('region', { name: 'Upload Additional Documents' })
     expect(within(uploadSection).getByText(/medications\.csv/)).toBeInTheDocument()
 
@@ -557,7 +557,7 @@ describe('CreateAnalysisPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Server error.')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
 
-    // The rest of the page - uploading a new document - still works even
+    // The rest of the page, uploading a new document, still works even
     // though the existing-documents section failed to load.
     const file = new File(['hello'], 'note.txt', { type: 'text/plain' })
     await user.upload(getFileInput(), file)

@@ -360,7 +360,7 @@ def test_summarize_reuses_previously_uploaded_documents_without_duplicating(clie
     # endpoint has always accepted any clinical_document_ids the patient
     # owns regardless of when they were created (see
     # test_summarize_combines_multiple_documents), so no backend change was
-    # needed - this test documents that reuse path explicitly and proves no
+    # needed; this test documents that reuse path explicitly and proves no
     # duplicate ClinicalDocument rows are created along the way.
     token = _register_and_login(client, "reuseexisting@example.com")
     patient = _create_patient(client, token).json()
@@ -740,8 +740,8 @@ def test_get_analysis_detail_includes_reconciliation_discrepancies(client):
 
 
 def test_get_analysis_detail_nests_mention_evidence_with_source_document(client):
-    # Issue #46: the discrepancy's supporting evidence - the MedicationMention
-    # that triggered it, and that mention's own source document - is nested
+    # Issue #46: the discrepancy's supporting evidence, the MedicationMention
+    # that triggered it, and that mention's own source document, is nested
     # directly in the response rather than requiring a second request.
     token = _register_and_login(client, "detailevidence@example.com")
     patient = _create_patient(client, token).json()
@@ -776,7 +776,7 @@ def test_get_analysis_detail_attributes_each_medication_to_its_true_source_docum
     # Issue #152: two documents selected, two different medications each
     # reported against a different numbered note. Before this issue, both
     # mentions would have been attached to whichever selected document had
-    # the lowest id, regardless of which note they actually came from - this
+    # the lowest id, regardless of which note they actually came from; this
     # proves the nested evidence now cites each medication's true source.
     token = _register_and_login(client, "detailtrueprovenance@example.com")
     patient = _create_patient(client, token).json()
@@ -836,7 +836,7 @@ def test_get_analysis_detail_attributes_each_medication_to_its_true_source_docum
 def test_get_analysis_detail_nests_medication_evidence_for_unsupported_entry(client):
     # "unsupported_medication_list_entry" is only checked when a selected
     # document is medication-list-shaped (see UNSUPPORTED_ENTRY_ELIGIBLE_DOCUMENT_TYPES
-    # in medication_reconciliation_service.py) - this is the one finding
+    # in medication_reconciliation_service.py); this is the one finding
     # type whose evidence is the patient's own Medication row rather than a
     # MedicationMention, since it fires precisely because nothing mentions it.
     token = _register_and_login(client, "detailmedicationevidence@example.com")
@@ -904,7 +904,7 @@ def test_get_analysis_detail_has_no_discrepancies_when_medications_match(client)
 
 def test_get_analysis_detail_does_not_duplicate_discrepancies_for_repeated_medications(client):
     # MULTIPLE_ITEMS_RESPONSE extracts three distinct medication names, none
-    # of which are on this patient's (empty) medication list - three
+    # of which are on this patient's (empty) medication list; three
     # findings, not more, even though building them involves grouping logic
     # that could in principle double-count.
     token = _register_and_login(client, "detaildedupe@example.com")
@@ -928,7 +928,7 @@ def test_summarize_leaves_no_discrepancies_or_mentions_when_reconciliation_fails
     client, db, monkeypatch
 ):
     # Simulates the AI call succeeding but reconciliation itself failing
-    # afterward - the whole analysis must still fail cleanly (existing
+    # afterward; the whole analysis must still fail cleanly (existing
     # failure behavior), with nothing reconciliation staged left behind.
     token = _register_and_login(client, "reconciliationfailure@example.com")
     patient = _create_patient(client, token).json()
@@ -1406,7 +1406,7 @@ def _resolve(client, token, patient_id, analysis_id, discrepancy_id, payload):
 
 def test_resolve_discrepancy_accepts_add_medication(client):
     # Patient has no medications on file, so the AI-extracted Lisinopril
-    # mention is "missing from the medication list" - the one discrepancy
+    # mention is "missing from the medication list": the one discrepancy
     # type add_medication is valid for.
     token = _register_and_login(client, "resolveaddmedication@example.com")
     patient = _create_patient(client, token).json()
@@ -1450,7 +1450,7 @@ def test_resolve_discrepancy_accepts_update_medication_for_dose_conflict(client)
     token = _register_and_login(client, "resolveupdatedose@example.com")
     patient = _create_patient(client, token).json()
     # Existing medication says 20 mg; the AI-extracted mention (VALID_RESPONSE)
-    # says 10 mg - a dose conflict, not "missing".
+    # says 10 mg: a dose conflict, not "missing".
     _create_medication(client, token, patient["id"], dose="20 mg")
     document = _create_document(client, token, patient["id"])
     analysis_id = _create_completed_analysis(client, token, patient["id"], document["id"])
@@ -1583,7 +1583,7 @@ def test_resolve_discrepancy_response_includes_audit_trail(client):
 
 
 def test_resolve_discrepancy_preserves_original_finding_after_resolving(client):
-    # "The analysis should remain a permanent record" - resolving must not
+    # "The analysis should remain a permanent record": resolving must not
     # erase what the reconciliation engine originally found.
     token = _register_and_login(client, "resolvepreserve@example.com")
     patient = _create_patient(client, token).json()
@@ -1648,7 +1648,7 @@ def test_resolve_discrepancy_rejects_action_invalid_for_discrepancy_type(client)
     discrepancy = _get_discrepancies(client, token, patient["id"], analysis_id)[0]
     assert discrepancy["discrepancy_type"] == "missing_from_medication_list"
 
-    # update_medication doesn't make sense here - there's no medication yet.
+    # update_medication doesn't make sense here; there's no medication yet.
     response = _resolve(
         client,
         token,
@@ -1792,6 +1792,6 @@ def test_resolve_discrepancy_handles_multiple_discrepancies_independently(client
     refetched = _get_discrepancies(client, token, patient["id"], analysis_id)
     by_type_after = {d["discrepancy_type"]: d for d in refetched}
     assert by_type_after["dose_conflict"]["resolution_status"] == "resolved"
-    # The Metformin discrepancy was never touched - still open.
+    # The Metformin discrepancy was never touched; still open.
     assert by_type_after["missing_from_medication_list"]["resolution_status"] == "open"
     assert by_type_after["missing_from_medication_list"]["id"] == missing["id"]

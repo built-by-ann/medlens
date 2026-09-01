@@ -17,7 +17,7 @@ interface UsePatientClinicalDocumentsResult {
  * whenever patientId changes, so navigating from one patient's documents to
  * another's doesn't show stale data.
  *
- * Scoped to a single patientId - there is no cross-patient document state
+ * Scoped to a single patientId; there is no cross-patient document state
  * anywhere in this hook. There is no add/create action here: documents are
  * created through the Upload workflow (useCreateAnalysis), which already
  * owns that flow; this hook only lists and removes what already exists.

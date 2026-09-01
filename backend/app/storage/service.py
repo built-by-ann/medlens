@@ -5,7 +5,7 @@ from app.storage.s3 import S3StorageService
 
 
 def build_storage_service(app_settings: Settings) -> StorageService:
-    """The single place storage_backend is ever branched on - everywhere
+    """The single place storage_backend is ever branched on; everywhere
     else in the application (routes, services) depends only on the
     StorageService interface, never on this choice. Settings.storage_backend
     is validated at startup (Settings' own model_validator) to guarantee
@@ -24,7 +24,7 @@ def build_storage_service(app_settings: Settings) -> StorageService:
 
 
 def get_storage_service() -> StorageService:
-    """FastAPI dependency - mirrors get_ai_summary_service's shape
+    """FastAPI dependency, mirrors get_ai_summary_service's shape
     (app/ai/service.py) for the same reason: routes declare a dependency
     on this function, never on a concrete backend class, so swapping the
     active backend is a configuration change, not a code change.

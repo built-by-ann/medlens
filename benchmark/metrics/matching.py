@@ -2,13 +2,13 @@
 
 Pairs predicted medications with expected (ground-truth) medications
 within one benchmark case, establishing which extracted medications are
-correct (TP), spurious (FP), or missed (FN) - before any attribute
+correct (TP), spurious (FP), or missed (FN), before any attribute
 (dosage/route/frequency/status/source_note) is scored. Getting this
 pairing right, and keeping it free of the fields it's later used to
 score, is the foundation everything in scoring.py depends on.
 
 Identity is normalized medication NAME alone. source_note, status, and
-notes are never used to decide who matches whom - see MATCHING_ATTRIBUTES
+notes are never used to decide who matches whom; see MATCHING_ATTRIBUTES
 below for exactly why, and benchmark/README.md's "Medication matching"
 section for the real duplicate-group audit this design was checked
 against before implementation.
@@ -24,13 +24,13 @@ from typing import Any
 
 # Attributes used to disambiguate a duplicate-name group (more than one
 # predicted or expected medication sharing the same normalized name
-# within one case) - dosage/route/frequency only, per Issue #90's
+# within one case), dosage/route/frequency only, per Issue #90's
 # explicit design:
 #
 #   - source_note is excluded because it is itself an independently
 #     scored source-attribution field (score_source_note, scoring.py);
 #     using it to decide *which* pair is "the match" would make its own
-#     accuracy close to 100% by construction - a circular metric.
+#     accuracy close to 100% by construction; a circular metric.
 #   - status is excluded because it is sparse (~27% non-null across the
 #     benchmark) and free-form; it should be scored on its own merits,
 #     not used to help find its own pairing.
@@ -41,11 +41,11 @@ from typing import Any
 # the dataset's 9 duplicate-containing groups (BENCH-006 atorvastatin,
 # BENCH-010 metformin [3-way] and lisinopril, BENCH-022 atorvastatin,
 # BENCH-029 lisinopril and furosemide) have dosage/route/frequency
-# identical (or entirely null) across every member of the group - the
+# identical (or entirely null) across every member of the group; the
 # only field that actually differs between them is source_note (or, for
 # BENCH-006/022's atorvastatin groups, status). Neither is available to
 # this matcher, so these specific pairs are inherently undecidable by any
-# permitted signal - see AMBIGUOUS PAIRS below for how that is handled
+# permitted signal; see AMBIGUOUS PAIRS below for how that is handled
 # without silently adding either field back in.
 MATCHING_ATTRIBUTES = ("dosage", "route", "frequency")
 
@@ -53,13 +53,13 @@ MATCHING_ATTRIBUTES = ("dosage", "route", "frequency")
 def normalize_text(value: str | None) -> str | None:
     """Unicode NFC -> strip -> collapse internal whitespace -> casefold.
     None passes through unchanged. Used for every string comparison in
-    this module and in scoring.py - the one normalization rule Issue #90
+    this module and in scoring.py, the one normalization rule Issue #90
     applies, deliberately excluding punctuation stripping or any
     semantic/alias normalization (see docs/ai.md and benchmark/
     README.md: the ground truth itself preserves wording exactly as the
     source note stated it, so normalizing meaning away here would score
     models against a more lenient contract than the one they were
-    actually asked to follow - "PO" and "oral" remain unequal, as do
+    actually asked to follow: "PO" and "oral" remain unequal, as do
     "twice daily"/"BID", "10 mg"/"10mg", and "discontinued"/"stopped").
     """
     if value is None:
@@ -73,8 +73,8 @@ class MatchedPair:
     expected: dict[str, Any]
     predicted: dict[str, Any]
     # True when this pair came from a duplicate-name group where more
-    # than one equally-good assignment existed (every permitted signal -
-    # dosage/route/frequency - tied). Every score OTHER than source_note
+    # than one equally-good assignment existed (every permitted signal,
+    # dosage/route/frequency, tied). Every score OTHER than source_note
     # is unaffected by which specific pairing was chosen in that case,
     # since a tie means those fields already agree identically no matter
     # which assignment wins; only source_note accuracy would be affected,
@@ -119,7 +119,7 @@ def _best_assignments_within_group(
     this (predicted, expected) duplicate-name group, deduplicated.
 
     A global search over the whole permutation space, not a greedy
-    left-to-right walk - it depends only on the *set* of predicted/
+    left-to-right walk; it depends only on the *set* of predicted/
     expected items, never on the order they happened to arrive in. Only
     ever run on groups of a handful of items (the largest in the current
     benchmark is 3), so brute force is cheap by construction.
@@ -155,7 +155,7 @@ def _match_group(
     predicted_group: list[dict[str, Any]], expected_group: list[dict[str, Any]]
 ) -> tuple[list[MatchedPair], list[dict[str, Any]], list[dict[str, Any]]]:
     """Matches one duplicate-name group. Returns (matched, leftover
-    predicted, leftover expected) - leftover items become FP/FN in
+    predicted, leftover expected); leftover items become FP/FN in
     match_case, below.
     """
     if not predicted_group or not expected_group:
@@ -169,7 +169,7 @@ def _match_group(
     chosen = min(best_assignments)
 
     # A pair is ambiguous unless it appears in *every* optimal
-    # assignment - i.e., some other equally-good way of pairing this
+    # assignment, i.e., some other equally-good way of pairing this
     # group would have matched one of its two items differently.
     membership = Counter(pair for assignment in best_assignments for pair in assignment)
     fully_agreed = len(best_assignments)
@@ -198,7 +198,7 @@ def match_case(
 ) -> CaseMatchResult:
     """Matches every medication in one benchmark case. Grouping by
     normalized name first means the common case (no duplicates on either
-    side) never touches the permutation-search machinery at all - it's
+    side) never touches the permutation-search machinery at all; it's
     only exercised for the handful of groups that actually need it.
     """
     expected_groups = _group_by_name(expected_medications)

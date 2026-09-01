@@ -7,7 +7,7 @@ export interface PaletteOption {
   description: string
 }
 
-// Ordered for display in the Appearance section's palette picker - Default
+// Ordered for display in the Appearance section's palette picker: Default
 // first as the application's own original look, then the 6 palettes drawn
 // from the provided inspiration boards (see docs/frontend.md's Theme
 // Architecture section for how each was derived).
@@ -47,7 +47,7 @@ export interface ThemeContextValue {
   // 'system' resolved to 'light' or 'dark'; otherwise identical to
   // modePreference. Never 'system' itself.
   resolvedMode: Mode
-  // `${palette}-${resolvedMode}` - the actual value applied to `data-theme`.
+  // `${palette}-${resolvedMode}`; the actual value applied to `data-theme`.
   resolvedTheme: ThemeName
   setPalette: (palette: PaletteName) => void
   setModePreference: (mode: ModePreference) => void

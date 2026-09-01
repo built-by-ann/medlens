@@ -4,11 +4,11 @@ evaluation runner (Issue #89).
 The identical-prompt guarantee lives in cli.py's run loop, not here:
 build_summary_prompt() is called exactly once per benchmark case, and the
 resulting string (and its hash) is passed unchanged into
-run_case_for_provider() below for every selected provider - this module
+run_case_for_provider() below for every selected provider; this module
 never rebuilds a prompt itself.
 
-Parsing is deliberately done in two explicit stages - json.loads(), then
-ClinicalSummary.model_validate() - rather than the one-line
+Parsing is deliberately done in two explicit stages, json.loads(), then
+ClinicalSummary.model_validate(), rather than the one-line
 ClinicalSummary.model_validate_json() AISummaryService._parse_response
 uses in production (app/ai/service.py). Splitting it is what lets
 invalid_json and schema_validation_error be told apart, which the
@@ -35,7 +35,7 @@ from benchmark.loader import BenchmarkCase
 from benchmark.runner.models import ParsingResult, PredictionResult
 from benchmark.runner.providers import generation_params_for, inference_backend_for
 
-# Failure taxonomy - derived from the exception boundaries every
+# Failure taxonomy, derived from the exception boundaries every
 # AIProvider implementation already has (see docs/ai.md's Provider
 # Abstraction / Error Handling sections and each provider module's own
 # generate_summary()), not invented for this framework. Every provider
@@ -43,7 +43,7 @@ from benchmark.runner.providers import generation_params_for, inference_backend_
 # exception, when there is one, survives via Python's own exception
 # chaining ("raise AIProviderError(...) from error" in every provider),
 # which is what lets this module recover finer detail than the single
-# exception type alone would give it - matched by isinstance against the
+# exception type alone would give it, matched by isinstance against the
 # real exception classes each provider itself catches, never by
 # string-matching a class name (which would risk colliding with, e.g.,
 # pydantic's own unrelated ValidationError).
@@ -60,13 +60,13 @@ def _classify_provider_error(error: AIProviderError) -> str:
     """Maps a caught AIProviderError to one of the categories above.
 
     Known, deliberately-not-fixed asymmetry: GeminiProvider has no SDK
-    exception distinct from a generic Exception for a network timeout -
+    exception distinct from a generic Exception for a network timeout;
     only genai_errors.APIError is caught specifically in
     gemini_provider.py, so a Gemini timeout classifies as
     unexpected_error, not timeout, unlike OpenBioLLM/MedGemma's
     InferenceTimeoutError (both call the same huggingface_hub
     InferenceClient). This reflects a real, pre-existing difference
-    between the provider implementations - documented here and in
+    between the provider implementations, documented here and in
     benchmark/README.md rather than papered over or "fixed" by modifying
     GeminiProvider as part of this issue.
     """
@@ -127,11 +127,11 @@ def run_case_for_provider(
     prompt_hash_value: str,
 ) -> PredictionResult:
     """Runs exactly one (case, provider) pair, isolated: any Exception
-    raised anywhere in this function - by the provider, or by JSON/schema
-    parsing - is caught here and turned into a PredictionResult carrying
+    raised anywhere in this function, by the provider, or by JSON/schema
+    parsing, is caught here and turned into a PredictionResult carrying
     the failure, never re-raised, so a single bad pair can never abort
     the run (see cli.py's run loop). A KeyboardInterrupt (or any other
-    BaseException) deliberately is NOT caught here - it propagates up to
+    BaseException) deliberately is NOT caught here; it propagates up to
     cli.py's own run-level handler, which is what marks the whole run
     "interrupted" rather than silently swallowing the interrupt as if it
     were just another provider failure.
@@ -171,17 +171,17 @@ def run_case_for_provider(
         provider_response = provider.generate_summary(prompt)
     except AIProviderError as error:
         # error's own message is already safe to expose (every provider
-        # writes it that way - see docs/ai.md's Error Handling section);
+        # writes it that way; see docs/ai.md's Error Handling section);
         # the underlying cause's message never is, so only its type is
         # ever inspected (_classify_provider_error), never its str().
         return _failure(_classify_provider_error(error), str(error))
     except Exception as error:
-        # Defensive net only - every provider is designed to always wrap
+        # Defensive net only; every provider is designed to always wrap
         # its own failures into AIProviderError, so reaching here means a
         # provider implementation bug, not an expected outcome. The raw
         # exception text has never been vetted as safe to expose (unlike
         # AIProviderError's own message), so only the exception's type
-        # name is recorded, never str(error) - see docs/ai.md's
+        # name is recorded, never str(error); see docs/ai.md's
         # sanitized-error-message convention.
         return _failure(
             "unexpected_error", f"Unexpected error escaped provider: {type(error).__name__}"

@@ -144,7 +144,7 @@ def test_register_preserves_username_casing_on_success(client):
 
     assert response.status_code == 201
     # Case-insensitive uniqueness (checked above) is not the same as
-    # case-insensitive storage - the username a user chose to type should
+    # case-insensitive storage; the username a user chose to type should
     # still be exactly what's displayed back to them.
     assert response.json()["username"] == "MixedCase"
 

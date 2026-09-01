@@ -24,7 +24,7 @@ describe('MedicationCsvUpload', () => {
   beforeEach(() => {
     createObjectURL = vi.fn(() => 'blob:mock-url')
     revokeObjectURL = vi.fn()
-    // jsdom does not implement these - stubbed locally since only the
+    // jsdom does not implement these; stubbed locally since only the
     // sample-CSV download in this one component needs them.
     vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
   })
@@ -44,7 +44,7 @@ describe('MedicationCsvUpload', () => {
   it('rejects an unsupported file type dropped onto the zone, with a visible error', async () => {
     // A real OS file picker constrained by `accept` would never offer this
     // file in the first place, and userEvent.upload() respects `accept`
-    // the same way - so a drop is used here instead, exactly like
+    // the same way, so a drop is used here instead, exactly like
     // UploadPage's own dropzone test for the same reason.
     render(<MedicationCsvUpload onImport={vi.fn()} />)
 

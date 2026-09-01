@@ -25,7 +25,7 @@ interface RecentAnalysisCardProps {
   analysis: AnalysisSummary
   onDelete?: (id: number) => Promise<void>
   // Set only by the Dashboard's cross-patient Recent Analyses feed (Issue
-  // #157) - every other caller already has the patient established by the
+  // #157); every other caller already has the patient established by the
   // page it's on, so this stays undefined (and unrendered) there.
   patientName?: string
 }

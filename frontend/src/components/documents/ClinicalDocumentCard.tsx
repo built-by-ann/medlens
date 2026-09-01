@@ -15,7 +15,7 @@ function analysisCountLabel(count: number): string {
 }
 
 // file_type is "manual_entry" for pasted notes, or the real upload format
-// ("txt"/"pdf") for uploaded files - there is no separate "source" field to
+// ("txt"/"pdf") for uploaded files; there is no separate "source" field to
 // read, so this is the one place that distinction is surfaced to the user.
 const FILE_TYPE_LABELS: Record<string, string> = {
   manual_entry: 'Pasted note',

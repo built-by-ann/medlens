@@ -1,5 +1,5 @@
 """Output-directory and artifact writing for the evaluation runner
-(Issue #89) - manifest.json (whole-file, atomically replaced) and
+(Issue #89): manifest.json (whole-file, atomically replaced) and
 predictions.jsonl (append-only, one line per attempted (case, provider)
 pair, flushed immediately after every write).
 """
@@ -19,7 +19,7 @@ DEFAULT_RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
 def new_run_id() -> str:
     """UTC timestamp (second precision) plus a short random suffix, so two
-    runs started in the same second still can't collide - used as both
+    runs started in the same second still can't collide; used as both
     the default output directory name and the run_id recorded in every
     artifact.
     """
@@ -46,7 +46,7 @@ def prepare_output_dir(output_dir: Path) -> Path:
 def write_manifest(output_dir: Path, manifest: RunManifest) -> None:
     """Atomically replaces manifest.json (see atomic_write_json). Called
     once at the start of a run (status="running") and again at the end
-    ("complete"/"interrupted") - see cli.py.
+    ("complete"/"interrupted"); see cli.py.
     """
     atomic_write_json(output_dir / "manifest.json", manifest.to_dict())
 

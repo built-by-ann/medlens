@@ -28,7 +28,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> UserResponse
     try:
         user = create_user(db, user_in)
     except EmailAlreadyRegisteredError:
-        # Never logs the attempted email - by itself this is only
+        # Never logs the attempted email; by itself this is only
         # informative alongside enough surrounding calls to suggest
         # enumeration, and the resulting 409 already tells the caller (who
         # already knows the email they submitted) everything this log
@@ -65,7 +65,7 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)) -> Token:
 
     if not user:
         # Deliberately never logs the submitted email or password (see
-        # this issue's own "never log passwords" requirement) - a failed
+        # this issue's own "never log passwords" requirement); a failed
         # login with no other identifying detail is still the standard,
         # useful security-monitoring signal (repeated failures, timing),
         # without risking logging a mistyped password someone pasted into

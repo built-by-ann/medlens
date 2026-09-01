@@ -1,7 +1,7 @@
 import re
 
 # Shared by every provider whose underlying model returns plain generated
-# text rather than a schema-constrained response (OpenBioLLM, MedGemma) -
+# text rather than a schema-constrained response (OpenBioLLM, MedGemma);
 # extracted out of openbiollm_provider.py (Issue #87) when MedGemmaProvider
 # (Issue #88) needed the exact same behavior, rather than duplicating it.
 # GeminiProvider needs none of this: JSON_RESPONSE_CONFIG
@@ -12,7 +12,7 @@ import re
 # repair malformed JSON, add missing braces, or touch anything inside the
 # object. AISummaryService._parse_response (ClinicalSummary.
 # model_validate_json) remains the only thing that actually validates a
-# provider's response - these functions only decide what string reaches it.
+# provider's response; these functions only decide what string reaches it.
 
 _CODE_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 
@@ -39,7 +39,7 @@ def extract_json_object(text: str) -> str:
     exactly as malformed after this call.
 
     Falls back to returning the text unchanged (stripped of surrounding
-    whitespace) if no closing brace exists anywhere - a missing boundary
+    whitespace) if no closing brace exists anywhere; a missing boundary
     is never guessed at or invented.
     """
     start = text.find("{")

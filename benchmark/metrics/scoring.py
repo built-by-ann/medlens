@@ -1,5 +1,5 @@
 """Medication-extraction quality metrics for a completed #89 run (Issue
-#90). Pure functions over already-loaded predictions/ground truth - no
+#90). Pure functions over already-loaded predictions/ground truth; no
 file I/O (see io.py) and no provider calls of any kind.
 """
 
@@ -22,11 +22,11 @@ def _safe_divide(numerator: int, denominator: int, when_zero: float) -> float:
 
 def precision_recall_f1(tp: int, fp: int, fn: int) -> dict[str, Any]:
     """Standard IR zero-denominator convention: precision is 1.0 when
-    nothing was predicted (TP+FP == 0 - vacuously precise, nothing wrong
-    was said); recall is 1.0 when nothing was expected (TP+FN == 0 -
+    nothing was predicted (TP+FP == 0, vacuously precise, nothing wrong
+    was said); recall is 1.0 when nothing was expected (TP+FN == 0,
     vacuously complete, nothing was there to miss). F1 is 0.0 whenever
-    either precision or recall is a *genuine* (non-vacuous) 0 - i.e. a
-    real over- or under-extraction - and the harmonic mean otherwise, so
+    either precision or recall is a *genuine* (non-vacuous) 0, i.e. a
+    real over- or under-extraction, and the harmonic mean otherwise, so
     F1 is 1.0 only when both precision and recall are (whether genuinely
     or vacuously). See benchmark/README.md for the six real
     zero-expected-medication cases this convention is checked against.
@@ -42,7 +42,7 @@ def precision_recall_f1(tp: int, fp: int, fn: int) -> dict[str, Any]:
 
 
 def macro_average(per_case_scores: list[dict[str, Any]]) -> dict[str, Any]:
-    """Unweighted mean of each case's own precision/recall/f1 - every
+    """Unweighted mean of each case's own precision/recall/f1; every
     case counts equally regardless of how many medications it has,
     unlike micro (see _detection_over/score_medication_detection).
     """
@@ -62,8 +62,8 @@ def _detection_over(
 ) -> tuple[list[dict[str, Any]], Counter, list[MatchedPair]]:
     """Runs match_case for every record in `predictions`. A schema-invalid
     record's predicted medications are treated as an empty list (never
-    inferred or recovered from provider_response - see docs/ai.md's
-    "never repair" convention, which this mirrors for scoring) - the
+    inferred or recovered from provider_response; see docs/ai.md's
+    "never repair" convention, which this mirrors for scoring); the
     entire end_to_end/conditional_on_valid_output distinction
     (score_medication_detection, below) is just which set of records is
     passed in here, not two different matching implementations.
@@ -99,7 +99,7 @@ def score_medication_detection(
     medication_detection section (end_to_end over every attempted case;
     conditional_on_valid_output over schema-valid cases only) plus every
     matched pair actually produced (always drawn from schema-valid cases
-    only, by construction - an unevaluable case has no predicted
+    only, by construction; an unevaluable case has no predicted
     medications to ever match anything with), for attribute/source_note/
     notes scoring downstream.
     """
@@ -136,7 +136,7 @@ def score_medication_detection(
 
 def score_attribute(matched_pairs: list[MatchedPair], field: str) -> dict[str, Any]:
     """dosage/route/frequency/status: normalized-exact comparison only
-    (see matching.normalize_text - no semantic/alias normalization).
+    (see matching.normalize_text; no semantic/alias normalization).
     Three numbers, each with a precisely different denominator so a
     sparse field (status is null 73% of the time in this benchmark)
     can't produce a misleadingly high plain accuracy by mostly agreeing
@@ -144,13 +144,13 @@ def score_attribute(matched_pairs: list[MatchedPair], field: str) -> dict[str, A
 
     - accuracy: correct / matched_pairs (both-null counts as correct).
     - accuracy_given_expected_non_null: correct / (pairs where expected
-      is non-null) - "when there was something to extract, how often was
+      is non-null): "when there was something to extract, how often was
       it right."
     - hallucination_rate_given_expected_null: (predicted non-null when
-      expected null) / (pairs where expected is null) - "how often was
+      expected null) / (pairs where expected is null): "how often was
       something invented where there was nothing to find."
 
-    matched_pairs == 0 reports 0.0 for every rate (not 1.0 - unlike
+    matched_pairs == 0 reports 0.0 for every rate (not 1.0; unlike
     detection's vacuous-perfect convention, "no data" is not the same
     claim as "perfect," and the accompanying matched_pairs/count fields
     always disambiguate the two for a reader).
@@ -192,7 +192,7 @@ def score_attribute(matched_pairs: list[MatchedPair], field: str) -> dict[str, A
 
 
 def score_notes(matched_pairs: list[MatchedPair]) -> dict[str, Any]:
-    """notes is free text (see benchmark/README.md) - never exact-match
+    """notes is free text (see benchmark/README.md); never exact-match
     or fuzzy-scored. Presence agreement only: did the model correctly
     recognize *that* an annotation-worthy note existed, regardless of its
     exact wording.
@@ -233,7 +233,7 @@ def score_source_note(matched_pairs: list[MatchedPair]) -> dict[str, Any]:
     equally-good assignment, so which expected item a given predicted
     item was paired with wasn't actually determined by any permitted
     signal) are excluded from this metric's denominator entirely, rather
-    than scored right or wrong by what would be an arbitrary coin flip -
+    than scored right or wrong by what would be an arbitrary coin flip;
     see excluded_ambiguous_pairs.
     """
     scoreable = [pair for pair in matched_pairs if not pair.source_note_ambiguous]
@@ -260,7 +260,7 @@ def score_reliability(predictions: list[dict[str, Any]]) -> dict[str, Any]:
     - provider_call_success_rate: succeeded / attempted (every pair).
     - json_validity_rate: valid JSON / calls that succeeded at all.
     - schema_validity_rate: schema-valid / JSON that was valid at all.
-    - evaluable_case_rate: schema-valid / attempted (unconditional) -
+    - evaluable_case_rate: schema-valid / attempted (unconditional);
       the number that must always be read alongside
       conditional_on_valid_output's quality numbers.
     """
@@ -293,12 +293,12 @@ def _percentile(sorted_values: list[float], pct: float) -> float:
 
 
 def score_latency(predictions: list[dict[str, Any]]) -> dict[str, Any]:
-    """Population is explicitly provider_call_succeeded == True only - a
+    """Population is explicitly provider_call_succeeded == True only: a
     failed call's near-instant latency (e.g. a missing-credential check
     that never reaches the network) is not a measure of model/provider
     speed and would distort every statistic if included. `count` is
     always reported alongside so a reader can see how few samples (at
-    most 30, one per benchmark case) back these numbers - this is not
+    most 30, one per benchmark case) back these numbers; this is not
     production-grade latency benchmarking.
     """
     values = sorted(r["latency_ms"] for r in predictions if r["provider_call_succeeded"])
@@ -329,7 +329,7 @@ def _group_detection(
     cases_by_id: dict[str, BenchmarkCase], predictions: list[dict[str, Any]]
 ) -> dict[str, Any]:
     """The compact {n, micro, macro} shape used by both by_difficulty and
-    by_tag - end_to_end interpretation only (the designated primary
+    by_tag; end_to_end interpretation only (the designated primary
     interpretation), not doubled up with conditional_on_valid_output, to
     keep grouped breakdowns from exploding in size for what is meant to
     be a compact, at-a-glance view.
@@ -360,10 +360,10 @@ def score_by_tag(
     cases_by_id: dict[str, BenchmarkCase], predictions: list[dict[str, Any]]
 ) -> dict[str, Any]:
     """A case can appear under more than one tag (matching the benchmark's
-    own multi-tag design - see benchmark/README.md's coverage table), so
+    own multi-tag design; see benchmark/README.md's coverage table), so
     `n` values across all tags do not sum to the provider's total case
     count. Every group reports its own `n`, some as small as 2 (the
-    benchmark's own enforced minimum per tag) - never suppressed, but
+    benchmark's own enforced minimum per tag), never suppressed, but
     always alongside the sample size so a group's numbers are never read
     as more statistically meaningful than they are. Deciding whether a
     given group is *reliable enough* to draw a conclusion from belongs to

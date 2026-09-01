@@ -114,7 +114,7 @@ def test_s3_delete_raises_object_not_found_for_missing_key(s3_bucket):
 
 def test_s3_upload_never_makes_the_object_public(s3_bucket):
     # Verifies the actual request sent to S3, not just that upload()
-    # succeeds - ACL="private" is passed explicitly (see S3StorageService)
+    # succeeds; ACL="private" is passed explicitly (see S3StorageService)
     # rather than relied on as an S3 default, and this is what proves it
     # actually reaches the request.
     with mock_aws():
@@ -135,7 +135,7 @@ def test_s3_failure_raises_storage_error_not_object_not_found(s3_bucket):
     # A genuine S3-side failure (here: the bucket itself doesn't exist,
     # simulating e.g. misconfiguration or an outage) is a different
     # condition than "the object isn't there" and must not be reported the
-    # same way - a caller catching ObjectNotFoundError specifically (see
+    # same way; a caller catching ObjectNotFoundError specifically (see
     # delete_clinical_document, app/services/clinical_document_service.py)
     # must not accidentally swallow this.
     storage = _s3_storage("this-bucket-does-not-exist")
@@ -189,7 +189,7 @@ def test_s3_download_failure_is_logged_with_key_and_error_type(s3_bucket, caplog
 
 def test_s3_download_for_a_missing_object_is_not_logged_as_a_failure(s3_bucket, caplog):
     # ObjectNotFoundError is an expected, already-handled condition (see
-    # S3StorageService.download) - not an operational failure worth a log
+    # S3StorageService.download); not an operational failure worth a log
     # line, unlike a genuine S3-side error.
     storage = _s3_storage(s3_bucket)
 

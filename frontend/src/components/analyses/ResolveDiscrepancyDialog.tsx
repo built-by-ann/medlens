@@ -28,7 +28,7 @@ const HEADING_ID = 'resolve-discrepancy-heading'
 // ArchivePatientDialog/StartAnalysisDialog: focus trapping, Escape-to-dismiss,
 // and initial focus on Cancel all come from the platform rather than being
 // reimplemented here. Handles every resolution action through one
-// component - which fields (if any) are editable, and what the dialog says
+// component: which fields (if any) are editable, and what the dialog says
 // it's about to do, come entirely from the `action` descriptor
 // (getDiscrepancyActions, discrepancyResolutionActions.ts) rather than a
 // separate dialog per action type.

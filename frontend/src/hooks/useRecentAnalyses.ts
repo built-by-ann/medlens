@@ -11,7 +11,7 @@ interface UseRecentAnalysesResult {
 }
 
 /**
- * The Dashboard's Recent Analyses feed (Issue #157) - cross-patient, unlike
+ * The Dashboard's Recent Analyses feed (Issue #157): cross-patient, unlike
  * usePatientAnalyses, and read-only: no delete action here, since deleting
  * an analysis remains a patient-page action (AnalysisDetailPage).
  */

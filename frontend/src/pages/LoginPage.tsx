@@ -78,7 +78,7 @@ export function LoginPage() {
 
   // Surfaces a silent, session-ending logout (the token expired or was
   // revoked) the one time it's read, through the exact same form-level
-  // message every other login failure already uses - not a separate banner
+  // message every other login failure already uses, not a separate banner
   // or toast. Cleared immediately after so it can't reappear on a later
   // visit to this page.
   useEffect(() => {

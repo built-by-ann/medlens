@@ -70,12 +70,12 @@ class AISummaryService:
 
 
 def build_ai_summary_service(app_settings: Settings) -> AISummaryService:
-    """The single place ai_provider is ever branched on - mirrors
+    """The single place ai_provider is ever branched on; mirrors
     app/storage/service.py's build_storage_service exactly, for the same
     reason: everywhere else in the application depends only on the
     AIProvider interface, never on this choice. Settings.ai_provider is
     validated at startup (Settings' own model_validator) to guarantee this
-    function never has to raise a config error itself - the else branch
+    function never has to raise a config error itself: the else branch
     below is unreachable in a running application, kept only as defense
     in depth.
 
@@ -89,7 +89,7 @@ def build_ai_summary_service(app_settings: Settings) -> AISummaryService:
             model=app_settings.openbiollm_model,
         )
     elif app_settings.ai_provider == "medgemma":
-        # Reuses huggingface_api_key - both providers call the same
+        # Reuses huggingface_api_key: both providers call the same
         # Hugging Face Inference Providers mechanism (see
         # medgemma_provider.py), just a different checkpoint/task.
         provider = MedGemmaProvider(
@@ -107,7 +107,7 @@ def build_ai_summary_service(app_settings: Settings) -> AISummaryService:
 
 
 def get_ai_summary_service() -> AISummaryService:
-    """FastAPI dependency - routes declare a dependency on this function,
+    """FastAPI dependency; routes declare a dependency on this function,
     never on a concrete provider class, so swapping the active provider
     is a configuration change (AI_PROVIDER), not a code change.
     """

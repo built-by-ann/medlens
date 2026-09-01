@@ -22,7 +22,7 @@ def upgrade() -> None:
     """Upgrade schema.
 
     Purely additive: username is nullable, so every existing row is valid
-    as-is with it left null - no backfill, no downgrade data loss for
+    as-is with it left null; no backfill, no downgrade data loss for
     pre-existing users (Issue #191). Uniqueness is enforced case-
     insensitively via a functional unique index on lower(username) rather
     than a plain column-level unique constraint, which would be case-
@@ -42,7 +42,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema.
 
-    Drops the index before the column it's defined over - the reverse
+    Drops the index before the column it's defined over, the reverse
     order of upgrade(). Chosen usernames are lost, the same acceptable
     trade-off already established for other additive columns in this
     project (see e.g. d9346397f3b5's own downgrade).

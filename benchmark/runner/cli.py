@@ -44,18 +44,18 @@ from benchmark.runner.storage import (
 # The same file/location app/core/config.py's Settings reads
 # (SettingsConfigDict(env_file=".env")), reused here so a developer's
 # existing GEMINI_API_KEY/HUGGINGFACE_API_KEY "just work" without a
-# second copy - see _load_env() below.
+# second copy; see _load_env() below.
 _BACKEND_ENV_PATH = Path(__file__).resolve().parent.parent.parent / "backend" / ".env"
 
 
 def _load_env() -> None:
     """Best-effort load of backend/.env. override=False: a credential
     already exported into the process environment always wins over the
-    file - this must keep working with no backend/.env present at all
+    file; this must keep working with no backend/.env present at all
     (e.g. CI, or a developer who exports credentials directly), so this
     never raises when the file is missing.
 
-    Deliberately does not construct app.core.config.Settings - Settings()
+    Deliberately does not construct app.core.config.Settings: Settings()
     requires DATABASE_URL/JWT_SECRET_KEY (unrelated to AI evaluation, no
     defaults) and its own AI_PROVIDER validation assumes exactly one
     active provider, neither of which this multi-provider runner needs
@@ -65,7 +65,7 @@ def _load_env() -> None:
 
 
 def _git_metadata() -> tuple[str | None, bool | None]:
-    """Best-effort git commit SHA and dirty-working-tree flag - both None
+    """Best-effort git commit SHA and dirty-working-tree flag; both None
     if this isn't a git checkout or git isn't on PATH. Reproducibility
     metadata is a nice-to-have here, not a requirement to run at all, so
     this never raises.
@@ -93,9 +93,9 @@ def _git_metadata() -> tuple[str | None, bool | None]:
 def _filter_cases(
     cases: list[BenchmarkCase], case_ids: list[str] | None, tags: list[str] | None
 ) -> list[BenchmarkCase]:
-    """--cases and --tags are intersected when both are given - a case
+    """--cases and --tags are intersected when both are given: a case
     must match both filters to be selected. This is the intuitive
-    reading of "run these specific cases, restricted to this tag" -
+    reading of "run these specific cases, restricted to this tag";
     a union would silently pull in cases neither filter alone asked for.
     """
     selected = cases

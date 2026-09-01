@@ -1,16 +1,16 @@
 """Tests for the evaluation runner (benchmark/runner/, Issue #89).
 
-No test here makes a real network call - every provider exercised for
+No test here makes a real network call; every provider exercised for
 orchestration/parsing/failure-isolation behavior is a hand-written fake
 (this codebase avoids a mocking library, see docs/testing.md), the same
 convention every other AI test in this suite already follows. The tests
 that do construct real provider classes (GeminiProvider/OpenBioLLMProvider/
-MedGemmaProvider) only inspect their attributes/module constants - they
+MedGemmaProvider) only inspect their attributes/module constants; they
 never call generate_summary(), so no client is ever built and no request
 is ever made.
 
 benchmark/ is a top-level directory, a sibling of backend/ (see
-benchmark/README.md) - not part of the `app` package under test everywhere
+benchmark/README.md), not part of the `app` package under test everywhere
 else in this suite. sys.path is extended here the same way
 test_benchmark_dataset.py already does, since this is the other test file
 that needs it.
@@ -71,7 +71,7 @@ VALID_RESPONSE = json.dumps(
 
 
 class FakeProvider(AIProvider):
-    """A hand-written fake AIProvider - no mocking library, matching this
+    """A hand-written fake AIProvider, no mocking library, matching this
     repo's established convention (see e.g. test_ai_service.py's own
     FakeProvider). Records every prompt it was called with, for the
     identical-prompt tests.
@@ -92,7 +92,7 @@ class FakeProvider(AIProvider):
 
 
 class _FakeHttpResponse:
-    """The minimal shape HfHubHTTPError.__init__ actually reads - see
+    """The minimal shape HfHubHTTPError.__init__ actually reads; see
     test_openbiollm_provider.py's identical fake.
     """
 
@@ -117,7 +117,7 @@ def _run_one(case, provider, provider_name="fake"):
 
 
 def test_cli_reuses_the_real_benchmark_loader():
-    # No reimplementation of loading/validation - cli.py imports the exact
+    # No reimplementation of loading/validation; cli.py imports the exact
     # same load_cases function benchmark/README.md documents as the one
     # entry point (see benchmark/loader.py's own module docstring).
     assert cli.load_cases is load_cases
@@ -291,7 +291,7 @@ def test_unexpected_exception_from_provider_is_isolated_and_sanitized():
     assert result.provider_call_succeeded is False
     assert result.parsing.error_category == "unexpected_error"
     # Only the exception's type is ever recorded for this defensive
-    # branch, never its message - see execution.py's own comment.
+    # branch, never its message; see execution.py's own comment.
     assert "sk-abc123" not in (result.parsing.error_message or "")
     assert "RuntimeError" in result.parsing.error_message
 
@@ -376,7 +376,7 @@ def test_cli_continues_after_provider_and_case_failures(tmp_path, monkeypatch):
 
     assert exit_code == 0
     lines = (output_dir / "predictions.jsonl").read_text().strip().splitlines()
-    assert len(lines) == 6  # 2 cases x 3 providers - every pair attempted despite the failure
+    assert len(lines) == 6  # 2 cases x 3 providers: every pair attempted despite the failure
 
     records = {(r["case_id"], r["provider"]): r for r in (json.loads(line) for line in lines)}
     assert records[("BENCH-A", "gemini")]["provider_call_succeeded"] is True

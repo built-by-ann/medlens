@@ -1,6 +1,6 @@
 """One-off script to render demo discharge summaries as real PDF files.
 
-Not part of the application - regenerates the two PDF demo documents under
+Not part of the application; regenerates the two PDF demo documents under
 frontend/public/demo/. Run from frontend/ using the backend's virtualenv
 (reportlab is already a backend dev dependency, used for the same purpose
 in backend/tests/test_clinical_documents.py):

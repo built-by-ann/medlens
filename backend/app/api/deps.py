@@ -66,7 +66,7 @@ def get_owned_patient(
     or 404s if it doesn't exist or doesn't belong to the authenticated
     user. Shared by every patient-nested route (e.g. medications) so this
     check is enforced in exactly one place rather than re-implemented per
-    resource - a route simply cannot do anything with a patient_id it
+    resource; a route simply cannot do anything with a patient_id it
     hasn't resolved through here first.
     """
     patient = get_patient(db, current_user.id, patient_id)

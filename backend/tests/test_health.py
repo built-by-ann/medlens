@@ -17,7 +17,7 @@ def test_health_check_ok(client):
 
 def test_health_check_returns_every_documented_field(client):
     # docs/api.md's documented shape, checked field-by-field rather than
-    # with a single `==` against the whole body - version/environment/etc.
+    # with a single `==` against the whole body; version/environment/etc.
     # depend on whatever Settings actually resolves to in this process, so
     # this only pins the ones that are fixed by test setup and the shape
     # of the rest.
@@ -119,9 +119,9 @@ def test_health_check_reports_medgemma_as_the_ai_provider_when_configured(client
 
 def test_health_check_does_not_require_a_gemini_api_key(client, monkeypatch):
     # No AIProvider is ever instantiated (only GeminiProvider.name, a
-    # class attribute) - reporting the AI provider/model must not depend
+    # class attribute); reporting the AI provider/model must not depend
     # on GEMINI_API_KEY being configured, unlike actually using AI
-    # features (which fails with a clear 503 - see docs/api.md).
+    # features (which fails with a clear 503; see docs/api.md).
     monkeypatch.setattr(settings, "gemini_api_key", None)
 
     response = client.get("/health")
@@ -152,7 +152,7 @@ def test_health_check_returns_503_when_database_unavailable(client, monkeypatch)
 
 def test_health_check_still_reports_version_and_config_when_database_is_down(client, monkeypatch):
     # version/environment/storage/ai never depended on the database to
-    # begin with - a down database shouldn't blank them out, and they're
+    # begin with; a down database shouldn't blank them out, and they're
     # arguably more useful, not less, while diagnosing exactly this
     # failure.
     class BrokenSession:

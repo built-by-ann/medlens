@@ -6,7 +6,7 @@ export interface ApiError {
   message: string
   // The raw `detail` value from the backend response, preserved as-is
   // alongside `message` for the rare caller that needs more structure than
-  // a single string - e.g. the medication CSV importer's row-level
+  // a single string, e.g. the medication CSV importer's row-level
   // validation errors (`{ message, row_errors }`), which no other endpoint
   // in this app returns. Most callers only ever read `.message`.
   detail?: unknown
@@ -20,7 +20,7 @@ export interface ApiError {
 export function toApiError(error: AxiosError): ApiError {
   const status = error.response?.status ?? null
 
-  // No response at all - the request never reached a server to produce a
+  // No response at all: the request never reached a server to produce a
   // `detail` body (offline, DNS/CORS failure, the backend is down, a
   // timeout). Axios's own `error.message` for this case is developer-facing
   // ("Network Error", "timeout of 10000ms exceeded"), not something to show

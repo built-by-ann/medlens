@@ -18,14 +18,14 @@ class ClinicalDocument(Base):
     file_type = Column(String, nullable=True)
 
     # Issue #58: identifies the original file in whichever StorageService
-    # backend is active (a local path or an S3 key - see app/storage/) -
+    # backend is active (a local path or an S3 key; see app/storage/),
     # never a URL, per that feature's own "do not store S3 URLs" rule, so
     # a bucket rename or moving between backends never requires touching
     # stored data. All three are nullable together: a pasted-text document
     # (POST .../clinical-documents, no file at all) and any document
     # created before this column existed have no stored object, and
     # storage_key being null is exactly how the download endpoint
-    # distinguishes "nothing to download" from "download failed" - see
+    # distinguishes "nothing to download" from "download failed"; see
     # app/services/clinical_document_service.py.
     storage_key = Column(String, nullable=True)
     content_type = Column(String, nullable=True)

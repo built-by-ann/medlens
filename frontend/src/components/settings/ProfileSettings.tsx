@@ -47,7 +47,7 @@ export function ProfileSettings() {
         const updated = await updateUser({
           name: joinName(values.firstName, values.lastName),
           // An empty field means "clear it" (existing accounts may have no
-          // username at all, see Issue #191) - never send '', which would
+          // username at all, see Issue #191); never send '', which would
           // fail the backend's own min-length check for a value that was
           // actually meant to mean "unset."
           username: trimmedUsername || null,
@@ -60,7 +60,7 @@ export function ProfileSettings() {
         const apiError = error as ApiError
 
         // A duplicate email or username is specifically about that one
-        // field, mirroring how SignupPage attaches its own 409 - every
+        // field, mirroring how SignupPage attaches its own 409; every
         // other failure is a generic form-level message instead.
         if (apiError.status === 409 && apiError.message.toLowerCase().includes('username')) {
           setFieldError('username', apiError.message)
@@ -73,7 +73,7 @@ export function ProfileSettings() {
     },
   })
 
-  // Same live-validation behavior as SignupPage's username field - see its
+  // Same live-validation behavior as SignupPage's username field; see its
   // own comment for why this one field validates on every keystroke
   // instead of only on submit.
   function handleUsernameChange(event: ChangeEvent<HTMLInputElement>) {

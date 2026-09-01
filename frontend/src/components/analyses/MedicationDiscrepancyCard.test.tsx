@@ -80,7 +80,7 @@ describe('MedicationDiscrepancyCard', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
-  it('renders no action buttons once a discrepancy is resolved - editing stays disabled', () => {
+  it('renders no action buttons once a discrepancy is resolved, editing stays disabled', () => {
     render(
       <MedicationDiscrepancyCard
         discrepancy={makeDiscrepancy({
@@ -107,7 +107,7 @@ describe('MedicationDiscrepancyCard', () => {
       />,
     )
 
-    // Not a bare `/Resolved/` match - ResolutionStatusBadge also renders the
+    // Not a bare `/Resolved/` match; ResolutionStatusBadge also renders the
     // word "Resolved" on its own, so the assertion has to include enough of
     // the sentence to be unambiguous.
     expect(screen.getByText(/Resolved by Dr\. Ann Lee/)).toBeInTheDocument()

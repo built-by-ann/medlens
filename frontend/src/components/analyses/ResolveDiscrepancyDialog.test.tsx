@@ -140,7 +140,7 @@ describe('ResolveDiscrepancyDialog', () => {
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled()
   })
 
-  it('never disables Confirm for a confirm-only or dismiss action - nothing is required', () => {
+  it('never disables Confirm for a confirm-only or dismiss action, nothing is required', () => {
     render(
       <ResolveDiscrepancyDialog
         target={makeTarget(dismissAction)}

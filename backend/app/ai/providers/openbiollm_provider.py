@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "aaditya/Llama3-OpenBioLLM-8B"
 
 # The one Hugging Face Inference Provider currently serving this exact
-# checkpoint - verified directly against Hugging Face's own API while
+# checkpoint, verified directly against Hugging Face's own API while
 # implementing this issue:
 #
 #   GET https://huggingface.co/api/models/aaditya/Llama3-OpenBioLLM-8B
@@ -22,7 +22,7 @@ DEFAULT_MODEL = "aaditya/Llama3-OpenBioLLM-8B"
 # Pinned explicitly rather than provider="auto" (huggingface_hub's
 # default): "auto" resolves to whichever provider HF's routing considers
 # fastest at request time, which could silently change to a different
-# backend if HF's provider landscape changes - a real problem for the
+# backend if HF's provider landscape changes, a real problem for the
 # benchmark reproducibility #89 depends on, where the same case run twice
 # should mean the same weights served the same way both times. Pinning
 # here means a change on Hugging Face's side (this provider dropping the
@@ -35,7 +35,7 @@ DEFAULT_TIMEOUT_S = 30.0
 # Generation parameters for OpenBioLLMProvider, chosen for structured
 # extraction rather than open-ended text generation. Kept as constants
 # here (not Settings/.env) since these describe how this one provider is
-# called, not deployment configuration - the same reasoning
+# called, not deployment configuration, the same reasoning
 # GeminiProvider.DEFAULT_TIMEOUT_MS already follows for its own timeout.
 #
 # #89's evaluation framework should record these exact values alongside
@@ -45,9 +45,9 @@ GENERATION_PARAMS = {
     # Large enough to hold a full ClinicalSummary JSON response (a
     # medications list, possible_inconsistencies, and a summary) for a
     # multi-document, multi-medication analysis without truncating
-    # mid-object. Not tuned empirically - a conservative upper bound.
+    # mid-object. Not tuned empirically; a conservative upper bound.
     "max_new_tokens": 1024,
-    # Greedy decoding - the closest thing to deterministic output this
+    # Greedy decoding, the closest thing to deterministic output this
     # API exposes. Appropriate for a structured-extraction task with one
     # intended correct answer per input, unlike creative generation.
     # temperature/top_p/top_k are deliberately left unset: they only
@@ -63,7 +63,7 @@ GENERATION_PARAMS = {
 
 class OpenBioLLMProvider(AIProvider):
     """OpenBioLLM (aaditya/Llama3-OpenBioLLM-8B), called through Hugging
-    Face's hosted Inference Providers - no local model weights, and no
+    Face's hosted Inference Providers, no local model weights, and no
     torch/transformers/accelerate in this application at all. See the
     module docstring-equivalent comments above for the exact provider
     and generation configuration, verified while implementing this issue.
@@ -84,7 +84,7 @@ class OpenBioLLMProvider(AIProvider):
 
     def _get_client(self) -> InferenceClient:
         # The key is checked here, not in __init__, so constructing this
-        # provider (for dependency injection) always succeeds - mirrors
+        # provider (for dependency injection) always succeeds; mirrors
         # GeminiProvider._get_client exactly, for the same reason: the
         # missing-credential case should surface as an AIProviderError
         # only when a summary is actually requested.
@@ -125,7 +125,7 @@ class OpenBioLLMProvider(AIProvider):
             self._log_failure(started_at, None, reason="empty response")
             raise AIProviderError("OpenBioLLM returned an empty or invalid response")
 
-        # Strictly syntactic cleanup only - see text_cleanup.py's own
+        # Strictly syntactic cleanup only; see text_cleanup.py's own
         # docstrings. Never repairs, never touches field content.
         # AISummaryService._parse_response is still the only thing that
         # validates the result against ClinicalSummary.

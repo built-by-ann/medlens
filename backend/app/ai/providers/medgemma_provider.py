@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "google/medgemma-27b-text-it"
 
 # The one Hugging Face Inference Provider currently serving this exact
-# checkpoint - verified directly against Hugging Face's own API while
+# checkpoint, verified directly against Hugging Face's own API while
 # implementing this issue:
 #
 #   GET https://huggingface.co/api/models/google/medgemma-27b-text-it
@@ -20,7 +20,7 @@ DEFAULT_MODEL = "google/medgemma-27b-text-it"
 #   -> {"featherless-ai": {"status": "live", "task": "conversational", ...}}
 #
 # It's the only MedGemma checkpoint with any live Inference Provider at
-# all - both 4B checkpoints (the original and 1.5) are multimodal and
+# all: both 4B checkpoints (the original and 1.5) are multimodal and
 # currently have no provider serving them ("This model isn't deployed by
 # any Inference Provider", per their own model pages), which is why this
 # text-only 27B checkpoint is the one integrated here rather than a 4B
@@ -63,7 +63,7 @@ GENERATION_PARAMS = {
     # Large enough to hold a full ClinicalSummary JSON response (a
     # medications list, possible_inconsistencies, and a summary) for a
     # multi-document, multi-medication analysis without truncating
-    # mid-object. Not tuned empirically - a conservative upper bound,
+    # mid-object. Not tuned empirically; a conservative upper bound,
     # matching OpenBioLLMProvider's own max_new_tokens.
     "max_tokens": 1024,
 }
@@ -71,7 +71,7 @@ GENERATION_PARAMS = {
 
 class MedGemmaProvider(AIProvider):
     """MedGemma (google/medgemma-27b-text-it), called through Hugging
-    Face's hosted Inference Providers - no local model weights, and no
+    Face's hosted Inference Providers, no local model weights, and no
     torch/transformers/accelerate in this application at all. See the
     module comments above for the exact provider, task, and generation
     configuration, verified while implementing this issue.
@@ -80,7 +80,7 @@ class MedGemmaProvider(AIProvider):
     generation: #89's benchmark needs to measure this model's actual,
     unassisted ability to produce the requested JSON shape, the same
     reasoning already applied to OpenBioLLMProvider. Output cleanup is
-    therefore strictly syntactic (see app/ai/providers/text_cleanup.py) -
+    therefore strictly syntactic (see app/ai/providers/text_cleanup.py);
     never a hidden repair layer.
 
     Requires the Hugging Face account behind HUGGINGFACE_API_KEY to have
@@ -104,7 +104,7 @@ class MedGemmaProvider(AIProvider):
 
     def _get_client(self) -> InferenceClient:
         # The key is checked here, not in __init__, so constructing this
-        # provider (for dependency injection) always succeeds - mirrors
+        # provider (for dependency injection) always succeeds; mirrors
         # GeminiProvider._get_client and OpenBioLLMProvider._get_client
         # exactly, for the same reason: the missing-credential case
         # should surface as an AIProviderError only when a summary is
@@ -148,7 +148,7 @@ class MedGemmaProvider(AIProvider):
             self._log_failure(started_at, None, reason="empty response")
             raise AIProviderError("MedGemma returned an empty or invalid response")
 
-        # Strictly syntactic cleanup only - see text_cleanup.py's own
+        # Strictly syntactic cleanup only; see text_cleanup.py's own
         # docstrings. Never repairs, never touches field content.
         # AISummaryService._parse_response is still the only thing that
         # validates the result against ClinicalSummary.
@@ -173,7 +173,7 @@ class MedGemmaProvider(AIProvider):
 
         A missing/empty choices list, or a message with no content, is
         treated the same way GeminiProvider/OpenBioLLMProvider already
-        treat an empty raw response - as "no usable content" (raised by
+        treat an empty raw response, as "no usable content" (raised by
         the caller as an AIProviderError), never a crash or a guess at
         what the model meant to say.
         """

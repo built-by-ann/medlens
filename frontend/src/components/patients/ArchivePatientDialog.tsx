@@ -17,7 +17,7 @@ interface ArchivePatientDialogProps {
  * focus trapping, Escape-to-dismiss, and focus restoration on close for
  * free. `onClose` fires for every close path (Escape, our own close() call
  * below, a future method="dialog" submit), so it's the single place that
- * syncs React state back to "closed" - the DOM and React state can't end
+ * syncs React state back to "closed"; the DOM and React state can't end
  * up disagreeing.
  */
 export function ArchivePatientDialog({

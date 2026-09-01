@@ -49,7 +49,7 @@ export function HomePage() {
         </h1>
         <p className="max-w-2xl text-lg text-muted">
           AI-powered medication reconciliation for clinical documentation. Upload notes, and MedLens
-          finds where they disagree - with the evidence to back it up.
+          finds where they disagree, with the evidence to back it up.
         </p>
         <div className="flex flex-wrap gap-3 pt-2">
           <Link
@@ -100,7 +100,7 @@ export function HomePage() {
 
       <p className="max-w-2xl text-xs text-muted">
         MedLens uses synthetic clinical data only and is intended for educational and portfolio
-        purposes - not for use with real patient information.
+        purposes, not for use with real patient information.
       </p>
     </div>
   )

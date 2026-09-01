@@ -51,7 +51,7 @@ def _fake_client_factory(fake_client, captured_init_kwargs):
 
 
 class _FakeHttpResponse:
-    """The minimal shape HfHubHTTPError.__init__ actually reads - a plain
+    """The minimal shape HfHubHTTPError.__init__ actually reads, a plain
     hand-written fake, not a real HTTP response.
     """
 
@@ -114,7 +114,7 @@ def test_generate_summary_passes_the_configured_model(monkeypatch):
 
 def test_client_is_constructed_with_the_pinned_featherless_ai_provider(monkeypatch):
     # Reproducibility requirement: provider="featherless-ai" is pinned
-    # explicitly, never "auto" - see medgemma_provider.py's own comment
+    # explicitly, never "auto"; see medgemma_provider.py's own comment
     # for why. This test fails if that pin is ever accidentally removed.
     fake_client = FakeInferenceClient(response=FakeChatCompletionOutput("{}"))
     init_kwargs = {}
@@ -246,7 +246,7 @@ def test_generate_summary_logs_failure_detail_server_side_only(monkeypatch, capl
     (record,) = [r for r in caplog.records if r.event == "ai_request_failed"]
     assert record.error_type == "RuntimeError"
     assert record.provider == "medgemma"
-    # The failure detail is server-side-log-only - it must never reach the
+    # The failure detail is server-side-log-only; it must never reach the
     # caller (see _safe_error_message, app/api/routes/analyses.py), which
     # only ever sees the generic wrapped message below.
     assert "connection reset" not in str(exc_info.value)
@@ -304,7 +304,7 @@ def test_generate_summary_logs_duration_ms_on_success(monkeypatch, caplog):
 # intact JSON object, and must never repair, complete, or otherwise alter
 # the JSON's own content. AISummaryService._parse_response
 # (ClinicalSummary.model_validate_json) remains the only thing that
-# validates the result - these tests only check what string this provider
+# validates the result; these tests only check what string this provider
 # hands back to it. This behavior itself lives in app/ai/providers/
 # text_cleanup.py (shared with OpenBioLLMProvider); these tests confirm
 # MedGemmaProvider actually applies it.
@@ -344,7 +344,7 @@ def test_strips_surrounding_prose_around_the_json_object(monkeypatch):
 
 def test_does_not_repair_malformed_json_inside_a_fence(monkeypatch):
     # Deliberately broken: an unbalanced bracket. Cleanup must not notice
-    # or fix this - only AISummaryService's real validation should ever
+    # or fix this; only AISummaryService's real validation should ever
     # reject it.
     broken = '```json\n{"medications": [}\n```'
     fake_client = FakeInferenceClient(response=FakeChatCompletionOutput(broken))
@@ -367,7 +367,7 @@ def test_does_not_repair_malformed_json_inside_a_fence(monkeypatch):
 def test_does_not_alter_field_content_inside_the_json_object(monkeypatch):
     # A cleanup step that touched field content, rather than only the
     # text surrounding the object, would be exactly the "hidden repair
-    # layer" this issue explicitly forbids - this test pins the entire
+    # layer" this issue explicitly forbids; this test pins the entire
     # object byte-for-byte, not just that it parses.
     payload = (
         '{"medications": [{"name": "Lisinopril", "dosage": "10 mg", "route": null, '

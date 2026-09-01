@@ -29,7 +29,7 @@ import {
 import type { ApiError } from '@/api/client'
 
 // Recent Analyses on the Overview page is a glance-and-go preview, not the
-// full browsable history (that's PatientAnalysesPage) - a small limit keeps
+// full browsable history (that's PatientAnalysesPage); a small limit keeps
 // this page from growing unbounded as a patient accumulates analyses over
 // time.
 const RECENT_ANALYSES_PREVIEW_LIMIT = 3

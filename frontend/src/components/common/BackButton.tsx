@@ -15,7 +15,7 @@ interface BackButtonProps {
  * version preferred real browser-history back navigation (`navigate(-1)`)
  * so the user would land exactly where they came from, but that meant the
  * actual destination depended on this session's in-app navigation path,
- * while the visible label always named the fixed logical parent - the two
+ * while the visible label always named the fixed logical parent; the two
  * silently disagreed whenever a user's path diverged from a straight
  * drill-down (e.g. Overview -> Documents -> "View Patient" back to
  * Overview -> clicking "Back to Patients" here actually landed back on

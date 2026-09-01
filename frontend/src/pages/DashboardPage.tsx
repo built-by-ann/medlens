@@ -20,7 +20,7 @@ import type { ApiError } from '@/api/client'
 import type { Patient } from '@/types/api'
 
 // A glance-and-go preview, not the full browsable list (that's
-// PatientsPage) - keeps the dashboard from growing unbounded as a provider
+// PatientsPage); keeps the dashboard from growing unbounded as a provider
 // accumulates patients over time.
 const RECENT_PATIENTS_LIMIT = 3
 
@@ -35,7 +35,7 @@ const RECENT_ANALYSES_LIMIT = 3
 // that: the Dashboard is meant to be a real workflow starting point, so
 // "New Analysis" now prompts for a patient (StartAnalysisDialog) and hands
 // off to the exact same CreateAnalysisPage every other entry point already
-// uses - nothing about analysis creation itself is duplicated here.
+// uses; nothing about analysis creation itself is duplicated here.
 export function DashboardPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -55,7 +55,7 @@ export function DashboardPage() {
   const isSearching = searchTerm.trim().length > 0
   const canStartAnalysis = !isLoading && !error && patients.length > 0
 
-  // Reuses the single list `usePatients()` already fetched - searching and
+  // Reuses the single list `usePatients()` already fetched; searching and
   // "recent patients" are two different views over the same data, never two
   // separate requests.
   const recentPatients = useMemo(
@@ -124,19 +124,19 @@ export function DashboardPage() {
       {/*
         Recent Patients and Recent Analyses sit side by side once there's
         room for two genuinely independent columns (lg: 1024px+); below
-        that - tablet portrait and phone - they stack in the same order a
+        that, tablet portrait and phone, they stack in the same order a
         screen reader already reads them in, so this is a purely visual
         rearrangement, not a second navigation path through the page.
       */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start">
         <section aria-labelledby="patients-heading" className="flex flex-col gap-4">
           {/*
-            Always rendered, even while loading/erroring/empty - matches
+            Always rendered, even while loading/erroring/empty; matches
             Recent Analyses' heading below, which is never conditional
             either. Previously this heading only appeared once patients
             existed, so the empty state ("No patients yet") started flush
             with the top of the grid row while Recent Analyses' card sat
-            below its own heading - the two columns' cards ended up at
+            below its own heading, so the two columns' cards ended up at
             different heights and looked misaligned. isSearching can only
             be true once PatientSearch is actually rendered (patients.length
             > 0, below), so this still reads "Recent patients" in every

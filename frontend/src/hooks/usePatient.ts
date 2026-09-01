@@ -13,7 +13,7 @@ interface UsePatientResult {
 /**
  * Fetches a single patient by id, for the Overview and Edit pages. A
  * not-found or not-owned patient surfaces through `error` exactly like any
- * other failed request - the backend's 404 detail ("Patient not found")
+ * other failed request; the backend's 404 detail ("Patient not found")
  * already reads correctly as an error message, so there is no separate
  * not-found UI state to build.
  */

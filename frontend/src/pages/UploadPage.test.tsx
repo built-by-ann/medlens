@@ -215,7 +215,7 @@ describe('UploadPage', () => {
 
     await screen.findByRole('heading', { name: /Upload documents for Jane Doe/ })
 
-    // Deliberately not named "Visit note" - that string is also the default
+    // Deliberately not named "Visit note"; that string is also the default
     // document type's display label, and this test wants to check the two
     // independently.
     await user.type(screen.getByLabelText('Title (optional)'), 'March visit')
@@ -297,7 +297,7 @@ describe('UploadPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Note text is required.')
     expect(editTextbox).toHaveAttribute('aria-invalid', 'true')
-    // The note was never saved with empty text - still editing, original
+    // The note was never saved with empty text; still editing, original
     // text never got cleared.
     expect(editTextbox).toHaveValue('')
   })

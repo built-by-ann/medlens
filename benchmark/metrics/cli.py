@@ -7,7 +7,7 @@ completed benchmark/runner (Issue #89) run: reads its manifest.json/
 predictions.jsonl, verifies the run is complete and the benchmark
 dataset hasn't changed since, computes every metric in scoring.py, and
 writes metrics.json into the same run directory. Never constructs or
-calls an AIProvider, and never reruns anything - this is a pure scoring
+calls an AIProvider, and never reruns anything; this is a pure scoring
 step over artifacts #89 already produced.
 """
 

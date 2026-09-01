@@ -5,7 +5,7 @@ from dataclasses import dataclass
 class StorageError(Exception):
     """Raised when a storage backend cannot complete an operation for any
     reason other than the object simply not existing (see
-    ObjectNotFoundError below) - a network failure, a permissions problem,
+    ObjectNotFoundError below): a network failure, a permissions problem,
     an unexpected response from the backend. Callers only need to handle
     this one exception type (plus ObjectNotFoundError) regardless of which
     backend is active, the same pattern AIProviderError already
@@ -24,7 +24,7 @@ class ObjectNotFoundError(StorageError):
 
 @dataclass
 class StoredObject:
-    """What download() returns - the object's bytes plus the content type
+    """What download() returns: the object's bytes plus the content type
     it was uploaded with, so a caller can stream it back with the correct
     Content-Type without needing a second lookup.
     """
@@ -40,7 +40,7 @@ class StorageService(ABC):
     only on this interface, never on a specific backend, so which backend
     is active is a matter of configuration (see app/storage/service.py),
     not conditionals scattered through upload/download/delete code. Mirrors
-    the AIProvider interface (app/ai/providers/base.py) - same shape, same
+    the AIProvider interface (app/ai/providers/base.py): same shape, same
     reasoning, applied to a different pluggable dependency.
     """
 
@@ -48,7 +48,7 @@ class StorageService(ABC):
     def upload(self, key: str, content: bytes, content_type: str) -> None:
         """Stores `content` under `key`. Callers are responsible for
         generating a key that does not already exist (see
-        app/services/clinical_document_service.py's key generation) -
+        app/services/clinical_document_service.py's key generation);
         implementations are not required to check for or reject an
         overwrite themselves.
 

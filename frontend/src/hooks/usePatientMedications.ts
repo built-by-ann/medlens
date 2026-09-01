@@ -26,7 +26,7 @@ interface UsePatientMedicationsResult {
  * actions that update local state directly on success (no refetch
  * needed). Re-fetches whenever patientId changes, so navigating from one
  * patient's medications to another's doesn't show stale data. Mutation
- * functions intentionally do not catch their own errors - callers (the add
+ * functions intentionally do not catch their own errors; callers (the add
  * form, or a card's own edit/delete state) own their own submitting/error
  * UI, mirroring how useAuthForm's onSubmit is used.
  *
@@ -98,7 +98,7 @@ export function usePatientMedications(patientId: number): UsePatientMedicationsR
 
   // A CSV import can create many medications at once, and the response is
   // only counts (no created medication objects to merge into local state
-  // the way addMedication does) - so success re-triggers the same
+  // the way addMedication does), so success re-triggers the same
   // fetch-on-mount effect used for retry(), rather than trying to
   // reconstruct the new rows locally.
   const importMedicationsCsv = useCallback(

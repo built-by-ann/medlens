@@ -11,7 +11,7 @@ import {
 
 // A CSV queued here is overwhelmingly a medication list (that's the only
 // CSV format this app's medication import already understands), so this
-// saves the provider a manual dropdown change in the common case - still
+// saves the provider a manual dropdown change in the common case; still
 // freely overridable via DocumentTypeSelect like any other file.
 const DEFAULT_CSV_DOCUMENT_TYPE = 'medication_list'
 
@@ -36,7 +36,7 @@ interface UseDocumentQueueResult {
  * Local, not-yet-persisted queue of files and pasted notes, shared by every
  * page that lets a provider stage clinical documents before they become
  * real ClinicalDocuments (UploadPage's "Save documents," and Issue #160's
- * unified CreateAnalysisPage) - extracted so the two pages can't drift
+ * unified CreateAnalysisPage); extracted so the two pages can't drift
  * apart on file-type validation, de-duplication, or edit/remove behavior.
  * Owns no network calls itself; callers decide what to do with the queue
  * (saveDocuments vs. navigating into analysis creation).

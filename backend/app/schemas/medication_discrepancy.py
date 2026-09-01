@@ -31,18 +31,18 @@ class ResolutionStatus(str, Enum):
 
 
 class ResolutionAction(str, Enum):
-    """What a provider actually did to resolve a discrepancy - distinct from
+    """What a provider actually did to resolve a discrepancy, distinct from
     ResolutionStatus (the coarser open/resolved/dismissed state that
     results), this is the specific operation, recorded for the audit trail.
     Which actions are valid for a given discrepancy depends on its
-    DiscrepancyType - enforced in resolve_discrepancy
+    DiscrepancyType, enforced in resolve_discrepancy
     (medication_discrepancy_service.py), not by this enum alone.
     """
 
     # Only valid when medication_id is None (nothing to update yet) -
     # creates a new Medication from the fields in DiscrepancyResolutionIn.
     ADD_MEDICATION = "add_medication"
-    # Only valid when medication_id is set - updates that Medication with
+    # Only valid when medication_id is set; updates that Medication with
     # whichever fields are present in DiscrepancyResolutionIn (the frontend
     # decides whether those were auto-suggested from the discrepancy's own
     # evidence or manually typed; the backend treats both identically).
@@ -61,12 +61,12 @@ class DiscrepancyResolutionIn(BaseModel):
     frequency: str | None = Field(default=None, min_length=1)
     status: str | None = Field(default=None, min_length=1)
     # Provider's own free-text rationale, independent of any medication
-    # field - always optional, never required to resolve a discrepancy.
+    # field, always optional, never required to resolve a discrepancy.
     note: str | None = Field(default=None, min_length=1)
 
 
 class ResolvedByResponse(BaseModel):
-    """Who resolved a discrepancy - a minimal, purpose-built view of User
+    """Who resolved a discrepancy, a minimal, purpose-built view of User
     for this one nested use (mirrors MedicationMentionEvidenceResponse
     below), not a general-purpose user schema.
     """

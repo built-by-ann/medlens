@@ -33,7 +33,7 @@ NOT_FOUND_DETAIL = "Clinical document not found"
 NO_STORED_FILE_DETAIL = "This document has no stored file to download"
 STORAGE_UNAVAILABLE_DETAIL = "File storage is currently unavailable"
 
-# The canonical content type for each upload route's file - not
+# The canonical content type for each upload route's file, not
 # file.content_type (what the client claims in the multipart request),
 # which is unreliable: browsers and API clients frequently send a generic
 # or empty value even for a file that otherwise passes this route's own
@@ -192,8 +192,8 @@ def upload_csv_document(
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
 ) -> ClinicalDocumentResponse:
-    # Issue #164: a CSV uploaded here becomes an ordinary clinical document -
-    # evidence for AI extraction and reconciliation - not a medication
+    # Issue #164: a CSV uploaded here becomes an ordinary clinical document,
+    # evidence for AI extraction and reconciliation, not a medication
     # import. Deliberately does not call parse_medication_csv /
     # create_medications_from_rows (app/services/medication_import_service.py,
     # the /patients/{id}/medications/import route in medications.py); the raw
@@ -245,7 +245,7 @@ def upload_csv_document(
 def _log_text_extracted(patient_id: int, file_type: str, extraction_started_at: float) -> None:
     # Issue #60: separate from document_uploaded's own duration_ms
     # (create_clinical_document_from_file, app/services/clinical_document_service.py),
-    # which covers storage upload + persistence - this is only the
+    # which covers storage upload + persistence; this is only the
     # text-extraction step (pypdf for PDF, a plain decode for txt/csv),
     # logged uniformly across all three formats so file_type is a
     # meaningful comparison dimension (e.g. PDF extraction is expected to
@@ -267,7 +267,7 @@ def _create_from_file(db, storage, patient, **kwargs) -> ClinicalDocumentRespons
     specific to *this file type* (wrong extension, bad encoding, no
     extractable text, ...) has already been checked by the caller before
     this runs, so the only new failure possible here is the storage
-    backend itself being unreachable - reported as a 503, the same status
+    backend itself being unreachable, reported as a 503, the same status
     `POST /patients/{patient_id}/analyses` already uses for "a configured
     external dependency failed" (see app/api/routes/analyses.py).
     """
@@ -312,7 +312,7 @@ def download_document(
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
 ) -> StreamingResponse:
-    """Streams the original uploaded file back from storage (Issue #58) -
+    """Streams the original uploaded file back from storage (Issue #58);
     never a redirect to a bucket URL, per that feature's "do not expose
     bucket URLs directly" requirement: the object's bytes pass through
     this process, and the client never learns anything about where or how
@@ -327,11 +327,11 @@ def download_document(
         ) from None
     except ObjectNotFoundError:
         # The database has a storage_key, but storage itself has nothing
-        # at it - a genuine inconsistency (e.g. an object deleted directly
+        # at it, a genuine inconsistency (e.g. an object deleted directly
         # from the bucket, outside this application). Reported to the
         # caller the same way as "no stored file," since that's true from
-        # their point of view either way, but logged - unlike the
-        # ordinary, expected case above - since it means something is
+        # their point of view either way, but logged, unlike the
+        # ordinary, expected case above, since it means something is
         # wrong that a provider can't fix by doing anything differently.
         logger.warning(
             "Document has a storage_key with no matching object in storage",

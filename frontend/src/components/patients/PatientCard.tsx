@@ -11,9 +11,9 @@ function formatDate(value: string): string {
 interface PatientCardProps {
   patient: Patient
   onArchiveRequest: (patient: Patient) => void
-  // Both default to false so PatientsPage's existing card - already
+  // Both default to false so PatientsPage's existing card, already
   // implicitly "active" for every row it shows, since the backend excludes
-  // archived patients from the default list - keeps its exact current
+  // archived patients from the default list, keeps its exact current
   // appearance. DashboardPage's Recent Patients cards opt into both, since
   // that view is meant to surface at a glance which patients were touched
   // most recently and how.

@@ -23,7 +23,7 @@ from typing import Any
 CASES_DIR = Path(__file__).resolve().parent / "cases"
 
 # Kept in sync with the "Required Demo Datasets" / category list in
-# benchmark/README.md - every case's tags must be drawn from this fixed
+# benchmark/README.md; every case's tags must be drawn from this fixed
 # vocabulary, the same way app/api/clinicalDocuments.ts's DOCUMENT_TYPES
 # is a fixed, deliberately-chosen vocabulary rather than free text. This
 # also doubles as the row list for the README's coverage table.
@@ -57,7 +57,7 @@ CASE_ID_PATTERN_ERROR = "case_id must look like 'BENCH-###'"
 class BenchmarkCase:
     """One benchmark case, loaded from a single JSON file.
 
-    `raw` is the original parsed JSON (dict) - kept alongside the typed
+    `raw` is the original parsed JSON (dict), kept alongside the typed
     fields so a future evaluation runner can round-trip it, or read a
     field this dataclass doesn't happen to surface, without needing this
     module to anticipate every future consumer's needs.
@@ -109,7 +109,7 @@ def _validate_medication_shape(medication: Any, index: int) -> list[str]:
 
 def validate_case(case: dict[str, Any], identifier: str) -> list[str]:
     """Returns a list of human-readable problems with `case` (empty if
-    none). Pure - never raises, never touches the filesystem, so it can
+    none). Pure; never raises, never touches the filesystem, so it can
     be reused against a case that hasn't been loaded from disk yet (e.g.
     a future authoring tool checking a case before it's saved).
     """
@@ -180,8 +180,8 @@ def validate_case(case: dict[str, Any], identifier: str) -> list[str]:
 
     # The strongest check: validate the whole `expected` object against
     # the real, production ClinicalSummary model (extra="forbid"), so a
-    # field this hand-written validator doesn't happen to check - or a
-    # typo'd/renamed field the real schema no longer has - fails loudly
+    # field this hand-written validator doesn't happen to check, or a
+    # typo'd/renamed field the real schema no longer has, fails loudly
     # here instead of silently drifting from the actual extraction
     # contract. Imported lazily, inside the function, so this module
     # stays importable (for tooling, or a case-authoring script) even in
@@ -252,7 +252,7 @@ def load_cases(cases_dir: Path | None = None) -> list[BenchmarkCase]:
 
 
 def coverage_by_tag(cases: list[BenchmarkCase]) -> dict[str, list[str]]:
-    """Maps each tag to the sorted list of case_ids carrying it - the
+    """Maps each tag to the sorted list of case_ids carrying it, the
     data behind benchmark/README.md's coverage table, kept computable
     rather than hand-maintained so it can never drift from the actual
     case files.

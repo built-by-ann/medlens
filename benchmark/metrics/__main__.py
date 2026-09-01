@@ -1,12 +1,12 @@
 """Entry point for `python -m benchmark.metrics` (Issue #90).
 
 See benchmark/runner/__main__.py's own docstring for why this exact
-sys.path insertion exists - identical reasoning, for a second top-level
+sys.path insertion exists; identical reasoning, for a second top-level
 CLI entry point. Nothing in benchmark/metrics/ directly imports from
 app.* (matching/scoring operate on the plain dicts predictions.jsonl
 already contains), but benchmark.loader.load_cases()'s own optional,
 lazy `from app.ai.schemas import ClinicalSummary` validation (see
-loader.py) only actually runs when backend/ is reachable - this ensures
+loader.py) only actually runs when backend/ is reachable; this ensures
 it is, the same way it already is under pytest (pytest.ini's
 pythonpath = .) and under `python -m benchmark.runner`.
 """

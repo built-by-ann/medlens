@@ -26,7 +26,7 @@ def upgrade() -> None:
     Every row on all three tables has had a populated patient_id since the
     Issue #128 backfill, and every route/service has read patient_id (not
     user_id) for ownership since Issues #129/#130. user_id has been dead
-    weight since then - this drops it, and tightens patient_id from
+    weight since then; this drops it, and tightens patient_id from
     nullable to NOT NULL now that it is the sole, always-populated
     ownership column. No data is lost: patient_id itself is untouched, and
     the dropped user_id values were never anything but a copy of
@@ -42,7 +42,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Restores user_id by re-deriving it from patient_id (via
     `patients.user_id`), the same value it always held, rather than adding
-    a NOT NULL column with nothing to populate it - Postgres would reject
+    a NOT NULL column with nothing to populate it; Postgres would reject
     that outright on any table with existing rows. patient_id is loosened
     back to nullable only after user_id is fully repopulated, matching the
     schema's shape immediately before this migration's upgrade() ran.

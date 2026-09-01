@@ -16,8 +16,8 @@ class S3StorageService(StorageService):
     Credentials: `access_key_id`/`secret_access_key` are passed through to
     boto3 only when both are provided (e.g. a developer's own AWS
     credentials, for testing against a real bucket locally). When either
-    is omitted - the expected production configuration, per this feature's
-    "use IAM credentials" requirement - boto3 falls back to its normal
+    is omitted, the expected production configuration, per this feature's
+    "use IAM credentials" requirement, boto3 falls back to its normal
     credential provider chain, which includes an IAM role attached to the
     EC2 instance. Neither this class nor its caller ever logs a credential
     value; boto3's own request signing never surfaces one to application
@@ -48,7 +48,7 @@ class S3StorageService(StorageService):
                 Key=key,
                 Body=content,
                 ContentType=content_type,
-                # Never public - this application has no use case for a
+                # Never public; this application has no use case for a
                 # publicly reachable object, and the bucket itself is
                 # expected to block public access at the account/bucket
                 # level regardless (see docs/deployment.md). ACL is set
@@ -57,12 +57,12 @@ class S3StorageService(StorageService):
                 ACL="private",
             )
         except ClientError as error:
-            # key and the botocore error code only - never content (never
+            # key and the botocore error code only; never content (never
             # passed to this method's own caller either) and never
             # credentials, which botocore signs into a request header, not
             # anything this exception carries (see the class docstring).
             # Not logged at all for a plain "object not found" (see
-            # download/delete below) - that's an expected, already-handled
+            # download/delete below); that's an expected, already-handled
             # condition, not an operational failure worth a log line.
             logger.warning(
                 "S3 upload failed",
@@ -120,7 +120,7 @@ class S3StorageService(StorageService):
         return StoredObject(content=content, content_type=content_type)
 
     def delete(self, key: str) -> None:
-        # S3's own DeleteObject is idempotent - it returns success whether
+        # S3's own DeleteObject is idempotent: it returns success whether
         # or not the key existed, unlike a typical filesystem `unlink`. A
         # HeadObject check first is what actually lets this class report
         # ObjectNotFoundError the same way LocalStorageService does, so

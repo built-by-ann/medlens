@@ -195,7 +195,7 @@ def test_get_document_by_id_succeeds(client):
 
 def test_document_response_includes_zero_analysis_count_when_unused(client):
     # Issue #146: analysis_count is derived from the analyses relationship
-    # (len(document.analyses)), not a stored column - a document that has
+    # (len(document.analyses)), not a stored column; a document that has
     # never been included in an analysis reports 0, not a missing field.
     token = _register_and_login(client, "analysiscountzero@example.com")
     patient = _create_patient(client, token).json()
@@ -215,7 +215,7 @@ def test_document_response_reflects_analysis_count_after_use_in_analyses(client,
     document = _create_document(client, token, patient["id"]).json()
 
     # Inserted directly rather than through POST /patients/{id}/analyses,
-    # since that route also calls a real AI provider - analysis_count only
+    # since that route also calls a real AI provider; analysis_count only
     # cares that the many-to-many link exists, not how the Analysis was
     # created.
     db_document = db.get(ClinicalDocument, document["id"])
@@ -674,7 +674,7 @@ def test_upload_csv_succeeds(client):
 def test_upload_csv_does_not_import_medications(client):
     # Issue #164: a CSV uploaded here must only ever become a clinical
     # document (evidence for AI extraction), never a direct medication
-    # import via app/services/medication_import_service.py - this is the
+    # import via app/services/medication_import_service.py; this is the
     # test that would catch the two pipelines being conflated.
     token = _register_and_login(client, "csvnoimport@example.com")
     patient = _create_patient(client, token).json()
@@ -773,7 +773,7 @@ def test_upload_csv_accepts_malformed_medication_csv_content(client):
 
 def test_create_document_from_pasted_text_has_no_storage_metadata(client):
     # A pasted-text document (POST .../clinical-documents, no file
-    # involved) never has anything to store - content_type/file_size_bytes
+    # involved) never has anything to store; content_type/file_size_bytes
     # must stay null, not e.g. default to 0/"text/plain".
     token = _register_and_login(client, "pastedmetadata@example.com")
     patient = _create_patient(client, token).json()
@@ -823,7 +823,7 @@ def test_upload_csv_persists_storage_metadata(client):
 def test_response_never_exposes_a_storage_key(client):
     # storage_key is an internal backend/S3 implementation detail (Issue
     # #58's own "do not expose bucket URLs directly" / "never make
-    # uploaded files public" intent extended to the key itself) - the
+    # uploaded files public" intent extended to the key itself); the
     # frontend has no legitimate use for it, only for the fact that a file
     # exists (file_size_bytes is not null) and the /download route.
     token = _register_and_login(client, "nokeyexposed@example.com")
@@ -918,7 +918,7 @@ def test_download_returns_404_for_another_users_patient(client):
 def test_delete_document_removes_it_from_storage_too(client):
     # Proven at the storage boundary, not just the database: after
     # deleting a document that had an uploaded file, the file is genuinely
-    # gone, not merely unreachable through this API - re-uploading a new
+    # gone, not merely unreachable through this API; re-uploading a new
     # document is what confirms the storage backend itself was actually
     # invoked, not just the database row.
     token = _register_and_login(client, "deletewithstorage@example.com")
@@ -939,7 +939,7 @@ def test_delete_document_removes_it_from_storage_too(client):
 
 
 def test_delete_document_with_no_stored_file_succeeds(client):
-    # A pasted-text document has no storage object to clean up - deletion
+    # A pasted-text document has no storage object to clean up; deletion
     # must not fail just because there's nothing there to delete.
     token = _register_and_login(client, "deletenostorage@example.com")
     patient = _create_patient(client, token).json()
@@ -975,7 +975,7 @@ def test_upload_txt_returns_503_when_storage_backend_is_unavailable(client):
 
 
 def test_download_returns_404_when_the_stored_object_is_missing_from_storage(client):
-    # A dangling reference - the database has a storage_key, but the
+    # A dangling reference: the database has a storage_key, but the
     # object it points to isn't actually in storage (e.g. deleted directly
     # from the bucket, outside this application). Must be reported the
     # same way as "no file was ever uploaded," not as a storage failure.
