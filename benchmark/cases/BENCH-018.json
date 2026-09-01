@@ -1,0 +1,16 @@
+{
+  "case_id": "BENCH-018",
+  "tags": [
+    "irrelevant_text"
+  ],
+  "difficulty": "easy",
+  "description": "A radiology report with no medication content.",
+  "input_notes": [
+    "Radiology Report - Chest X-ray: Findings: Lungs are clear without focal consolidation, effusion, or pneumothorax. Cardiomediastinal silhouette is normal in size and contour. No acute osseous abnormality. Impression: No acute cardiopulmonary process."
+  ],
+  "expected": {
+    "medications": [],
+    "possible_inconsistencies": [],
+    "summary": "This chest X-ray report contains no medication information; findings are unremarkable."
+  }
+}

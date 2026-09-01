@@ -1,0 +1,45 @@
+{
+  "case_id": "BENCH-012",
+  "tags": [
+    "route_variety",
+    "straightforward_list"
+  ],
+  "difficulty": "medium",
+  "description": "Three medications with three distinct, less common administration routes.",
+  "input_notes": [
+    "Medications reviewed: Nitroglycerin patch 0.4 mg/hr applied transdermally each morning and removed at bedtime; Clindamycin 1% gel applied topically to the face twice daily; Insulin glargine 20 units injected subcutaneously at bedtime."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Nitroglycerin",
+        "dosage": "0.4 mg/hr",
+        "route": "transdermally",
+        "frequency": "applied each morning and removed at bedtime",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Clindamycin",
+        "dosage": "1%",
+        "route": "topically",
+        "frequency": "twice daily",
+        "status": null,
+        "notes": "applied to the face",
+        "source_note": 1
+      },
+      {
+        "name": "Insulin glargine",
+        "dosage": "20 units",
+        "route": "subcutaneously",
+        "frequency": "at bedtime",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Three medications with different administration routes are documented: a transdermal nitroglycerin patch, topical clindamycin gel, and subcutaneous insulin glargine."
+  }
+}

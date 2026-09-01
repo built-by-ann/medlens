@@ -1,0 +1,40 @@
+{
+  "case_id": "BENCH-015",
+  "tags": [
+    "brand_vs_generic",
+    "multi_document",
+    "reconciliation_relevant"
+  ],
+  "difficulty": "hard",
+  "description": "The same medication named by brand in one note and by generic name in another; both literal names must be preserved rather than merged into one canonical name.",
+  "input_notes": [
+    "Cardiology note: Continue Lipitor 40 mg oral nightly for hyperlipidemia.",
+    "Pharmacy dispensing record: Filled atorvastatin 40 mg tablets, oral, once nightly, 30-day supply."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Lipitor",
+        "dosage": "40 mg",
+        "route": "oral",
+        "frequency": "nightly",
+        "status": "continue",
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "atorvastatin",
+        "dosage": "40 mg",
+        "route": "oral",
+        "frequency": "once nightly",
+        "status": null,
+        "notes": "30-day supply",
+        "source_note": 2
+      }
+    ],
+    "possible_inconsistencies": [
+      "The cardiology note refers to Lipitor and the pharmacy record refers to atorvastatin; these are the same medication under its brand and generic names respectively, both at 40 mg nightly."
+    ],
+    "summary": "The same medication is referred to as Lipitor in the cardiology note and atorvastatin in the pharmacy record, both dosed at 40 mg nightly."
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "case_id": "BENCH-020",
+  "tags": [
+    "mentioned_not_active"
+  ],
+  "difficulty": "medium",
+  "description": "Medications named only in a family-history statement, not the patient's own.",
+  "input_notes": [
+    "Family history: Mother has type 2 diabetes managed with insulin; father has hypertension treated with lisinopril. No other significant family medical history."
+  ],
+  "expected": {
+    "medications": [],
+    "possible_inconsistencies": [],
+    "summary": "Family history includes a mother with insulin-treated diabetes and a father with lisinopril-treated hypertension; these are not the patient's own medications."
+  }
+}

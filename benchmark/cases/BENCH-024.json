@@ -1,0 +1,45 @@
+{
+  "case_id": "BENCH-024",
+  "tags": [
+    "straightforward_list",
+    "prn"
+  ],
+  "difficulty": "easy",
+  "description": "A home medication list mixing scheduled medications with one as-needed medication.",
+  "input_notes": [
+    "Home Medications:\n- Levothyroxine 100 mcg oral once daily, taken on an empty stomach\n- Omeprazole 20 mg oral once daily before breakfast\n- Acetaminophen 500 mg oral every 6 hours as needed for pain"
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Levothyroxine",
+        "dosage": "100 mcg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": "taken on an empty stomach",
+        "source_note": 1
+      },
+      {
+        "name": "Omeprazole",
+        "dosage": "20 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": "before breakfast",
+        "source_note": 1
+      },
+      {
+        "name": "Acetaminophen",
+        "dosage": "500 mg",
+        "route": "oral",
+        "frequency": "every 6 hours as needed",
+        "status": null,
+        "notes": "for pain",
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Home medications include levothyroxine, omeprazole, and as-needed acetaminophen for pain, each with specific administration timing noted."
+  }
+}

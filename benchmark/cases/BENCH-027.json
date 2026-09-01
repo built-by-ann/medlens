@@ -1,0 +1,28 @@
+{
+  "case_id": "BENCH-027",
+  "tags": [
+    "abbreviation",
+    "prn",
+    "route_variety"
+  ],
+  "difficulty": "medium",
+  "description": "A PRN sublingual medication with explicit safety instructions folded into the note.",
+  "input_notes": [
+    "Patient carries Nitroglycerin 0.4 mg SL prn chest pain, may repeat every 5 minutes up to 3 doses; advised to call 911 if pain does not resolve after first dose."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Nitroglycerin",
+        "dosage": "0.4 mg",
+        "route": "SL",
+        "frequency": "prn, may repeat every 5 minutes up to 3 doses",
+        "status": null,
+        "notes": "for chest pain; call 911 if pain does not resolve after first dose",
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Patient carries sublingual nitroglycerin for chest pain, to be used as needed with instructions to seek emergency care if pain persists."
+  }
+}

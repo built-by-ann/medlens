@@ -1,0 +1,27 @@
+{
+  "case_id": "BENCH-004",
+  "tags": [
+    "narrative_text",
+    "discontinued"
+  ],
+  "difficulty": "easy",
+  "description": "A discontinued medication with a stated reason, no dose/route/frequency given.",
+  "input_notes": [
+    "Hydrochlorothiazide was discontinued last month because of worsening gout symptoms, and the patient has not resumed it since."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Hydrochlorothiazide",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": "discontinued",
+        "notes": "discontinued due to worsening gout symptoms",
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Hydrochlorothiazide was discontinued last month due to worsening gout and has not been restarted."
+  }
+}

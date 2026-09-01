@@ -1,0 +1,59 @@
+{
+  "case_id": "BENCH-023",
+  "tags": [
+    "status_change",
+    "discontinued",
+    "multi_document",
+    "reconciliation_relevant"
+  ],
+  "difficulty": "hard",
+  "description": "A medication documented as active in primary care is discontinued by a specialist for a stated clinical reason, with a replacement medication started.",
+  "input_notes": [
+    "Primary care visit: Patient with chronic kidney disease stage 3 reports ongoing knee pain, managed with Naproxen 500 mg oral twice daily as needed. Referring to nephrology given a recent rise in creatinine.",
+    "Nephrology consultation: Naproxen use is likely contributing to declining renal function and should be discontinued immediately; recommend Acetaminophen 500 mg oral as needed for pain control instead. Continue Losartan 50 mg oral once daily for renal protection."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Naproxen",
+        "dosage": "500 mg",
+        "route": "oral",
+        "frequency": "twice daily as needed",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Naproxen",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": "discontinued",
+        "notes": "should be discontinued due to declining renal function",
+        "source_note": 2
+      },
+      {
+        "name": "Acetaminophen",
+        "dosage": "500 mg",
+        "route": "oral",
+        "frequency": "as needed",
+        "status": null,
+        "notes": "for pain control, replacing naproxen",
+        "source_note": 2
+      },
+      {
+        "name": "Losartan",
+        "dosage": "50 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": "continue",
+        "notes": "for renal protection",
+        "source_note": 2
+      }
+    ],
+    "possible_inconsistencies": [
+      "Naproxen is documented as active in the primary care note but is recommended for discontinuation in the nephrology note due to declining renal function."
+    ],
+    "summary": "Naproxen, used for knee pain, is being discontinued per nephrology recommendation due to declining kidney function, with acetaminophen suggested in its place; losartan continues for renal protection."
+  }
+}

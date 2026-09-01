@@ -1,0 +1,16 @@
+{
+  "case_id": "BENCH-017",
+  "tags": [
+    "irrelevant_text"
+  ],
+  "difficulty": "easy",
+  "description": "An orthopedic follow-up note with no medications mentioned at all.",
+  "input_notes": [
+    "Orthopedic follow-up: Right knee range of motion improved to 0-120 degrees since the last visit. Incision well healed with no signs of infection. Patient ambulating with a single cane and tolerating physical therapy well. Continue home exercise program and follow up in six weeks for repeat X-ray."
+  ],
+  "expected": {
+    "medications": [],
+    "possible_inconsistencies": [],
+    "summary": "This orthopedic follow-up note documents improved knee range of motion and healing progress, with no medications mentioned."
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "case_id": "BENCH-002",
+  "tags": [
+    "straightforward_list",
+    "missing_fields",
+    "prn"
+  ],
+  "difficulty": "easy",
+  "description": "A bullet-point medication list where route and frequency are not stated for every entry.",
+  "input_notes": [
+    "Medication list, updated by patient:\n- Losartan 50 mg, once daily\n- Simvastatin 40 mg\n- Ibuprofen 200 mg, as needed for headache"
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Losartan",
+        "dosage": "50 mg",
+        "route": null,
+        "frequency": "once daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Simvastatin",
+        "dosage": "40 mg",
+        "route": null,
+        "frequency": null,
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Ibuprofen",
+        "dosage": "200 mg",
+        "route": null,
+        "frequency": "as needed",
+        "status": null,
+        "notes": "for headache",
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Patient-reported medication list includes losartan, simvastatin, and as-needed ibuprofen for headache; route and frequency are not fully specified for two of the three medications."
+  }
+}

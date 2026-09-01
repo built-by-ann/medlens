@@ -1,0 +1,27 @@
+{
+  "case_id": "BENCH-014",
+  "tags": [
+    "brand_vs_generic",
+    "narrative_text"
+  ],
+  "difficulty": "easy",
+  "description": "A medication referred to only by its brand name; ground truth preserves that name as written rather than mapping it to the generic.",
+  "input_notes": [
+    "Patient continues Glucophage 850 mg by mouth twice daily for type 2 diabetes, tolerating it well with meals."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Glucophage",
+        "dosage": "850 mg",
+        "route": "by mouth",
+        "frequency": "twice daily",
+        "status": "continues",
+        "notes": "taken with meals",
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Patient is taking Glucophage 850 mg by mouth twice daily with meals for type 2 diabetes."
+  }
+}
