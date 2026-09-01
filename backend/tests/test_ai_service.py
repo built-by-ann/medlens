@@ -4,7 +4,10 @@ import logging
 import pytest
 
 from app.ai.providers.base import AIProvider, AIProviderError
-from app.ai.service import AISummaryService
+from app.ai.providers.gemini_provider import GeminiProvider
+from app.ai.providers.openbiollm_provider import OpenBioLLMProvider
+from app.ai.service import AISummaryService, build_ai_summary_service
+from app.core.config import Settings
 
 VALID_RESPONSE = json.dumps(
     {
@@ -293,3 +296,48 @@ def test_summarize_logs_validation_failure_without_leaking_the_raw_response(capl
     assert "anxious and depressed" not in caplog.text
     assert "50mg" not in caplog.text
     assert response not in caplog.text
+
+
+# --- AI_PROVIDER selection (build_ai_summary_service) -------------------
+#
+# build_ai_summary_service takes an explicit Settings instance (mirroring
+# app/storage/service.py's build_storage_service) specifically so these
+# tests need no monkeypatching of the module-level settings singleton -
+# every case below constructs its own Settings(...) directly.
+
+
+def _settings(**overrides) -> Settings:
+    base = {
+        "_env_file": None,
+        "database_url": "postgresql://u:p@localhost:5432/db",
+        "jwt_secret_key": "unit-test-secret",
+    }
+    base.update(overrides)
+    return Settings(**base)
+
+
+def test_build_ai_summary_service_defaults_to_gemini():
+    service = build_ai_summary_service(_settings())
+
+    assert isinstance(service._provider, GeminiProvider)
+
+
+def test_build_ai_summary_service_selects_gemini_explicitly():
+    service = build_ai_summary_service(_settings(ai_provider="gemini", gemini_model="g-test"))
+
+    assert isinstance(service._provider, GeminiProvider)
+    assert service._provider.model == "g-test"
+
+
+def test_build_ai_summary_service_selects_openbiollm():
+    service = build_ai_summary_service(
+        _settings(
+            ai_provider="openbiollm",
+            huggingface_api_key="hf-fake-key",
+            openbiollm_model="aaditya/Llama3-OpenBioLLM-8B",
+        )
+    )
+
+    assert isinstance(service._provider, OpenBioLLMProvider)
+    assert service._provider.model == "aaditya/Llama3-OpenBioLLM-8B"
+    assert service._provider._api_key == "hf-fake-key"

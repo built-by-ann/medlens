@@ -6,8 +6,9 @@ from pydantic import ValidationError
 from app.ai.prompts import build_summary_prompt
 from app.ai.providers.base import AIProvider, AIProviderError
 from app.ai.providers.gemini_provider import GeminiProvider
+from app.ai.providers.openbiollm_provider import OpenBioLLMProvider
 from app.ai.schemas import ClinicalSummary
-from app.core.config import settings
+from app.core.config import Settings, settings
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,38 @@ class AISummaryService:
             raise AIProviderError("AI response failed validation") from error
 
 
-def get_ai_summary_service() -> AISummaryService:
-    provider = GeminiProvider(api_key=settings.gemini_api_key, model=settings.gemini_model)
+def build_ai_summary_service(app_settings: Settings) -> AISummaryService:
+    """The single place ai_provider is ever branched on - mirrors
+    app/storage/service.py's build_storage_service exactly, for the same
+    reason: everywhere else in the application depends only on the
+    AIProvider interface, never on this choice. Settings.ai_provider is
+    validated at startup (Settings' own model_validator) to guarantee this
+    function never has to raise a config error itself - the else branch
+    below is unreachable in a running application, kept only as defense
+    in depth.
+
+    Taking app_settings as a parameter, rather than reading the module-
+    level settings directly, is what makes this testable with a
+    constructed Settings(...) instance with no monkeypatching required.
+    """
+    if app_settings.ai_provider == "openbiollm":
+        provider: AIProvider = OpenBioLLMProvider(
+            api_key=app_settings.huggingface_api_key,
+            model=app_settings.openbiollm_model,
+        )
+    elif app_settings.ai_provider == "gemini":
+        provider = GeminiProvider(
+            api_key=app_settings.gemini_api_key, model=app_settings.gemini_model
+        )
+    else:
+        raise ValueError(f"Unsupported AI_PROVIDER: {app_settings.ai_provider!r}")
 
     return AISummaryService(provider)
+
+
+def get_ai_summary_service() -> AISummaryService:
+    """FastAPI dependency - routes declare a dependency on this function,
+    never on a concrete provider class, so swapping the active provider
+    is a configuration change (AI_PROVIDER), not a code change.
+    """
+    return build_ai_summary_service(settings)

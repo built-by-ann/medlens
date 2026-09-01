@@ -12,4 +12,5 @@ pyjwt
 python-multipart
 pypdf
 google-genai
+huggingface_hub
 boto3

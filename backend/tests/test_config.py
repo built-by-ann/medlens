@@ -115,3 +115,49 @@ def test_settings_rejects_an_unrecognized_storage_backend(monkeypatch):
 
     with pytest.raises(ValueError, match="STORAGE_BACKEND"):
         Settings(_env_file=None)
+
+
+# --- ai_provider validation (Issue #87) ---
+
+
+def test_settings_defaults_to_gemini_with_no_ai_provider_configured(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_provider == "gemini"
+
+
+def test_settings_accepts_openbiollm_as_ai_provider(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("AI_PROVIDER", "openbiollm")
+    monkeypatch.setenv("HUGGINGFACE_API_KEY", "hf-fake-key")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_provider == "openbiollm"
+    assert settings.huggingface_api_key == "hf-fake-key"
+    assert settings.openbiollm_model == "aaditya/Llama3-OpenBioLLM-8B"
+
+
+def test_settings_accepts_openbiollm_without_a_huggingface_api_key(monkeypatch):
+    # Mirrors gemini_api_key's own optionality: selecting a provider with
+    # no credential configured yet must not block the application from
+    # starting - only the first actual analysis request should fail, with
+    # a clear AIProviderError, exactly like Gemini's missing-key case.
+    _base_env(monkeypatch)
+    monkeypatch.setenv("AI_PROVIDER", "openbiollm")
+    monkeypatch.delenv("HUGGINGFACE_API_KEY", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.huggingface_api_key is None
+
+
+def test_settings_rejects_an_unsupported_ai_provider(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("AI_PROVIDER", "chatgpt")
+
+    with pytest.raises(ValueError, match="AI_PROVIDER"):
+        Settings(_env_file=None)

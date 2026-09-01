@@ -119,7 +119,7 @@ Response
 
 Description
 
-Reports application status, database connectivity, and the deployment configuration already loaded into memory (version, environment, storage backend, AI provider/model) - a single place to check "what is this instance actually running as" without SSHing in. Deliberately lightweight: the only I/O it performs is one `SELECT 1` against the database this process already holds a connection pool for. It never contacts Gemini, never makes an S3 request, and never performs any other network call - `storage`/`ai` below are read directly from configuration already in memory (and, for `ai.provider`, a plain class attribute), not by constructing a real storage backend or AI provider client.
+Reports application status, database connectivity, and the deployment configuration already loaded into memory (version, environment, storage backend, AI provider/model) - a single place to check "what is this instance actually running as" without SSHing in. Deliberately lightweight: the only I/O it performs is one `SELECT 1` against the database this process already holds a connection pool for. It never contacts Gemini or Hugging Face, never makes an S3 request, and never performs any other network call - `storage`/`ai` below are read directly from configuration already in memory (and, for `ai.provider`, a plain class attribute), not by constructing a real storage backend or AI provider client.
 
 Request
 
@@ -177,8 +177,7 @@ Field notes:
 - `version` - `Settings.app_version` (`APP_VERSION` environment variable, defaults to `"1.0.0"`). A plain configured string, not derived from git or the Docker image tag.
 - `environment` - `Settings.app_env` (`APP_ENV`), the same value that gates CORS behavior elsewhere (see `POST /auth/register` and friends).
 - `storage.backend` - `Settings.storage_backend` (`STORAGE_BACKEND`), `"local"` or `"s3"` - see `docs/deployment.md`'s File Storage (S3) section. Never `"s3"` because a request to S3 actually succeeded; it's the *configured* backend, reported without contacting it.
-- `ai.provider` - always `"gemini"` today (`GeminiProvider.name`, `app/ai/providers/gemini_provider.py`) - there is currently only one `AIProvider` implementation wired into the application (see `docs/design-decisions.md`, Decision 15), so this reflects which class is compiled in rather than a separate selectable setting.
-- `ai.model` - `Settings.gemini_model` (`GEMINI_MODEL`), the same value `POST /patients/{patient_id}/analyses` uses for real AI calls. Reporting it here requires no Gemini API key and makes no request to Gemini - unlike using AI features themselves, which fail with a `503` and a different message when the key is missing (see that endpoint above).
+- `ai.provider` / `ai.model` - reflect `Settings.ai_provider` (`AI_PROVIDER`, `"gemini"` or `"openbiollm"`): `"gemini"` / `Settings.gemini_model`, or `"openbiollm"` / `Settings.openbiollm_model`. Reporting either requires no credential and makes no request to Gemini or Hugging Face - unlike using AI features themselves, which fail with a `503` and a different message when the active provider's credential is missing (see that endpoint above).
 - `timestamp` - UTC, formatted like `2026-08-04T02:15:30Z`.
 
 ---

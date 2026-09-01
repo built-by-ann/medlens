@@ -384,11 +384,13 @@ Cons
 
 **Decision**
 
-Define an abstract `AIProvider` interface with a single method, `generate_summary(prompt: str) -> str`, and one exception type, `AIProviderError`, that every provider raises for any failure. `AISummaryService` depends only on this interface. The first implementation, `GeminiProvider`, is the only concrete class that imports the Gemini SDK.
+Define an abstract `AIProvider` interface with a single method, `generate_summary(prompt: str) -> str`, and one exception type, `AIProviderError`, that every provider raises for any failure. `AISummaryService` depends only on this interface. `GeminiProvider` and `OpenBioLLMProvider` are the two concrete implementations; each is the only class that imports its own provider's SDK/client library.
 
 **Reasoning**
 
-The project intends to evaluate multiple providers, including OpenAI, MedGemma, and OpenBioLLM. If business logic called a specific SDK directly, adding or swapping a provider would mean changing the service layer itself. Behind a single interface, a new provider is a new class that implements one method and translates its own SDK's exceptions into `AIProviderError`. Nothing else in the application needs to change, and nothing else needs to know which SDK is in use.
+The project intends to evaluate multiple providers, including MedGemma and OpenBioLLM. If business logic called a specific SDK directly, adding or swapping a provider would mean changing the service layer itself. Behind a single interface, a new provider is a new class that implements one method and translates its own SDK's exceptions into `AIProviderError`. Nothing else in the application needs to change, and nothing else needs to know which SDK is in use.
+
+OpenBioLLM is the first real test of this design, not just a hypothetical one. It is called through Hugging Face's hosted Inference Providers rather than a locally loaded model - a materially different integration shape from Gemini's SDK client (a different transport, a different credential type, no equivalent of Gemini's structured-output enforcement, requiring a syntactic-only cleanup step before the shared `ClinicalSummary` validation runs). None of that difference reached `AISummaryService`, the prompt template, or the API route - it is entirely contained inside `OpenBioLLMProvider` itself, exactly as this decision predicted.
 
 See `docs/ai.md`'s Provider Abstraction and Extending the AI Layer sections for the full implementation reference and the exact steps to add a new provider.
 
