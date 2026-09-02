@@ -16,10 +16,10 @@ from app.schemas.medication_discrepancy import (
 from app.services.medication_service import create_medication, update_medication
 
 # discrepancy_type values (see DiscrepancyType) for which "add_medication"
-# makes sense - only when there is genuinely no Medication row yet.
+# makes sense, only when there is genuinely no Medication row yet.
 _ADD_ELIGIBLE_TYPES = {DiscrepancyType.MISSING_FROM_MEDICATION_LIST}
 
-# Every other type has a Medication row already (medication_id is set) - the
+# Every other type has a Medication row already (medication_id is set); the
 # resolution is updating it, not creating a new one. This includes
 # unsupported_medication_list_entry: there's no mention to add *from*, but a
 # provider can still hand-correct the existing Medication ("edit manually").
@@ -35,7 +35,7 @@ _UPDATE_ELIGIBLE_TYPES = {
 
 class InvalidResolutionActionError(Exception):
     """Raised when the requested action doesn't make sense for this specific
-    discrepancy - either the wrong action for its discrepancy_type, or
+    discrepancy: either the wrong action for its discrepancy_type, or
     (defensively) a medication_id/mention state that shouldn't be possible
     given that type. The route layer turns this into a 400.
     """
@@ -43,7 +43,7 @@ class InvalidResolutionActionError(Exception):
 
 class DiscrepancyAlreadyResolvedError(Exception):
     """Raised when resolving a discrepancy whose resolution_status is no
-    longer "open" - resolving is one-way; there is no "re-open" action, so a
+    longer "open"; resolving is one-way; there is no "re-open" action, so a
     second resolve attempt is always a conflict, not an update. The route
     layer turns this into a 409.
     """
@@ -117,17 +117,17 @@ def resolve_discrepancy(
 ) -> MedicationDiscrepancy:
     """Applies a provider's resolution to one discrepancy: for an accept
     action, creates or updates the relevant Medication (reusing
-    medication_service's own create_medication/update_medication - this
+    medication_service's own create_medication/update_medication; this
     function never builds or writes a Medication row itself, so there is
     exactly one place medication mutation logic lives); for dismiss, no
     Medication is touched at all. Either way, records who/when/what/why on
-    the discrepancy itself - the audit trail - and leaves every field the
+    the discrepancy itself, the audit trail, and leaves every field the
     original reconciliation run computed (title, ai_explanation,
     expected_value, observed_value, ...) untouched, so the record of what
     was originally found is never lost, only added to.
 
     Raises DiscrepancyAlreadyResolvedError if resolution_status isn't
-    "open" (resolving is one-way - there is no un-resolve), and
+    "open" (resolving is one-way; there is no un-resolve), and
     InvalidResolutionActionError if the action doesn't fit this
     discrepancy's type or current medication linkage. Callers commit; this
     function only adds/stages changes, matching create_medication_discrepancies'
@@ -174,7 +174,7 @@ def resolve_discrepancy(
                 status=resolution_in.status,
                 # Distinguishes reconciliation-created medications from ones
                 # entered directly (source="patient_reported") or imported
-                # via CSV - source is a freeform string (app/schemas/medication.py),
+                # via CSV; source is a freeform string (app/schemas/medication.py),
                 # so this is a project convention, not an enforced enum.
                 source="reconciliation",
             ),
@@ -205,7 +205,7 @@ def resolve_discrepancy(
             db, patient.id, discrepancy.medication_id, MedicationUpdate(**update_fields)
         )
         # update_medication scopes its lookup by patient_id (app/services/medication_service.py)
-        # and returns None rather than raising if nothing matched - defensively
+        # and returns None rather than raising if nothing matched; defensively
         # checked here since silently marking the discrepancy resolved while
         # actually changing nothing would be a worse failure than a clear 400.
         if updated_medication is None:

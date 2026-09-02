@@ -1,0 +1,54 @@
+{
+  "case_id": "BENCH-016",
+  "tags": [
+    "abbreviation",
+    "straightforward_list"
+  ],
+  "difficulty": "hard",
+  "description": "A dense, abbreviation-heavy medication list in the shorthand clinicians actually write.",
+  "input_notes": [
+    "Medications: HCTZ 25mg PO qd. ASA 81mg PO qd. MVI PO qd. Colace 100mg PO bid prn constipation."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "HCTZ",
+        "dosage": "25mg",
+        "route": "PO",
+        "frequency": "qd",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "ASA",
+        "dosage": "81mg",
+        "route": "PO",
+        "frequency": "qd",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "MVI",
+        "dosage": null,
+        "route": "PO",
+        "frequency": "qd",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Colace",
+        "dosage": "100mg",
+        "route": "PO",
+        "frequency": "bid prn",
+        "status": null,
+        "notes": "for constipation",
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Four medications are documented using standard clinical abbreviations: HCTZ, aspirin (ASA), a multivitamin (MVI), and docusate (Colace) taken as needed for constipation."
+  }
+}

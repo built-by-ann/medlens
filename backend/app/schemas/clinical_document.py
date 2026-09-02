@@ -22,16 +22,16 @@ class ClinicalDocumentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime | None
     # Issue #146: how many analyses this document has been included in
-    # (len(document.analyses), a property on the model, not a column - see
+    # (len(document.analyses), a property on the model, not a column; see
     # Analysis.document_count for the identical pattern).
     analysis_count: int = Field(ge=0)
     # Issue #58: file_size_bytes and content_type are null for a
     # pasted-text document (no file was ever uploaded) and for any
-    # document created before this field existed - see
+    # document created before this field existed; see
     # app/models/clinical_document.py. storage_key itself is deliberately
     # NOT exposed here: it's an internal storage backend detail (a local
     # path or an S3 key), never a value the frontend needs or should be
-    # able to construct a request around - "is there a file to download"
+    # able to construct a request around: "is there a file to download"
     # is answered by whether file_size_bytes is null, not by inspecting
     # the key.
     content_type: str | None
@@ -40,7 +40,7 @@ class ClinicalDocumentResponse(BaseModel):
 
 class ClinicalDocumentSummaryResponse(BaseModel):
     """Minimal document identity for citing a source document as supporting
-    evidence elsewhere (Issue #46 - see MedicationMentionEvidenceResponse in
+    evidence elsewhere (Issue #46; see MedicationMentionEvidenceResponse in
     schemas/medication_discrepancy.py), without exposing the full raw_text
     a citation has no need for.
     """

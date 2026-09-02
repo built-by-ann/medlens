@@ -13,7 +13,7 @@ export interface AuthContextValue {
   // Dashboard) without a full page reload or a second GET /users/me.
   setUser: (user: User) => void
   // Set when the session was ended for the user rather than by their own
-  // choice (a 401 on an already-authenticated request - the token expired
+  // choice (a 401 on an already-authenticated request: the token expired
   // or was revoked). Previously this was a fully silent logout with no
   // explanation; LoginPage reads this once, shows it, then clears it, so
   // it's a one-time message rather than something that could reappear.

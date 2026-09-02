@@ -32,7 +32,7 @@ describe('validateProfileForm', () => {
     })
   })
 
-  it('accepts a blank username - it means "leave unset", not an error', () => {
+  it('accepts a blank username, it means "leave unset", not an error', () => {
     expect(validateProfileForm({ ...validValues, username: '' })).toEqual({})
   })
 

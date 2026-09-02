@@ -1,0 +1,36 @@
+{
+  "case_id": "BENCH-025",
+  "tags": [
+    "narrative_text",
+    "missing_fields"
+  ],
+  "difficulty": "medium",
+  "description": "A self-started supplement of unknown dose alongside a fully-specified prescription medication, in the same sentence-driven note.",
+  "input_notes": [
+    "During today's visit, the patient mentioned she recently started taking a fish oil supplement on her own for cholesterol, though she wasn't sure of the dose. She also confirmed she is still taking her Metoprolol 25 mg twice daily as prescribed."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Fish oil",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": "started",
+        "notes": "started by patient on her own for cholesterol, dose unknown",
+        "source_note": 1
+      },
+      {
+        "name": "Metoprolol",
+        "dosage": "25 mg",
+        "route": null,
+        "frequency": "twice daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Patient recently self-started a fish oil supplement of unknown dose for cholesterol and continues metoprolol 25 mg twice daily as prescribed."
+  }
+}

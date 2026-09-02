@@ -24,7 +24,7 @@ class Patient(Base):
     user = relationship("User", back_populates="patients")
 
     # Medication, ClinicalDocument, and Analysis are owned exclusively
-    # through Patient - none of them has a user_id of their own (see
+    # through Patient; none of them has a user_id of their own (see
     # docs/data-model.md).
     medications = relationship("Medication", back_populates="patient")
     clinical_documents = relationship("ClinicalDocument", back_populates="patient")

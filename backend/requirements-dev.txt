@@ -4,3 +4,4 @@ httpx
 reportlab
 ruff==0.16.1
 moto[s3]
+matplotlib==3.11.1

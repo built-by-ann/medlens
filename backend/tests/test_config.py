@@ -74,7 +74,7 @@ def test_settings_accepts_s3_when_fully_configured(monkeypatch):
 def test_settings_accepts_s3_without_explicit_credentials(monkeypatch):
     # The production-recommended configuration (an IAM role attached to
     # the EC2 instance, this feature's own "use IAM credentials"
-    # requirement) supplies no static access key at all - Settings must
+    # requirement) supplies no static access key at all; Settings must
     # not require one.
     _base_env(monkeypatch)
     monkeypatch.setenv("STORAGE_BACKEND", "s3")
@@ -115,3 +115,91 @@ def test_settings_rejects_an_unrecognized_storage_backend(monkeypatch):
 
     with pytest.raises(ValueError, match="STORAGE_BACKEND"):
         Settings(_env_file=None)
+
+
+# --- ai_provider validation (Issue #87) ---
+
+
+def test_settings_defaults_to_gemini_with_no_ai_provider_configured(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_provider == "gemini"
+
+
+def test_settings_accepts_openbiollm_as_ai_provider(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("AI_PROVIDER", "openbiollm")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_provider == "openbiollm"
+    assert settings.openbiollm_model == "openbiollm-llama3-instruct"
+
+
+def test_settings_accepts_openbiollm_with_no_credential_of_any_kind(monkeypatch):
+    # Unlike Gemini, openbiollm requires no credential at all - it's
+    # served by a local Ollama daemon, not a hosted API. Selecting it
+    # must not block the application from starting even with nothing
+    # else configured; only the first actual analysis request fails, with
+    # a clear AIProviderError, if Ollama isn't reachable.
+    _base_env(monkeypatch)
+    monkeypatch.setenv("AI_PROVIDER", "openbiollm")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_provider == "openbiollm"
+
+
+def test_settings_default_ollama_base_url_is_localhost(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ollama_base_url == "http://localhost:11434"
+
+
+def test_settings_accepts_a_configured_ollama_base_url(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ollama_base_url == "http://host.docker.internal:11434"
+
+
+def test_settings_rejects_an_unsupported_ai_provider(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("AI_PROVIDER", "chatgpt")
+
+    with pytest.raises(ValueError, match="AI_PROVIDER"):
+        Settings(_env_file=None)
+
+
+# --- ai_provider validation, medgemma (Issue #88) ---
+
+
+def test_settings_accepts_medgemma_as_ai_provider(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("AI_PROVIDER", "medgemma")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_provider == "medgemma"
+    assert settings.medgemma_model == "hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M"
+
+
+def test_settings_accepts_medgemma_with_no_credential_of_any_kind(monkeypatch):
+    # Mirrors openbiollm's own optionality (see above): selecting a
+    # provider with nothing else configured must not block the
+    # application from starting; only the first actual analysis request
+    # fails, with a clear AIProviderError, if Ollama isn't reachable.
+    _base_env(monkeypatch)
+    monkeypatch.setenv("AI_PROVIDER", "medgemma")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_provider == "medgemma"

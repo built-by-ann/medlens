@@ -106,7 +106,7 @@ def test_generate_summary_logs_api_error_message_server_side_only(monkeypatch, c
     # 404 "model not found" is the real shape of the production incident
     # this logging change was made for: the model in DEFAULT_MODEL/
     # GEMINI_MODEL retired server-side, and the only thing the previous log
-    # line recorded was error_type=ClientError - not enough to diagnose
+    # line recorded was error_type=ClientError, not enough to diagnose
     # without reproducing the request by hand.
     fake_models = FakeModels(
         error=genai_errors.ClientError(
@@ -125,13 +125,13 @@ def test_generate_summary_logs_api_error_message_server_side_only(monkeypatch, c
 
     assert "models/gemini-2.0-flash is not found" in caplog.text
     # error_type is a structured field (extra=), not part of the message
-    # text caplog.text renders - see app/core/logging_config.py's
+    # text caplog.text renders; see app/core/logging_config.py's
     # ALLOWED_FIELDS/JSONFormatter for why call sites pass fields this way
     # rather than baking them into the message string.
     (record,) = [r for r in caplog.records if r.event == "ai_request_failed"]
     assert record.error_type == "ClientError"
     assert record.provider == "gemini"
-    # The API's failure description is server-side-log-only - it must never
+    # The API's failure description is server-side-log-only; it must never
     # reach the caller (see _safe_error_message, app/api/routes/analyses.py),
     # which only ever sees the generic wrapped message below.
     assert "models/gemini-2.0-flash is not found" not in str(exc_info.value)
@@ -197,7 +197,7 @@ def test_generate_summary_raises_on_none_response_text(monkeypatch):
 #
 # duration_ms on ai_request_succeeded/ai_request_failed already existed
 # before this issue (added when this file's other logging assertions were
-# written, Issue #59) - these two tests are new *coverage* for that
+# written, Issue #59); these two tests are new *coverage* for that
 # already-correct behavior, not a code change, per Issue #60's own
 # "Leverage existing request timing... avoid duplicated instrumentation."
 

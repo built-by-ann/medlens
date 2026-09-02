@@ -69,7 +69,7 @@ describe('PatientBreadcrumb', () => {
   it('separates every crumb with a decorative slash hidden from assistive tech', () => {
     renderBreadcrumb([{ label: 'Analyses', to: '/patients/7/analyses' }])
 
-    // Patients / Jane Doe / Analyses - 3 crumbs, 2 separators.
+    // Patients / Jane Doe / Analyses: 3 crumbs, 2 separators.
     const separators = screen.getAllByText('/')
     expect(separators).toHaveLength(2)
     separators.forEach((separator) => expect(separator).toHaveAttribute('aria-hidden', 'true'))

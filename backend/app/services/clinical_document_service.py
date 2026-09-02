@@ -19,7 +19,7 @@ CSV_FILE_TYPE = "csv"
 
 class DocumentHasNoStoredFileError(Exception):
     """Raised by get_clinical_document_content when a document exists but
-    has no storage_key - a pasted-text document (never had a file to
+    has no storage_key: a pasted-text document (never had a file to
     begin with) or one created before Issue #58. Distinct from the
     document itself not existing, which callers already handle as a 404
     via get_clinical_document returning None.
@@ -28,7 +28,7 @@ class DocumentHasNoStoredFileError(Exception):
 
 def _build_storage_key(patient_id: int, file_name: str) -> str:
     # A uuid4 segment, not the filename alone, is what actually satisfies
-    # "never overwrite an existing object" - two uploads of the same
+    # "never overwrite an existing object": two uploads of the same
     # filename (even for the same patient) get different keys. The
     # filename is kept in the key purely so a key is still human-legible
     # when browsing a bucket directly; it plays no role in uniqueness.
@@ -72,13 +72,13 @@ def create_clinical_document_from_file(
     """Uploads the original file to storage, then persists the document
     with the resulting metadata. Text extraction (producing `raw_text`)
     already happened in the caller (app/api/routes/clinical_documents.py)
-    before this is called - a PDF/CSV/TXT that fails extraction never
+    before this is called; a PDF/CSV/TXT that fails extraction never
     reaches here, so this function never uploads a file for a document
     that wouldn't have been created anyway.
 
     started_at (Issue #60): a time.monotonic() reading from the top of the
     calling route handler, used only to compute the document_uploaded log's
-    duration_ms below - the "document upload processing" span covers the
+    duration_ms below: the "document upload processing" span covers the
     whole route (validation, extraction, this function), not just the part
     inside this function, so the timer has to start before this function is
     even called. Optional (defaults to now, i.e. ~0ms) so this function
@@ -105,7 +105,7 @@ def create_clinical_document_from_file(
         db.add(document)
         db.commit()
     except Exception:
-        # The upload above already succeeded - without this, a DB failure
+        # The upload above already succeeded; without this, a DB failure
         # here would leave an object in storage with no ClinicalDocument
         # row ever pointing to it. Best-effort: a secondary failure while
         # cleaning up is logged, not raised, so the caller still sees the
@@ -167,8 +167,8 @@ def get_clinical_document_content(
     db: Session, storage: StorageService, patient_id: int, document_id: int
 ) -> tuple[ClinicalDocument, StoredObject] | None:
     """Used by the download route. Returns None only when the document
-    itself doesn't exist or doesn't belong to this patient - the same
-    "not found" case get_clinical_document already handles - so the route
+    itself doesn't exist or doesn't belong to this patient, the same
+    "not found" case get_clinical_document already handles, so the route
     can keep using its existing 404 for that. A document that exists but
     has no stored file (storage_key is null) raises
     DocumentHasNoStoredFileError instead, a distinct, more specific
@@ -203,8 +203,8 @@ def delete_clinical_document(
         extra={"event": "document_deleted", "patient_id": patient_id, "document_id": document_id},
     )
 
-    # The database record - what the user actually sees as "this document
-    # is gone" - is already correctly deleted at this point, regardless of
+    # The database record, what the user actually sees as "this document
+    # is gone", is already correctly deleted at this point, regardless of
     # what happens below. Deleting the storage object second, and treating
     # its failure as non-fatal, means the worst case is a harmless orphaned
     # object in storage (a cleanup/cost concern), never a document that

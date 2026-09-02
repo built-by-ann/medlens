@@ -34,6 +34,21 @@ services:
       # here, in infra/.env, without touching application code or rebuilding
       # any image - just a container restart.
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      # Which AIProvider get_ai_summary_service() constructs (app/ai/
+      # service.py) - "gemini" (the default), "openbiollm", or "medgemma".
+      # Settings' own startup validation fails the container immediately,
+      # with a clear error, if this is set to anything else.
+      AI_PROVIDER: ${AI_PROVIDER:-gemini}
+      # Only used when AI_PROVIDER=openbiollm or AI_PROVIDER=medgemma -
+      # both are served by a local Ollama daemon, not a hosted API, so
+      # neither requires a credential. host.docker.internal is the
+      # address Docker Desktop (Mac/Windows) maps to the host machine
+      # from inside a container - Ollama itself is expected to run on the
+      # host, not as a service in this compose file. See docs/deployment.md
+      # and docs/ai.md.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OPENBIOLLM_MODEL: ${OPENBIOLLM_MODEL:-openbiollm-llama3-instruct}
+      MEDGEMMA_MODEL: ${MEDGEMMA_MODEL:-hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M}
       # development (the default) auto-allows any localhost/127.0.0.1
       # origin for CORS (see app/main.py's configure_cors) - relevant only
       # to `npm run dev`'s Vite dev server, which talks to this container

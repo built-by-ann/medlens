@@ -23,7 +23,7 @@ interface ThemeProviderProps {
 /**
  * Owns the active palette and mode, and applies their combination to the
  * document. A theme is switched by setting `data-theme="{palette}-{mode}"`
- * on `<html>` - every color in the app is a CSS custom property keyed off
+ * on `<html>`; every color in the app is a CSS custom property keyed off
  * that attribute (see src/styles/themes.css), so this component never needs
  * to know what any theme actually looks like.
  *
@@ -40,7 +40,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     () => getStoredMode() ?? 'system',
   )
   // Tracks only the OS preference itself, kept up to date by a single,
-  // permanent matchMedia subscription below - not by an effect reacting to
+  // permanent matchMedia subscription below, not by an effect reacting to
   // `modePreference`. `resolvedMode` is then a plain derived value, never
   // its own piece of state that needs syncing.
   const [systemMode, setSystemMode] = useState<Mode>(() => resolveSystemMode())

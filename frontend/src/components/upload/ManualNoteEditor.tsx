@@ -16,7 +16,7 @@ export function ManualNoteEditor({ onAdd }: ManualNoteEditorProps) {
   const [title, setTitle] = useState('')
   const [rawText, setRawText] = useState('')
   const [documentType, setDocumentType] = useState(DEFAULT_DOCUMENT_TYPE)
-  // Only set once Add note is clicked with empty text - matching every
+  // Only set once Add note is clicked with empty text, matching every
   // other form in the app (validate on submit, not disable the button with
   // no explanation of why).
   const [showTextError, setShowTextError] = useState(false)

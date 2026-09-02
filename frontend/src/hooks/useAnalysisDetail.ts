@@ -9,7 +9,7 @@ interface UseAnalysisDetailResult {
   error: string | null
   retry: () => void
   // Splices one resolved discrepancy back into analysis.medication_discrepancies
-  // in place - mirrors usePatientMedications' editMedication (update local
+  // in place; mirrors usePatientMedications' editMedication (update local
   // state directly on success, no refetch) rather than re-fetching the
   // whole analysis just to pick up one row's new resolution fields.
   replaceDiscrepancy: (updated: MedicationDiscrepancy) => void
@@ -18,7 +18,7 @@ interface UseAnalysisDetailResult {
 /**
  * Fetches a single analysis's metadata for AnalysisDetailPage. A not-found
  * or not-owned analysis (or patient) surfaces through the normal `error`
- * state, matching usePatient - the backend's own "Analysis not found" /
+ * state, matching usePatient; the backend's own "Analysis not found" /
  * "Patient not found" detail already reads correctly as an error message.
  */
 export function useAnalysisDetail(patientId: number, analysisId: number): UseAnalysisDetailResult {

@@ -1,0 +1,88 @@
+{
+  "case_id": "BENCH-029",
+  "tags": [
+    "multi_document",
+    "straightforward_list",
+    "missing_fields",
+    "reconciliation_relevant"
+  ],
+  "difficulty": "hard",
+  "description": "Three terse, realistic documentation sources (a phone call, a med-pass record, and a pharmacist call-back) that vary in specificity, including colloquial patient language.",
+  "input_notes": [
+    "Telephone triage note: Patient called regarding refill for her blood pressure pill and her water pill. States both still working well.",
+    "Nursing home medication pass record: Lisinopril - given. Furosemide - given. Metformin - given.",
+    "Pharmacist call-back note: Confirmed with patient - Lisinopril and Furosemide refills sent to pharmacy as requested. Patient did not mention Metformin during this call."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "blood pressure pill",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": null,
+        "notes": "patient's own term; specific medication not stated",
+        "source_note": 1
+      },
+      {
+        "name": "water pill",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": null,
+        "notes": "patient's own term; specific medication not stated",
+        "source_note": 1
+      },
+      {
+        "name": "Lisinopril",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": null,
+        "notes": null,
+        "source_note": 2
+      },
+      {
+        "name": "Furosemide",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": null,
+        "notes": null,
+        "source_note": 2
+      },
+      {
+        "name": "Metformin",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": null,
+        "notes": null,
+        "source_note": 2
+      },
+      {
+        "name": "Lisinopril",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": null,
+        "notes": null,
+        "source_note": 3
+      },
+      {
+        "name": "Furosemide",
+        "dosage": null,
+        "route": null,
+        "frequency": null,
+        "status": null,
+        "notes": null,
+        "source_note": 3
+      }
+    ],
+    "possible_inconsistencies": [
+      "Note 1 refers to a 'blood pressure pill' and a 'water pill' without naming them, which likely correspond to Lisinopril and Furosemide named in notes 2 and 3, though this cannot be confirmed from the text alone.",
+      "Metformin appears in the medication pass record (note 2) but is not mentioned in the pharmacist's call-back note (note 3)."
+    ],
+    "summary": "Across three brief documentation sources, Lisinopril, Furosemide, and Metformin are referenced with varying specificity, including two colloquial patient references that could not be matched to exact drug names from the text alone."
+  }
+}

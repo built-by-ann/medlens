@@ -19,7 +19,7 @@ def get_user_by_email(db: Session, email: str) -> User | None:
 
 
 def get_user_by_username(db: Session, username: str) -> User | None:
-    """Case-insensitive by design (Issue #191) - matches the functional
+    """Case-insensitive by design (Issue #191); matches the functional
     unique index on lower(username) the Alembic migration creates, so this
     lookup and the database's own constraint can never disagree about
     whether a username is taken.
@@ -81,7 +81,7 @@ def update_user(db: Session, user: User, user_in: UserUpdate) -> User:
     if "username" in updates:
         new_username = updates["username"]
         # Re-casing your own username (e.g. "jdoe" -> "JDoe") is not a
-        # conflict with yourself - only compare case-insensitively against
+        # conflict with yourself; only compare case-insensitively against
         # *other* users, the same rule get_user_by_username enforces.
         already_this_user = (
             new_username is not None

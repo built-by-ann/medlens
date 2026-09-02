@@ -14,7 +14,7 @@ interface UsePatientsResult {
 /**
  * Fetches the current provider's active patients. Archiving updates local
  * state directly on success (no refetch needed), mirroring usePatientMedications.
- * archivePatient intentionally does not catch its own errors - the caller
+ * archivePatient intentionally does not catch its own errors; the caller
  * (the archive confirmation dialog's owning page) owns its own
  * submitting/error UI, the same division of responsibility useAuthForm's
  * onSubmit uses.

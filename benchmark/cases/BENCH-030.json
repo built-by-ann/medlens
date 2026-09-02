@@ -1,0 +1,18 @@
+{
+  "case_id": "BENCH-030",
+  "tags": [
+    "irrelevant_text",
+    "mentioned_not_active",
+    "narrative_text"
+  ],
+  "difficulty": "hard",
+  "description": "A note dominated by non-medication content, ending in a negated supplement mention.",
+  "input_notes": [
+    "Nutrition consultation: Patient met with a dietitian to discuss a low-sodium, diabetic-friendly meal plan. Portion sizes and carbohydrate counting were reviewed in detail. Patient reports good understanding of the material and plans to keep a food diary. She denies using any over-the-counter supplements or herbal products at this time."
+  ],
+  "expected": {
+    "medications": [],
+    "possible_inconsistencies": [],
+    "summary": "This nutrition consultation note covers dietary counseling with no current medications; the patient denies using any supplements or herbal products."
+  }
+}

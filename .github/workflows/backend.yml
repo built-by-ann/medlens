@@ -5,16 +5,26 @@ name: Backend CI
 # rest of this repo already branches (feature/* -> develop -> main) and
 # mirrors frontend.yml's own trigger shape. Frontend-only or docs-only
 # changes don't trigger this at all.
+#
+# benchmark/** is included too (Issue #89): the benchmark dataset/loader
+# and the evaluation runner both live there, not under backend/, but
+# backend/tests/test_benchmark_dataset.py and
+# backend/tests/test_evaluation_runner.py exercise them directly (see
+# benchmark/README.md) - without this, a change to benchmark/ alone
+# (e.g. a runner bug fix, or a case file edit) would never trigger the
+# one job whose tests would actually catch a regression in it.
 on:
   push:
     branches: [main, develop]
     paths:
       - "backend/**"
+      - "benchmark/**"
       - ".github/workflows/backend.yml"
   pull_request:
     branches: [main, develop]
     paths:
       - "backend/**"
+      - "benchmark/**"
       - ".github/workflows/backend.yml"
 
 jobs:

@@ -83,7 +83,7 @@ def test_two_requests_get_two_different_request_ids(client):
 
 def test_health_endpoint_is_excluded_from_request_summary_logging(client, caplog):
     # Polled continuously by Docker's own healthcheck (every 10s, see
-    # infra/docker-compose.yml) - a log line for it would be pure noise,
+    # infra/docker-compose.yml); a log line for it would be pure noise,
     # never a signal worth an operator's attention.
     caplog.set_level(logging.INFO)
 
@@ -114,7 +114,7 @@ def test_request_summary_includes_user_id_for_an_authenticated_request(client, c
 
 def test_request_id_is_shared_by_every_log_line_within_the_same_request(client, caplog):
     # Proves context propagation, not just that the middleware's own final
-    # line has a request_id - a domain-event log fired *during* route
+    # line has a request_id; a domain-event log fired *during* route
     # handling (login_succeeded) should carry the exact same request_id as
     # the request-summary line that wraps it.
     caplog.set_level(logging.INFO)
@@ -152,7 +152,7 @@ def test_request_summary_includes_client_ip(client, caplog):
 @pytest.mark.parametrize("path", ["/", "/health"])
 def test_every_response_still_succeeds_regardless_of_logging(client, path):
     # A sanity check that adding logging never changed a single response's
-    # actual behavior - the core "preserve all existing functionality"
+    # actual behavior; the core "preserve all existing functionality"
     # requirement, checked directly rather than only inferred from every
     # other (unrelated) test file still passing.
     response = client.get(path)
@@ -165,7 +165,7 @@ def test_every_response_still_succeeds_regardless_of_logging(client, path):
 
 def test_application_startup_is_logged(caplog):
     # TestClient only enters the FastAPI lifespan (app/main.py) when used
-    # as a context manager - the shared `client` fixture (conftest.py)
+    # as a context manager; the shared `client` fixture (conftest.py)
     # deliberately doesn't do that (each test gets its own plain client),
     # so this test drives its own to actually observe startup logging.
     caplog.set_level(logging.INFO)
@@ -202,7 +202,7 @@ def test_unhandled_exception_is_logged_with_a_traceback_but_the_response_stays_g
     # raise_server_exceptions=False: Starlette's TestClient otherwise
     # re-raises the original exception in-process for debugging even
     # though ServerErrorMiddleware (where configure_exception_handling's
-    # handler actually runs - it wraps *every* middleware, including our
+    # handler actually runs; it wraps *every* middleware, including our
     # own request-logging one) already converted it to a real 500
     # response. Disabling that here is what lets this test observe the
     # actual client-facing response, the same as a real deployment would.
@@ -220,7 +220,7 @@ def test_unhandled_exception_is_logged_with_a_traceback_but_the_response_stays_g
 
     assert response.status_code == 500
     assert response.json() == {"detail": "Internal server error"}
-    # Nothing about the real exception - message, type, or traceback -
+    # Nothing about the real exception, message, type, or traceback,
     # ever reaches the client (this issue's "Do not expose stack traces or
     # sensitive information to API clients" requirement).
     assert "simulated database outage" not in response.text
@@ -240,7 +240,7 @@ def test_a_realistic_session_never_logs_credentials_tokens_or_clinical_content(c
     # Exercises the exact flow Issue #59's "never log" list is about:
     # register (password), login (issues a JWT used as a Bearer token on
     # every later request), then upload a clinical document whose text
-    # names a specific, identifiable condition and medication - the kind
+    # names a specific, identifiable condition and medication, the kind
     # of content that must never leave the database and reach a log line,
     # no matter which layer (auth, request logging, document service)
     # touches the request on its way through.

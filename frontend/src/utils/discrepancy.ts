@@ -26,7 +26,7 @@ export function discrepancySeverityLabel(severity: DiscrepancySeverity): string 
 
 // Lower is more severe, so findings can be sorted highest-severity-first.
 // There is no "critical" tier: DiscrepancySeverity (backend enum, unchanged
-// by this issue) only ever has high/medium/low - see docs/frontend.md for
+// by this issue) only ever has high/medium/low; see docs/frontend.md for
 // why a 4th tier was not invented to match the issue's example wording.
 export const DISCREPANCY_SEVERITY_RANK: Record<DiscrepancySeverity, number> = {
   high: 0,

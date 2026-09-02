@@ -8,13 +8,13 @@ import { describe, expect, it } from 'vitest'
 // this project's Tailwind Vite plugin intercepts every .css import (raw
 // query suffix included) to run it through Tailwind's own compiler, which
 // returns empty content for a file that's nothing but custom-property
-// declarations with no utility classes to generate - there's nothing
+// declarations with no utility classes to generate; there's nothing
 // Tailwind-relevant in this file for it to produce. `@types/node` is a
 // real devDependency already (just excluded from tsconfig.app.json's
 // browser-scoped `types` array), so the reference directive above scopes
 // Node's ambient types to only this one test file rather than the whole
 // app. This is a plain-text regression check over the source CSS, not a
-// rendered component - the guarantee it protects ("Completed" and every
+// rendered component; the guarantee it protects ("Completed" and every
 // high/medium/low severity badge look identical no matter which of the 27
 // themes is active) is a property of the token *values* themselves, which
 // only exist in this file; reading it directly is the only way to assert

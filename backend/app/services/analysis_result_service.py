@@ -24,14 +24,14 @@ def persist_analysis_result(
     mentions, the inconsistencies, the reconciliation findings below, and
     the completed Analysis fields) or, if an exception is raised before that
     commit (including one raised by reconciliation itself), the caller's
-    surrounding try/except rolls back and none of it is - see
+    surrounding try/except rolls back and none of it is; see
     app/api/routes/analyses.py.
 
     As of Issue #148, medication reconciliation runs here too, immediately
     after the AI-extracted medications are known: reconcile_ai_extracted_medications
     persists them as real MedicationMention rows and runs the existing
     reconciliation engine against the patient's medication list, producing
-    real MedicationDiscrepancy rows and severity counts - rather than the
+    real MedicationDiscrepancy rows and severity counts, rather than the
     hardcoded zeros this function used before that engine was wired in. See
     docs/architecture.md for the full pipeline.
     """

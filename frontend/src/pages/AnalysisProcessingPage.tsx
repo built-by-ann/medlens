@@ -101,7 +101,7 @@ export function AnalysisProcessingPage() {
   }, [submission, submit])
 
   // Guards the automatic mount-time submission below against firing more
-  // than once per mount - most notably React Strict Mode's dev-only
+  // than once per mount, most notably React Strict Mode's dev-only
   // double-invoke of mount effects, which (unlike a merely wasted re-fetch)
   // would otherwise re-run the real upload-and-create-analysis sequence a
   // second time, producing a duplicate ClinicalDocument and a duplicate
@@ -113,7 +113,7 @@ export function AnalysisProcessingPage() {
     if (hasStartedSubmissionRef.current) return
     hasStartedSubmissionRef.current = true
 
-    // Intentionally run once on mount only - retries are user-triggered.
+    // Intentionally run once on mount only; retries are user-triggered.
     void runSubmission()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

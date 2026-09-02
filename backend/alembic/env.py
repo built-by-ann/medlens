@@ -4,7 +4,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 # Registers every model on Base.metadata (see target_metadata below) purely
-# via import side effect - nothing here references the module directly.
+# via import side effect; nothing here references the module directly.
 import app.models  # noqa: F401
 from alembic import context
 from app.db.session import Base
@@ -19,11 +19,11 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # alembic.ini's sqlalchemy.url is a hardcoded localhost:5432 connection
-# string - correct only when alembic runs directly on a developer's host,
+# string, correct only when alembic runs directly on a developer's host,
 # where the local dev Postgres really is reachable at localhost. Inside a
 # container (see backend/Dockerfile, run as part of the image's startup
 # command), Postgres is a separate service reachable by its compose service
-# name, not localhost - DATABASE_URL (already required by Settings, see
+# name, not localhost; DATABASE_URL (already required by Settings, see
 # app/core/config.py) is the same value the application itself connects
 # with, so alembic overriding its own static default with it when present
 # keeps both environments working from the one file, with no separate

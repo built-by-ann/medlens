@@ -19,7 +19,7 @@ def read_current_user(current_user: User = Depends(get_current_user)) -> UserRes
     return current_user
 
 
-# Also how a user changes their username (Issue #191) - PATCH /users/me
+# Also how a user changes their username (Issue #191); PATCH /users/me
 # already handles partial profile updates (email, name), and username is
 # just another optional profile field on the same UserUpdate schema, not a
 # credential change, so it belongs here rather than a dedicated endpoint.

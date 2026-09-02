@@ -17,7 +17,7 @@ export function SettingsPage() {
           <p className="text-sm text-muted">
             Dedicated accessibility controls (e.g. reduced motion, text size) are planned for a
             future release. In the meantime, the High Contrast theme under Appearance already
-            targets AAA contrast - see docs/frontend.md.
+            targets AAA contrast; see docs/frontend.md.
           </p>
         </Card>
 

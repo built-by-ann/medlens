@@ -67,7 +67,7 @@ export function CreateAnalysisPage() {
 
   function handleExistingDocumentsQueryChange(value: string) {
     setExistingDocumentsQuery(value)
-    // A new search should always start collapsed - showing every match right
+    // A new search should always start collapsed; showing every match right
     // away for a broad query would recreate the same content overload
     // Show more exists to avoid.
     setShowAllExisting(false)

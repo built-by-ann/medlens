@@ -17,7 +17,7 @@ def test_health_check_ok(client):
 
 def test_health_check_returns_every_documented_field(client):
     # docs/api.md's documented shape, checked field-by-field rather than
-    # with a single `==` against the whole body - version/environment/etc.
+    # with a single `==` against the whole body; version/environment/etc.
     # depend on whatever Settings actually resolves to in this process, so
     # this only pins the ones that are fixed by test setup and the shape
     # of the rest.
@@ -93,11 +93,37 @@ def test_health_check_reports_gemini_as_the_ai_provider(client):
     assert response.json()["ai"]["provider"] == "gemini"
 
 
+def test_health_check_reports_openbiollm_as_the_ai_provider_when_configured(client, monkeypatch):
+    monkeypatch.setattr(settings, "ai_provider", "openbiollm")
+    monkeypatch.setattr(settings, "openbiollm_model", "openbiollm-llama3-instruct")
+
+    response = client.get("/health")
+
+    assert response.json()["ai"] == {
+        "provider": "openbiollm",
+        "model": "openbiollm-llama3-instruct",
+    }
+
+
+def test_health_check_reports_medgemma_as_the_ai_provider_when_configured(client, monkeypatch):
+    monkeypatch.setattr(settings, "ai_provider", "medgemma")
+    monkeypatch.setattr(
+        settings, "medgemma_model", "hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M"
+    )
+
+    response = client.get("/health")
+
+    assert response.json()["ai"] == {
+        "provider": "medgemma",
+        "model": "hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M",
+    }
+
+
 def test_health_check_does_not_require_a_gemini_api_key(client, monkeypatch):
     # No AIProvider is ever instantiated (only GeminiProvider.name, a
-    # class attribute) - reporting the AI provider/model must not depend
+    # class attribute); reporting the AI provider/model must not depend
     # on GEMINI_API_KEY being configured, unlike actually using AI
-    # features (which fails with a clear 503 - see docs/api.md).
+    # features (which fails with a clear 503; see docs/api.md).
     monkeypatch.setattr(settings, "gemini_api_key", None)
 
     response = client.get("/health")
@@ -128,7 +154,7 @@ def test_health_check_returns_503_when_database_unavailable(client, monkeypatch)
 
 def test_health_check_still_reports_version_and_config_when_database_is_down(client, monkeypatch):
     # version/environment/storage/ai never depended on the database to
-    # begin with - a down database shouldn't blank them out, and they're
+    # begin with; a down database shouldn't blank them out, and they're
     # arguably more useful, not less, while diagnosing exactly this
     # failure.
     class BrokenSession:

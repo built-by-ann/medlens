@@ -222,3 +222,18 @@ __marimo__/
 # Claude
 CLAUDE.md
 .DS_Store
+
+# MedLens evaluation runner output (Issue #89) - real run artifacts
+# (provider responses, latencies, reproducibility metadata) are never
+# committed, even though every benchmark note is synthetic; the dataset
+# and runner code under benchmark/ are tracked, this directory of
+# generated results is not. See benchmark/README.md.
+benchmark/results/
+
+# MedLens comparison report generator output (Issue #91): working
+# output only, same reasoning as benchmark/results/ above (it quotes raw
+# model text in its qualitative section, never reviewed at generation
+# time). A specific reviewed report/figures set is promoted into
+# docs/model-comparison-report.md and docs/assets/evaluation/
+# deliberately, by hand, never automatically; see benchmark/README.md.
+benchmark/report/output/

@@ -1,0 +1,16 @@
+{
+  "case_id": "BENCH-021",
+  "tags": [
+    "mentioned_not_active"
+  ],
+  "difficulty": "hard",
+  "description": "A medication discussed only as a hypothetical future option, never actually started.",
+  "input_notes": [
+    "Blood pressure today is 138/86, improved from prior visit. Will continue current regimen. If blood pressure remains elevated at the next visit, will consider adding amlodipine at that time."
+  ],
+  "expected": {
+    "medications": [],
+    "possible_inconsistencies": [],
+    "summary": "Blood pressure has improved on the current regimen; amlodipine is discussed only as a possible future addition, not a medication the patient is currently taking."
+  }
+}

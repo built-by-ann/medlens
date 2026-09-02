@@ -33,7 +33,7 @@ export function NoteCard({ note, position, onUpdate, onRemove }: NoteCardProps) 
   const [draftTitle, setDraftTitle] = useState(note.title)
   const [draftText, setDraftText] = useState(note.rawText)
   const [draftDocumentType, setDraftDocumentType] = useState(note.documentType)
-  // Only set once Save is clicked with empty text - matching every other
+  // Only set once Save is clicked with empty text, matching every other
   // form in the app (validate on submit, not disable the button with no
   // explanation of why).
   const [showTextError, setShowTextError] = useState(false)

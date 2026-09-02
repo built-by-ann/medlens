@@ -11,7 +11,7 @@ interface RecentDocumentCardProps {
   document: ClinicalDocument
 }
 
-// A compact, glance-and-go preview for Patient Overview - the whole card
+// A compact, glance-and-go preview for Patient Overview; the whole card
 // toggles an inline expand/collapse to view the document's extracted text,
 // the same interaction ClinicalDocumentCard's "View" button offers on the
 // full Clinical Documents page, just without a separate Delete action here.

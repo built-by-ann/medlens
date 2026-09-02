@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/patients/{patient_id}/analyses", tags=["analyses"])
 
-# Cross-patient, unlike `router` above - the Dashboard's Recent Analyses
+# Cross-patient, unlike `router` above: the Dashboard's Recent Analyses
 # feed (Issue #157) spans every patient a user owns, so it can't be nested
 # under a single patient_id the way every other analyses route is.
 recent_analyses_router = APIRouter(prefix="/analyses", tags=["analyses"])
@@ -109,7 +109,7 @@ def summarize_clinical_documents(
         mark_analysis_processing(db, analysis)
 
         # ordered_clinical_documents fixes the "Note N" numbering the prompt
-        # uses (app/ai/prompts.py) to a reproducible order - the same order
+        # uses (app/ai/prompts.py) to a reproducible order, the same order
         # reconcile_ai_extracted_medications uses afterward to map each
         # medication's reported source note back to a real document id
         # (Issue #152).
@@ -129,11 +129,11 @@ def summarize_clinical_documents(
         mark_analysis_failed(db, analysis, message)
         duration_ms = (time.monotonic() - started_at) * 1000
 
-        # message is already sanitized by _safe_error_message - the same
+        # message is already sanitized by _safe_error_message, the same
         # text returned to the client in the 503 below, never a raw
         # exception message or traceback (that's logger.exception's job,
         # already covered by GeminiProvider._log_failure for the AI-provider
-        # case, or by the global exception handler for anything else - see
+        # case, or by the global exception handler for anything else; see
         # app/core/logging_config.py). This log's job is only to record
         # *that*, and *which*, analysis failed and why in the sanitized,
         # already-safe terms a client would also see.
@@ -156,9 +156,9 @@ def summarize_clinical_documents(
     duration_ms = (time.monotonic() - started_at) * 1000
 
     # duration_ms here is the whole pipeline this route runs after marking
-    # the analysis processing - AI request (already timed on its own by
+    # the analysis processing: AI request (already timed on its own by
     # GeminiProvider, app/ai/providers/gemini_provider.py) plus response
-    # validation and reconciliation (persist_analysis_result, above) - not
+    # validation and reconciliation (persist_analysis_result, above), not
     # a duplicate of the AI provider's own timing, a broader span that
     # includes it.
     logger.info(

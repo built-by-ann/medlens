@@ -23,7 +23,7 @@ depends_on: Union[str, Sequence[str], None] = None
 # This used to import backfill_patient_ids/clear_patient_ids from
 # app.services.patient_backfill_service, which operated on the live ORM
 # models (Medication, ClinicalDocument, Analysis, Patient, User). Sprint 3.5,
-# Issue #133 removed user_id from those three models entirely - the exact
+# Issue #133 removed user_id from those three models entirely, the exact
 # "later renamed or restructured" risk patient_backfill_service.py's own
 # docstring warned about. A historical migration must keep working when
 # replayed from scratch against an empty database, which means it can never
@@ -157,7 +157,7 @@ def upgrade() -> None:
     """Upgrade schema, then backfill patient_id for every existing row.
 
     Both the schema change and the backfill run inside Alembic's own
-    transaction (this project assumes transactional DDL - see alembic/
+    transaction (this project assumes transactional DDL; see alembic/
     env.py), so a failure partway through the backfill (an ambiguous
     multi-patient user) rolls back the ALTER TABLE statements too, leaving
     the database exactly as it was before this migration ran.
@@ -189,7 +189,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Nulls out patient_id everywhere, then drops the columns. Does not
-    delete any placeholder Patient rows the backfill created - by the time
+    delete any placeholder Patient rows the backfill created; by the time
     this runs they are ordinary, real Patient rows (editable through the
     Patient API), and deleting them is a much riskier, less reversible
     operation than simply unsetting a foreign key.

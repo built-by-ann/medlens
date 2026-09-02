@@ -361,7 +361,7 @@ describe('PatientOverviewPage', () => {
     expect(screen.getByText(/Visit note/)).toBeInTheDocument()
 
     // Full document management (delete) lives on the dedicated Clinical
-    // Documents page instead - only viewing is available from the preview.
+    // Documents page instead; only viewing is available from the preview.
     expect(screen.queryByRole('button', { name: 'Delete Initial Visit' })).not.toBeInTheDocument()
   })
 
@@ -453,7 +453,7 @@ describe('PatientOverviewPage', () => {
     const documentsLink = screen.getByRole('link', { name: 'View all clinical documents' })
     const analysesLink = screen.getByRole('link', { name: 'View all analyses' })
 
-    // Same visible label everywhere - the standardization this issue asks for.
+    // Same visible label everywhere; the standardization this issue asks for.
     for (const link of [medicationsLink, documentsLink, analysesLink]) {
       expect(link).toHaveTextContent('View All')
     }

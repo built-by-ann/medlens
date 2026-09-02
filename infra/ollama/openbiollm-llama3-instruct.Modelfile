@@ -1,0 +1,56 @@
+# Attaches the correct Meta Llama 3 Instruct chat template to the
+# already-pulled OpenBioLLM-Llama3-8B Q4_K_M GGUF, which embeds no usable
+# template of its own.
+#
+# Verified directly: `ollama show
+# hf.co/aaditya/OpenBioLLM-Llama3-8B-GGUF:Q4_K_M --modelfile` reports only
+# `TEMPLATE {{ .Prompt }}`, a bare passthrough with no role/turn
+# structure. A manual test against that untemplated import asked it to
+# extract a medication from a plain clinical sentence, and it
+# reformulated the request as a question instead of answering it.
+# OpenBioLLM's own model card requires the exact Llama 3 Instruct
+# template for correct behavior, since it is a fine-tune of
+# Meta-Llama-3-8B-Instruct that was never retrained with a different
+# conversational format.
+#
+# FROM reuses the exact GGUF/quantization already pulled via
+# `ollama pull hf.co/aaditya/OpenBioLLM-Llama3-8B-GGUF:Q4_K_M`. `ollama
+# create` attaches a new template/parameters to that existing blob; it
+# does not re-download or modify the underlying weights.
+FROM hf.co/aaditya/OpenBioLLM-Llama3-8B-GGUF:Q4_K_M
+
+# --- Meta Llama 3 Instruct chat template ---------------------------------
+# Copied verbatim, unmodified, from Ollama's own official `llama3` library
+# model (`ollama pull llama3:8b-instruct-q4_K_M && ollama show
+# llama3:8b-instruct-q4_K_M --modelfile`) - the authoritative reference
+# for this architecture's intended prompt format. If this ever needs
+# revisiting, re-derive it from that same source rather than hand-editing
+# the block below.
+TEMPLATE """{{ if .System }}<|start_header_id|>system<|end_header_id|>
+
+{{ .System }}<|eot_id|>{{ end }}{{ if .Prompt }}<|start_header_id|>user<|end_header_id|>
+
+{{ .Prompt }}<|eot_id|>{{ end }}<|start_header_id|>assistant<|end_header_id|>
+
+{{ .Response }}<|eot_id|>"""
+
+# Also copied verbatim from the same reference Modelfile.
+#
+# num_keep: how many leading tokens are protected from eviction if the
+# context needs mid-generation truncation/shifting once the context
+# window fills up. This is a context-management setting, not part of
+# chat-template rendering (that's the TEMPLATE block above), so it has no
+# bearing on the correctness fix this file exists for. Retained anyway,
+# unchanged, for byte-for-byte fidelity to the known-good reference
+# config; it is harmless here regardless, since MedLens's benchmark
+# prompts are short, single-turn, and nowhere near this model's context
+# limit, so no mid-generation truncation is ever expected to occur.
+PARAMETER num_keep 24
+PARAMETER stop <|start_header_id|>
+PARAMETER stop <|end_header_id|>
+PARAMETER stop <|eot_id|>
+
+# Deliberately no SYSTEM directive: MedLens sends a single user-turn
+# message with no system prompt (see openbiollm_provider.py), and this
+# file must not introduce a MedLens- or OpenBioLLM-specific system prompt
+# the benchmark task doesn't define.

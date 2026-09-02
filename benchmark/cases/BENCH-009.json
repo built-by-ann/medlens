@@ -1,0 +1,40 @@
+{
+  "case_id": "BENCH-009",
+  "tags": [
+    "multi_document",
+    "frequency_variety",
+    "conflicting_across_documents"
+  ],
+  "difficulty": "medium",
+  "description": "Two notes from the same week disagree on how often the patient takes her medication.",
+  "input_notes": [
+    "Psychiatry note: Continue Sertraline 100 mg oral once daily in the morning; well tolerated.",
+    "Primary care note (same week): Patient states she takes her Sertraline 100 mg twice a day, once in the morning and once in the evening."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Sertraline",
+        "dosage": "100 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": "continue",
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Sertraline",
+        "dosage": "100 mg",
+        "route": null,
+        "frequency": "twice a day",
+        "status": null,
+        "notes": null,
+        "source_note": 2
+      }
+    ],
+    "possible_inconsistencies": [
+      "Sertraline frequency differs between the psychiatry note (once daily) and the primary care note (twice a day) from the same week."
+    ],
+    "summary": "Sertraline dose is consistent at 100 mg, but the documented frequency differs between psychiatry (once daily) and primary care (twice daily) in the same week."
+  }
+}

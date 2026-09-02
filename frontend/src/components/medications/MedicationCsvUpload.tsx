@@ -28,14 +28,14 @@ interface MedicationCsvUploadProps {
 
 /**
  * A dedicated section on PatientMedicationsPage, not a modal or a
- * collapsible - the page already shows a single, always-visible add-one
+ * collapsible; the page already shows a single, always-visible add-one
  * form (MedicationForm) below the list, so this follows the same
  * always-visible pattern rather than introducing a new interaction
  * paradigm for what is, at heart, another way to add medications.
  *
- * The file-selection control mirrors FileDropzone (components/upload/) -
+ * The file-selection control mirrors FileDropzone (components/upload/):
  * same drag-and-drop-plus-click-to-browse box, same keyboard handling, same
- * hidden-native-input approach - so the two file upload experiences in this
+ * hidden-native-input approach, so the two file upload experiences in this
  * app look and behave the same way. It's a separate, single-file
  * implementation rather than a shared component: FileDropzone's own
  * accept list, `multiple`, and result handling are specific to Upload's

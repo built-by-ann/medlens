@@ -40,7 +40,7 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 ![Create Analysis](docs/screenshots/create-analysis.png)
 
-![Create Analysis - uploading additional documents](docs/screenshots/create-analysis-upload.png)
+![Create Analysis: uploading additional documents](docs/screenshots/create-analysis-upload.png)
 
 **Reconciliation findings:** discrepancies grouped by severity, each with supporting evidence and resolution actions.
 
@@ -109,7 +109,7 @@ nginx (single public entry point, HTTPS)
                                                        │
                                                        ▼
                                      Deterministic Reconciliation Engine
-                                        (no AI - plain Python logic)
+                                        (no AI, plain Python logic)
 ```
 
 A layered FastAPI backend (routers → services → models/schemas) serves a React SPA, both coordinated by the same Docker Compose file in local development and production. See [docs/architecture.md](docs/architecture.md) for component interaction, request flows, and the full set of architectural principles.
@@ -118,9 +118,9 @@ A layered FastAPI backend (routers → services → models/schemas) serves a Rea
 
 ## AI Pipeline
 
-Gemini, behind a swappable `AIProvider` interface, reads clinical note text and returns structured JSON: extracted medications and a short summary. Every response is validated against a strict Pydantic schema (`extra="forbid"`) before it's trusted - a malformed or unexpected response fails the request rather than being silently accepted.
+Gemini, behind a swappable `AIProvider` interface, reads clinical note text and returns structured JSON: extracted medications and a short summary. Every response is validated against a strict Pydantic schema (`extra="forbid"`) before it's trusted, so a malformed or unexpected response fails the request rather than being silently accepted.
 
-That's the entire scope of what AI does here. It never compares documents, decides whether two records conflict, or makes a clinical decision - that boundary is enforced structurally, not just by convention: the reconciliation engine's own code has no dependency on the AI layer at all. See [docs/ai.md](docs/ai.md) for the provider abstraction, prompt design, structured output validation, and the full AI/deterministic boundary.
+That's the entire scope of what AI does here. It never compares documents, decides whether two records conflict, or makes a clinical decision. That boundary is enforced structurally, not just by convention: the reconciliation engine's own code has no dependency on the AI layer at all. See [docs/ai.md](docs/ai.md) for the provider abstraction, prompt design, structured output validation, and the full AI/deterministic boundary.
 
 ---
 
@@ -136,7 +136,7 @@ FastAPI · Python 3.12 · SQLAlchemy · Alembic · Pydantic · JWT authenticatio
 PostgreSQL
 
 **AI**
-Google Gemini, behind a provider-abstraction layer (OpenBioLLM and MedGemma planned)
+Google Gemini (default), OpenBioLLM (`aaditya/Llama3-OpenBioLLM-8B`), and MedGemma (`google/medgemma-4b-it`), the latter two served locally via Ollama, all selectable behind a provider-abstraction layer; multi-model benchmarking planned
 
 **Infrastructure**
 Docker · Docker Compose · nginx (reverse proxy, TLS termination) · Let's Encrypt / Certbot · AWS EC2 · AWS S3 (optional storage backend) · GitHub Actions
@@ -167,7 +167,7 @@ Ruff (lint + format) · ESLint (flat config, typescript-eslint) · Prettier · T
 
 ```text
 medlens/
-├── backend/     FastAPI application - routes, services, models, schemas, AI layer, storage layer
+├── backend/     FastAPI application: routes, services, models, schemas, AI layer, storage layer
 ├── frontend/    React + TypeScript single-page application
 ├── infra/       Docker Compose, nginx config, environment templates
 ├── docs/        Architecture, API, AI, frontend, testing, deployment, and design documentation
@@ -236,7 +236,7 @@ MedLens is live at [medlenshealth.com](http://medlenshealth.com) (also linked at
 
 ## Future Improvements
 
-- Additional LLM providers (OpenBioLLM, MedGemma) and multi-model benchmarking
+- A multi-model comparison report against the synthetic benchmark dataset. A runner that executes the dataset against Gemini/OpenBioLLM/MedGemma and a scorer that grades the results (medication-detection precision/recall/F1, attribute accuracy, reliability, and latency) already exist as `python -m benchmark.runner` and `python -m benchmark.metrics` (see `benchmark/README.md`), but nothing ranks providers or produces a human-facing report yet
 - Production monitoring and alerting (e.g. CloudWatch, Sentry, performance dashboards)
 - A custom domain actually resolving to the production instance (HTTPS and the reverse proxy are already implemented)
 - Automated, CI-triggered deployment

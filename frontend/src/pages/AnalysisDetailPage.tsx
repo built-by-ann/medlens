@@ -35,7 +35,7 @@ function formatDateTime(value: string | null): string | null {
   return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-// Ordering (and grouping) drives "most important findings first" - there is
+// Ordering (and grouping) drives "most important findings first"; there is
 // no "critical" tier to include here: DiscrepancySeverity only ever has
 // high/medium/low (see docs/frontend.md for why a 4th tier was not invented
 // just to match this issue's example wording).
@@ -259,7 +259,7 @@ export function AnalysisDetailPage() {
       {/*
         AI-generated content (summary, medications mentioned) gets its own
         violet-accented section, visually distinct from the deterministic
-        reconciliation findings below - the badges and left border repeat
+        reconciliation findings below; the badges and left border repeat
         that distinction so it never rests on color alone. There is no "Key
         clinical observations" or "Mentioned conditions" section here: the AI
         response schema (app/ai/schemas.py) has no such structured fields,
@@ -322,7 +322,7 @@ export function AnalysisDetailPage() {
         </div>
 
         {/* role="status" so screen readers announce a successful resolution
-            immediately - required feedback per the issue's accessibility
+            immediately; required feedback per the issue's accessibility
             requirements, not just a visual confirmation. */}
         {resolveSuccessMessage && (
           <p role="status" className="text-sm font-medium text-success">

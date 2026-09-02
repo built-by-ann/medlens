@@ -20,7 +20,7 @@ os.environ["DATABASE_URL"] = _test_database_url
 # database above is swapped for a dedicated test database: tests must
 # never depend on, or write into, whatever a developer happens to have
 # configured for local development. A session-scoped temp directory (not
-# per-test) is deliberate - LocalStorageService's own key generation
+# per-test) is deliberate: LocalStorageService's own key generation
 # already guarantees every uploaded object gets a unique path, so nothing
 # ever collides between tests even though they share one directory.
 os.environ["STORAGE_BACKEND"] = "local"

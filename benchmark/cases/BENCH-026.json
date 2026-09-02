@@ -1,0 +1,41 @@
+{
+  "case_id": "BENCH-026",
+  "tags": [
+    "multi_document",
+    "conflicting_across_documents",
+    "frequency_variety",
+    "reconciliation_relevant"
+  ],
+  "difficulty": "hard",
+  "description": "A genuine, unresolved frequency conflict between two encounters in the same week, with no explanation reconciling the two - unlike the taper/titration cases above.",
+  "input_notes": [
+    "Visit note: Patient reports taking Gabapentin 300 mg three times daily for neuropathic pain, with good relief.",
+    "Emergency department note (same week): Medication reconciliation lists Gabapentin 300 mg twice daily; patient unable to clarify exact regimen at time of visit due to pain."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Gabapentin",
+        "dosage": "300 mg",
+        "route": null,
+        "frequency": "three times daily",
+        "status": null,
+        "notes": "for neuropathic pain",
+        "source_note": 1
+      },
+      {
+        "name": "Gabapentin",
+        "dosage": "300 mg",
+        "route": null,
+        "frequency": "twice daily",
+        "status": null,
+        "notes": null,
+        "source_note": 2
+      }
+    ],
+    "possible_inconsistencies": [
+      "Gabapentin frequency differs between the visit note (three times daily) and the emergency department note (twice daily), and the patient was unable to clarify which is correct."
+    ],
+    "summary": "Gabapentin dose is consistent at 300 mg, but the documented frequency conflicts between two encounters in the same week, with no clear resolution."
+  }
+}

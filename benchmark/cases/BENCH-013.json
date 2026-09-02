@@ -1,0 +1,54 @@
+{
+  "case_id": "BENCH-013",
+  "tags": [
+    "frequency_variety",
+    "straightforward_list"
+  ],
+  "difficulty": "medium",
+  "description": "Several uncommon dosing schedules, including a variable-dose regimen for one medication.",
+  "input_notes": [
+    "Medication regimen: Prednisone 10 mg oral every other day; Alendronate 70 mg oral once weekly on Sundays; Vitamin D3 2000 units oral once daily; Warfarin 5 mg oral once daily except 2.5 mg on Tuesdays and Fridays."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Prednisone",
+        "dosage": "10 mg",
+        "route": "oral",
+        "frequency": "every other day",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Alendronate",
+        "dosage": "70 mg",
+        "route": "oral",
+        "frequency": "once weekly on Sundays",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Vitamin D3",
+        "dosage": "2000 units",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Warfarin",
+        "dosage": "5 mg (2.5 mg on Tuesdays and Fridays)",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      }
+    ],
+    "possible_inconsistencies": [],
+    "summary": "Four medications are documented with varied schedules, including a warfarin regimen that alternates dose on specific days of the week."
+  }
+}

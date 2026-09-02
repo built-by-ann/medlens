@@ -56,7 +56,7 @@ export async function resolveDiscrepancy(
   return response.data
 }
 
-// Cross-patient, unlike every other function here - the Dashboard's Recent
+// Cross-patient, unlike every other function here: the Dashboard's Recent
 // Analyses feed (Issue #157).
 export async function getRecentAnalyses(limit = 3): Promise<RecentAnalysis[]> {
   const response = await apiClient.get<RecentAnalysis[]>('/analyses/recent', {

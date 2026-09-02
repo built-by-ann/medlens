@@ -115,7 +115,7 @@ def test_production_disables_localhost_wildcard(monkeypatch):
 
 def test_production_allows_no_origin_at_all(monkeypatch):
     # Issue #190: production has no cross-origin allowlist to configure
-    # anymore - the deployed frontend reaches the backend exclusively
+    # anymore; the deployed frontend reaches the backend exclusively
     # through nginx's same-origin reverse proxy (frontend/nginx.conf),
     # never as a real cross-origin browser request, so there is no
     # legitimate origin production should ever need to allow. A request

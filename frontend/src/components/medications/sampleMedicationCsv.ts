@@ -1,5 +1,5 @@
 // Mirrors the example CSV in docs/api.md exactly, using only synthetic
-// example data - never anything derived from a real patient's medications.
+// example data, never anything derived from a real patient's medications.
 export const SAMPLE_MEDICATION_CSV = `medication_name,dose,route,frequency,status,source,notes
 Lisinopril,10 mg,oral,once daily,active,patient_reported,Taken with breakfast
 Metformin,500 mg,oral,twice daily,active,patient_reported,

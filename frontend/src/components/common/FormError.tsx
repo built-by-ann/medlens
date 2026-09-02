@@ -14,10 +14,10 @@ interface FormErrorProps {
  * duplicated ad hoc as `<p role="alert" className="text-sm text-red-600">`
  * across Login, Signup, PatientForm, MedicationForm, MedicationCard,
  * ClinicalDocumentCard, RecentAnalysisCard, ArchivePatientDialog,
- * DeleteAnalysisDialog, UploadPage, and CreateAnalysisPage - same wording
+ * DeleteAnalysisDialog, UploadPage, and CreateAnalysisPage; same wording
  * convention everywhere now: role="alert" so assistive tech announces it as
  * soon as it appears, without a title (unlike ErrorState, which is for a
- * failed *page load* with something to retry - this is for a failed
+ * failed *page load* with something to retry; this is for a failed
  * *action*, shown right next to whatever failed).
  */
 export function FormError({ message, className, id }: FormErrorProps) {

@@ -1,0 +1,40 @@
+{
+  "case_id": "BENCH-008",
+  "tags": [
+    "multi_document",
+    "route_variety",
+    "reconciliation_relevant"
+  ],
+  "difficulty": "medium",
+  "description": "The same medication documented by IV route in the hospital and oral route at discharge.",
+  "input_notes": [
+    "Hospital progress note: Patient receiving Furosemide 40 mg intravenously twice daily for volume overload; input and output being monitored closely.",
+    "Discharge summary: Transitioning to Furosemide 40 mg oral once daily at discharge as volume status has normalized."
+  ],
+  "expected": {
+    "medications": [
+      {
+        "name": "Furosemide",
+        "dosage": "40 mg",
+        "route": "intravenously",
+        "frequency": "twice daily",
+        "status": null,
+        "notes": null,
+        "source_note": 1
+      },
+      {
+        "name": "Furosemide",
+        "dosage": "40 mg",
+        "route": "oral",
+        "frequency": "once daily",
+        "status": "transitioning",
+        "notes": null,
+        "source_note": 2
+      }
+    ],
+    "possible_inconsistencies": [
+      "Furosemide's route and frequency differ between the two notes (intravenous twice daily vs. oral once daily), consistent with a planned transition at discharge."
+    ],
+    "summary": "Furosemide was given intravenously twice daily during hospitalization and transitioned to oral once daily at discharge."
+  }
+}

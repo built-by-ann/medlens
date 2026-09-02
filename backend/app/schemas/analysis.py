@@ -66,7 +66,7 @@ class AnalysisDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime | None
     # Issue #47: how many clinical documents this analysis covers (a
-    # property on the model, len(analysis.clinical_documents) - not a
+    # property on the model, len(analysis.clinical_documents), not a
     # stored column, the same pattern as ClinicalDocument.analysis_count),
     # exposed here so the Analysis Results page's AI Summary metadata can
     # show it without a second request.
@@ -105,7 +105,7 @@ class AnalysisSummaryResponse(BaseModel):
     medium_severity_findings: int
     low_severity_findings: int
     # Unlike the four counts above (stored columns, fixed at analysis
-    # completion - see Analysis.total_findings), this is computed fresh on
+    # completion; see Analysis.total_findings), this is computed fresh on
     # every request from the discrepancies' current resolution_status, so it
     # goes down as a provider resolves/dismisses findings instead of staying
     # frozen at whatever reconciliation originally found.
@@ -116,8 +116,8 @@ class AnalysisSummaryResponse(BaseModel):
 
 class RecentAnalysisResponse(AnalysisSummaryResponse):
     """Issue #157: the Dashboard's Recent Analyses feed is the one place an
-    analysis is ever shown outside a single patient's own pages, so - unlike
-    every other analysis response - the patient it belongs to isn't already
+    analysis is ever shown outside a single patient's own pages, so, unlike
+    every other analysis response, the patient it belongs to isn't already
     established by the URL and has to be identified inline.
     """
 

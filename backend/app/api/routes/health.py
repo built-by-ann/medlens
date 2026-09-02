@@ -5,6 +5,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.ai.providers.gemini_provider import GeminiProvider
+from app.ai.providers.medgemma_provider import MedGemmaProvider
+from app.ai.providers.openbiollm_provider import OpenBioLLMProvider
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.schemas.health import AIHealth, DatabaseHealth, HealthResponse, StorageHealth
@@ -22,15 +24,27 @@ def health_check() -> JSONResponse:
     the only I/O is the one `SELECT 1` below, to a database this process
     already holds a connection pool for. Storage backend and AI
     provider/model are reported from settings already loaded into memory
-    and a plain class attribute - never by constructing a StorageService
+    and a plain class attribute, never by constructing a StorageService
     (which would mean a real S3 call for the "s3" backend) or an AI
-    provider client (which would mean contacting Gemini), both explicitly
-    ruled out by this endpoint's own requirements.
+    provider client (which would mean contacting Gemini or Hugging Face),
+    both explicitly ruled out by this endpoint's own requirements.
+
+    Mirrors settings.ai_provider (validated at startup; see Settings'
+    own model_validator) rather than hardcoding GeminiProvider: reporting
+    "gemini" here while AI_PROVIDER=openbiollm is actually configured
+    would make this endpoint actively misleading, not just incomplete.
     """
     version = settings.app_version
     environment = settings.app_env
     storage = StorageHealth(backend=settings.storage_backend)
-    ai = AIHealth(provider=GeminiProvider.name, model=settings.gemini_model)
+
+    if settings.ai_provider == "openbiollm":
+        ai = AIHealth(provider=OpenBioLLMProvider.name, model=settings.openbiollm_model)
+    elif settings.ai_provider == "medgemma":
+        ai = AIHealth(provider=MedGemmaProvider.name, model=settings.medgemma_model)
+    else:
+        ai = AIHealth(provider=GeminiProvider.name, model=settings.gemini_model)
+
     timestamp = _utc_timestamp()
 
     try:

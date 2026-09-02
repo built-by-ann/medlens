@@ -13,7 +13,7 @@ const mockedLoginUser = vi.mocked(loginUser)
 const mockedGetCurrentUser = vi.mocked(getCurrentUser)
 
 // AuthProvider registers a real callback with api/client's module-level
-// unauthorizedHandler via setUnauthorizedHandler - captured here so a
+// unauthorizedHandler via setUnauthorizedHandler; captured here so a
 // background 401 (the thing the real Axios interceptor would trigger) can
 // be simulated directly, without standing up a full mocked HTTP round-trip.
 const { unauthorizedHandlerRef } = vi.hoisted(() => ({
@@ -85,7 +85,7 @@ describe('AuthProvider', () => {
 
     renderAuth()
 
-    // Starts in a loading state - the stored token hasn't been validated yet.
+    // Starts in a loading state; the stored token hasn't been validated yet.
     expect(screen.getByTestId('isLoading')).toHaveTextContent('true')
 
     await waitFor(() => expect(screen.getByTestId('isLoading')).toHaveTextContent('false'))
@@ -149,7 +149,7 @@ describe('AuthProvider', () => {
     expect(unauthorizedHandlerRef.current).toBeInstanceOf(Function)
 
     // Simulates what the Axios response interceptor does on a 401 from an
-    // already-authenticated request - the session ended without the user
+    // already-authenticated request; the session ended without the user
     // clicking "Log out" themselves.
     act(() => {
       unauthorizedHandlerRef.current?.()

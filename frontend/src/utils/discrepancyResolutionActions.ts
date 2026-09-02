@@ -13,7 +13,7 @@ export interface MedicationFieldValue {
 }
 
 export interface DiscrepancyActionDescriptor {
-  // Unique within one discrepancy's action list - not globally unique.
+  // Unique within one discrepancy's action list, not globally unique.
   key: string
   label: string
   action: ResolutionAction
@@ -21,7 +21,7 @@ export interface DiscrepancyActionDescriptor {
   // as a starting point the provider can change before confirming ("Edit
   // Manually", and "Add Medication" since there's real data to enter).
   // false: opens a confirm-only dialog stating exactly what will happen,
-  // with no editable medication fields - the fast path for accepting a
+  // with no editable medication fields; the fast path for accepting a
   // single suggested value as-is.
   editable: boolean
   fields: MedicationFieldValue[]
@@ -44,7 +44,7 @@ const MEDICATION_FIELD_KEYS: MedicationFieldKey[] = [
   'status',
 ]
 
-// The medication list's own current values - the starting point for "Edit
+// The medication list's own current values, the starting point for "Edit
 // Manually", since correcting an existing entry should start from what it
 // already says, not from the (possibly wrong) AI-reported value.
 function currentMedicationFields(discrepancy: MedicationDiscrepancy): MedicationFieldValue[] {
@@ -57,7 +57,7 @@ function currentMedicationFields(discrepancy: MedicationDiscrepancy): Medication
   }))
 }
 
-// What the AI actually extracted - the starting point for "Add Medication",
+// What the AI actually extracted, the starting point for "Add Medication",
 // since there is no existing medication list entry to start from.
 function mentionFields(discrepancy: MedicationDiscrepancy): MedicationFieldValue[] {
   const mention = discrepancy.medication_mention
@@ -69,7 +69,7 @@ function mentionFields(discrepancy: MedicationDiscrepancy): MedicationFieldValue
   }))
 }
 
-// A single field's suggested value, straight from the AI's mention - null
+// A single field's suggested value, straight from the AI's mention, null
 // when the mention never reported it, so the caller can skip offering a
 // one-click "Update Medication" quick action with nothing concrete to apply
 // (falling back to Edit Manually only, per "do not expose actions that
@@ -103,12 +103,12 @@ const DISMISS: DiscrepancyActionDescriptor = {
 }
 
 /**
- * The actions available for one discrepancy, in display order - matches
+ * The actions available for one discrepancy, in display order; matches
  * the issue's own examples exactly (missing -> Add Medication/Dismiss;
  * dose/route/frequency conflicts -> Update Medication/Edit Manually/Dismiss;
  * status conflicts -> Mark Discontinued/Mark Active/Edit Manually/Dismiss;
  * unsupported list entry -> Edit Manually/Dismiss). Dismiss is always last
- * and always available - resolving is optional, dismissing never is.
+ * and always available; resolving is optional, dismissing never is.
  */
 export function getDiscrepancyActions(
   discrepancy: MedicationDiscrepancy,
@@ -188,7 +188,7 @@ export function getDiscrepancyActions(
   return actions
 }
 
-/** Every field required to enable the Confirm button - add_medication needs
+/** Every field required to enable the Confirm button; add_medication needs
  * all five (a real Medication row has none optional); update_medication
  * needs at least one (enforced by the caller, not per-field here); dismiss
  * needs none. */
