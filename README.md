@@ -50,10 +50,6 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 ![AI summary](docs/screenshots/analysis-ai-summary.png)
 
-**Login**
-
-<img src="docs/screenshots/login.png" width="320" alt="Login page">
-
 **Responsive mobile layout**
 
 <table>
@@ -72,7 +68,7 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 **AI-powered extraction.** Google Gemini reads each document and extracts structured medication mentions (name, dose, route, frequency, status) plus a narrative summary, validated against a strict schema before anything is persisted.
 
-**Deterministic reconciliation.** A separate, non-AI comparison engine checks the AI-extracted mentions against the patient's own medication list and produces evidence-backed discrepancies, with no fuzzy matching and no hallucination risk in the comparison itself.
+**Deterministic reconciliation.** A separate, non-AI comparison engine checks the AI-extracted mentions against the patient's own medication list and produces evidence-backed discrepancies. This ensures no fuzzy matching, no hallucination risk in the comparison itself.
 
 **Discrepancy resolution workflow.** Each finding can be accepted (creating or updating the medication list), dismissed, or left open, with a full audit trail of who resolved it, when, and why.
 
@@ -82,9 +78,9 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 ## Why MedLens?
 
-Medication information is often scattered across a patient's chart, spread across a visit note, a discharge summary, and a medication list, and these sources can quietly drift out of sync. MedLens was inspired by research at Vanderbilt University Medical Center on medication documentation inconsistencies within electronic health records: the same problem, explored as a portfolio-scale engineering project rather than a research artifact.
+Medication information is often scattered across a patient's chart (a visit note, a discharge summary, a medication list) and these sources can quietly drift out of sync. MedLens was inspired by research at Vanderbilt University Medical Center on medication documentation inconsistencies within electronic health records: the same problem, explored as a portfolio-scale engineering project rather than a research artifact.
 
-The core idea is a deliberate split of responsibility. AI is good at reading unstructured text and pulling out structured facts, so that's all it's asked to do. Deciding whether two structured facts actually conflict is a comparison problem, not a language problem, so it is handled by explicit, deterministic backend logic that's reproducible and unit-testable, with no risk of an LLM silently merging two different medications or inventing an equivalence that isn't there.
+The core idea is a deliberate split of responsibility. AI is good at reading unstructured text and pulling out structured facts, so that's all it's asked to do in this application. Deciding whether two structured facts actually conflict is a comparison problem, not a language problem, and this is handled by explicit, deterministic backend logic that is reproducible and unit-testable, with no risk of an LLM silently merging two different medications or inventing an equivalence that isn't there.
 
 **How it works, end to end:**
 
