@@ -53,7 +53,7 @@ This roadmap tracks MedLens's development milestones across five sprints, from b
 
 ---
 
-## Sprint 5: Model Evaluation (In Progress)
+## Sprint 5: Model Evaluation (Complete)
 
 - Synthetic benchmark dataset: completed
 - OpenBioLLM integration: completed (selectable via `AI_PROVIDER=openbiollm`; switched from Hugging Face's hosted Inference Providers to local Ollama inference before scoring, after the hosted path proved operationally unreliable during pre-evaluation smoke testing; see `docs/ai.md`)
