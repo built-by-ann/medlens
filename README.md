@@ -159,7 +159,7 @@ Ruff (lint + format) · ESLint (flat config, typescript-eslint) · Prettier · T
 - **Multi-stage, non-root Docker images** with BuildKit cache mounts and GitHub Actions cache for fast, reproducible builds.
 - **HTTPS by default:** a self-signed certificate bootstraps immediately on `docker compose up`, replaced by a real Let's Encrypt certificate via an on-demand Certbot service once DNS is configured.
 - **Private-only S3 integration:** uploaded files are never made public, credentials come from an IAM role in production, and no endpoint ever returns a bucket URL.
-- **Comprehensive, real-dependency testing:** both suites exercise real infrastructure (a real Postgres database, real rendered components) rather than mocking through the layer actually being tested.
+- **Comprehensive, real-dependency testing:** both suites exercise real infrastructure (a real Postgres database, real rendered components) rather than mocking through the layer actually being tested. 
 
 ---
 
