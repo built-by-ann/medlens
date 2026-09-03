@@ -136,7 +136,7 @@ FastAPI · Python 3.12 · SQLAlchemy · Alembic · Pydantic · JWT authenticatio
 PostgreSQL
 
 **AI**
-Google Gemini (default), OpenBioLLM (`aaditya/Llama3-OpenBioLLM-8B`), and MedGemma (`google/medgemma-4b-it`), the latter two served locally via Ollama, all selectable behind a provider-abstraction layer; multi-model benchmarking planned
+Google Gemini (default), OpenBioLLM (`openbiollm-llama3-instruct`), and MedGemma (`hf.co/bartowski/google_medgemma-4b-it-GGUF:Q4_K_M`), the latter two served locally via Ollama, all selectable behind a provider-abstraction layer; a full 30-case benchmark comparison across all three has been run and scored (see [Model Comparison Report](docs/model-comparison-report.md))
 
 **Infrastructure**
 Docker · Docker Compose · nginx (reverse proxy, TLS termination) · Let's Encrypt / Certbot · AWS EC2 · AWS S3 (optional storage backend) · GitHub Actions
@@ -170,7 +170,8 @@ medlens/
 ├── backend/     FastAPI application: routes, services, models, schemas, AI layer, storage layer
 ├── frontend/    React + TypeScript single-page application
 ├── infra/       Docker Compose, nginx config, environment templates
-├── docs/        Architecture, API, AI, frontend, testing, deployment, and design documentation
+├── benchmark/   Model evaluation: dataset, runner, scorer, and comparison report generator
+├── docs/        Architecture, API, AI, frontend, testing, deployment, design, and model evaluation documentation
 ├── README.md
 └── LICENSE
 ```
@@ -223,6 +224,9 @@ For production deployment (AWS EC2, HTTPS/TLS, S3, monitoring) see [docs/deploym
 | [Deployment](docs/deployment.md) | Infrastructure, Docker, nginx, HTTPS, S3, and operations |
 | [Design Decisions](docs/design-decisions.md) | Why major architectural choices were made, with trade-offs |
 | [Roadmap](docs/roadmap.md) | Sprint-by-sprint development milestones |
+| [Model Evaluation Methodology](docs/model-evaluation.md) | How the Gemini/OpenBioLLM/MedGemma benchmark comparison is scored and built |
+| [Model Comparison Report](docs/model-comparison-report.md) | Results of the three-model benchmark comparison, with figures |
+| [Benchmark](benchmark/README.md) | The benchmark dataset, runner, scorer, and report generator |
 
 ---
 
