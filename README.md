@@ -12,7 +12,7 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 
 **[Live demo: medlenshealth.com](http://medlenshealth.com)** 
 
-**Status:** Active development (Sprint 4: production engineering)
+**Status:** Complete (see [Roadmap](docs/roadmap.md) for the full sprint-by-sprint history)
 
 > MedLens uses synthetic clinical data only. It is an educational software engineering portfolio project: it is not HIPAA compliant, does not provide medical advice, and is not intended for clinical use.
 

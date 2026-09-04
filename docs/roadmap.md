@@ -42,14 +42,12 @@ This roadmap tracks MedLens's development milestones across five sprints, from b
 
 ---
 
-## Sprint 4: Production Engineering (In Progress)
+## Sprint 4: Production Engineering (Complete)
 
 - AWS EC2 deployment via Docker Compose: done, see `docs/deployment.md`
 - CI/CD (automated backend and frontend checks, plus Docker image build validation): done
 - Reverse proxy and HTTPS/TLS: done
-- Production monitoring and alerting: planned
-- Performance optimization: planned
-- Automated (CI-triggered) deployment: planned
+- Production monitoring and alerting, performance optimization, and automated (CI-triggered) deployment were not pursued before the project was called complete; see Long-Term Ideas, below
 
 ---
 
@@ -67,6 +65,9 @@ This roadmap tracks MedLens's development milestones across five sprints, from b
 
 ## Long-Term Ideas
 
+- Production monitoring and alerting (e.g. CloudWatch, Sentry, performance dashboards)
+- Performance optimization
+- Automated, CI-triggered deployment
 - Background jobs
 - Search across analyses
 - PDF/CSV/JSON export
