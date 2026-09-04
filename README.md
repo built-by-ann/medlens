@@ -234,7 +234,7 @@ For production deployment (AWS EC2, HTTPS/TLS, S3, monitoring) see [docs/deploym
 
 MedLens is live at [medlenshealth.com](http://medlenshealth.com) (also linked at the top of this README).
 
-<!-- TODO: Add a short walkthrough video once one is available. -->
+[![MedLens demo video](https://img.youtube.com/vi/Rb3phEDYXLE/maxresdefault.jpg)](https://www.youtube.com/watch?v=Rb3phEDYXLE)
 
 ---
 
