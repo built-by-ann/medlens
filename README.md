@@ -10,7 +10,7 @@ MedLens reads synthetic clinical documents (visit notes, discharge summaries, me
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-React-3178c6.svg)
 
-**[Live demo: medlenshealth.com](http://medlenshealth.com)**
+**[Live demo: medlenshealth.com](http://medlenshealth.com)** 
 
 **Status:** Active development (Sprint 4: production engineering)
 
